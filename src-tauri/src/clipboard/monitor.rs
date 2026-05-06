@@ -183,15 +183,22 @@ impl CMHandler for MonitorHandler {
         // 先获取来源应用（在读取内容之前）
         let source = super::source_app::get_clipboard_source_app();
 
-        // 检查来源应用是否在排除列表中
-        if let Some(ref handler) = *self.handler.lock()
-            && handler.is_source_app_excluded(&source) {
-                debug!("Clipboard change ignored (source app excluded: {:?})", source.as_ref().map(|s| &s.app_name));
-                return CallbackResult::Next;
+        // 同一次加锁内完成排除判断与限制读取，避免多次 lock
+        let max_image_bytes = {
+            let guard = self.handler.lock();
+            if let Some(ref handler) = *guard {
+                if handler.is_source_app_excluded(&source) {
+                    debug!("Clipboard change ignored (source app excluded: {:?})", source.as_ref().map(|s| &s.app_name));
+                    return CallbackResult::Next;
+                }
+                handler.get_max_image_size()
+            } else {
+                0
             }
+        };
 
         // 读取剪贴板内容（带重试，应对剪贴板锁竞争）
-        let content = match read_clipboard_content_with_retry() {
+        let content = match read_clipboard_content_with_retry(max_image_bytes) {
             Some(c) => c,
             None => return CallbackResult::Next,
         };
@@ -229,7 +236,8 @@ impl CMHandler for MonitorHandler {
 }
 
 /// 带重试的剪贴板读取，应对剪贴板锁竞争（如截图工具延迟渲染）
-fn read_clipboard_content_with_retry() -> Option<ClipboardContent> {
+/// `max_image_bytes` 为 0 时不限制；非零时先按原始像素尺寸预判，避免对超大图进行 PNG 编码
+fn read_clipboard_content_with_retry(max_image_bytes: usize) -> Option<ClipboardContent> {
     const MAX_RETRIES: u32 = 3;
     const RETRY_DELAY_MS: u64 = 50;
 
@@ -239,7 +247,7 @@ fn read_clipboard_content_with_retry() -> Option<ClipboardContent> {
             debug!("Clipboard read retry {}/{}", attempt + 1, MAX_RETRIES);
         }
 
-        match read_clipboard_content() {
+        match read_clipboard_content(max_image_bytes) {
             Some(content) => return Some(content),
             None if attempt + 1 < MAX_RETRIES => {
                 debug!("Clipboard read returned nothing, will retry");
@@ -255,7 +263,7 @@ fn read_clipboard_content_with_retry() -> Option<ClipboardContent> {
 }
 
 /// 读取当前剪贴板内容（单次尝试）
-fn read_clipboard_content() -> Option<ClipboardContent> {
+fn read_clipboard_content(max_image_bytes: usize) -> Option<ClipboardContent> {
     use clipboard_rs::common::RustImage;
     use clipboard_rs::{Clipboard, ClipboardContext};
 
@@ -282,6 +290,19 @@ fn read_clipboard_content() -> Option<ClipboardContent> {
         Ok(img) => {
             let (width, height) = img.get_size();
             debug!("Got image from clipboard: {}x{}", width, height);
+
+            // 基于原始 RGBA 像素数粗估，超限则跳过，避免对超大图进行 PNG 编码（CPU 密集）
+            // PNG 压缩后通常小于原始像素，这里使用原始字节数作为上界近似
+            if max_image_bytes > 0 {
+                let raw_bytes = (width as u64).saturating_mul(height as u64).saturating_mul(4);
+                if raw_bytes > max_image_bytes as u64 {
+                    warn!(
+                        "Clipboard image {}x{} (~{} bytes raw) exceeds max image size {} bytes, skipping",
+                        width, height, raw_bytes, max_image_bytes
+                    );
+                    return None;
+                }
+            }
 
             match img.to_png() {
                 Ok(png_buffer) => {

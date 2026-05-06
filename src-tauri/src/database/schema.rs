@@ -74,6 +74,7 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     ('global_shortcut', 'Alt+C'),
     ('max_history_count', '10000'),
     ('max_content_size_kb', '1024'),
+    ('max_image_size_kb', '51200'),
     ('dedup_strategy', 'move_to_top'),
     ('text_dedup_mode', 'semantic'),
     ('autostart_enabled', 'false'),

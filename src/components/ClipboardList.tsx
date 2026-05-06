@@ -589,7 +589,7 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
             },
           ],
         }}
-        style={{ cursor: "grabbing" }}
+        style={{ cursor: "move" }}
       >
         {activeItemData && (
           <div className="shadow-xl">

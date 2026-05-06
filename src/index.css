@@ -447,8 +447,8 @@ textarea,
     animation: paste-flash 0.3s ease-out;
 }
 
-/* Dragging cursor - from QuickClipboard optimization */
+/* Dragging cursor - 使用系统 move 光标，避免与自定义 Windows 指针主题不一致 */
 body.dragging-cursor,
 body.dragging-cursor * {
-    cursor: grabbing !important;
+    cursor: move !important;
 }

@@ -9,7 +9,7 @@ help:
 	@Write-Host ""
 	@Write-Host "Available targets:"
 	@Write-Host "  make clean   Remove frontend dist and Rust target artifacts"
-	@Write-Host "  make build   Build frontend and backend release binary"
+	@Write-Host "  make build   Build Tauri release installer"
 	@Write-Host "  make run     Build frontend and run backend"
 	@Write-Host "  make check   Run lint, TypeScript, and cargo check"
 	@Write-Host "  make format  Run frontend autofix and Rust formatter"
@@ -22,10 +22,8 @@ clean:
 	@Write-Host "[clean] done"
 
 build:
-	@Write-Host "[build] frontend production build"
-	npm run build
-	@Write-Host "[build] backend release build"
-	cargo build --release --manifest-path src-tauri/Cargo.toml
+	@Write-Host "[build] tauri release installer"
+	npm run tauri build
 	@Write-Host "[build] done"
 
 run:

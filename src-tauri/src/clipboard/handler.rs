@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use tracing::{debug, info, warn};
 
 const DEFAULT_MAX_CONTENT_SIZE: usize = 1_048_576;
+const DEFAULT_MAX_IMAGE_SIZE: usize = 50 * 1024 * 1024;
 const MAX_PREVIEW_LENGTH: usize = 200;
 const DEFAULT_MAX_HISTORY_COUNT: i64 = 0;
 const DEFAULT_AUTO_CLEANUP_DAYS: i64 = 30;
@@ -134,6 +135,17 @@ impl ClipboardHandler {
             .and_then(|s| s.parse::<usize>().ok())
             .map(|kb| kb * 1024)
             .unwrap_or(DEFAULT_MAX_CONTENT_SIZE)
+    }
+
+    /// 图片大小上限（字节），0 表示不限制
+    pub fn get_max_image_size(&self) -> usize {
+        self.settings_repo
+            .get("max_image_size_kb")
+            .ok()
+            .flatten()
+            .and_then(|s| s.parse::<usize>().ok())
+            .map(|kb| kb.saturating_mul(1024))
+            .unwrap_or(DEFAULT_MAX_IMAGE_SIZE)
     }
 
     fn get_max_history_count(&self) -> i64 {
@@ -290,6 +302,19 @@ impl ClipboardHandler {
                     );
                     return Ok(None);
                 }
+            }
+        }
+
+        // 图片单独应用大小上限，避免超大图片阻塞监听线程与数据库写入
+        if let ClipboardContent::Image(ref data) = content {
+            let max_image_size = self.get_max_image_size();
+            if max_image_size > 0 && data.len() > max_image_size {
+                warn!(
+                    "Image size {} bytes exceeds max {} bytes, skipping",
+                    data.len(),
+                    max_image_size
+                );
+                return Ok(None);
             }
         }
 
