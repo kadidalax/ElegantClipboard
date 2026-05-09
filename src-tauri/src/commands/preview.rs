@@ -68,6 +68,18 @@ pub async fn show_image_preview(
         return Ok(());
     }
 
+    // 守卫：主窗必须可见，否则拒绝显示预览。
+    // 防御悬停倒计时与主窗关闭之间的竞态：即便 token 巧合匹配通过 promote，
+    // 也会在此拦下"孤儿预览"，并顺手 force_hide 清理残留窗口。
+    if !app
+        .get_webview_window("main")
+        .and_then(|w| w.is_visible().ok())
+        .unwrap_or(false)
+    {
+        force_hide_image_preview(&app);
+        return Ok(());
+    }
+
     let mut newly_created = false;
     let window = if let Some(w) = app.get_webview_window("image-preview") {
         w
@@ -181,6 +193,17 @@ pub async fn show_text_preview(
 ) -> Result<(), String> {
     let token = token.unwrap_or(0);
     if token != 0 && !promote_preview_token(&TEXT_PREVIEW_TOKEN, token) {
+        return Ok(());
+    }
+
+    // 守卫：主窗必须可见，否则拒绝显示预览。
+    // 与 show_image_preview 对称，防御悬停倒计时与主窗关闭之间的竞态。
+    if !app
+        .get_webview_window("main")
+        .and_then(|w| w.is_visible().ok())
+        .unwrap_or(false)
+    {
+        force_hide_text_preview(&app);
         return Ok(());
     }
 
