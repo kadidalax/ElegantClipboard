@@ -124,11 +124,7 @@ pub fn toggle_shortcuts_disabled(app: &tauri::AppHandle) -> bool {
         if let Some(sc) = parse_shortcut(&get_current_shortcut()) {
             let _ = app
                 .global_shortcut()
-                .on_shortcut(sc, |app, _shortcut, event| {
-                    if event.state == ShortcutState::Pressed {
-                        commands::window::toggle_window_visibility(app);
-                    }
-                });
+                .on_shortcut(sc, on_toggle_shortcut);
         }
         let shortcuts = CURRENT_QUICK_PASTE_SHORTCUTS.read().clone();
         apply_paste_shortcuts(app, &shortcuts, PasteKind::Quick);
@@ -151,6 +147,17 @@ fn quick_paste_setting_key(slot: u8) -> String {
 
 fn normalize_shortcut_value(value: &str) -> String {
     value.trim().to_string()
+}
+
+/// 全局呼出快捷键统一回调：按下时切换主窗口显隐。
+fn on_toggle_shortcut(
+    app: &tauri::AppHandle,
+    _shortcut: &Shortcut,
+    event: tauri_plugin_global_shortcut::ShortcutEvent,
+) {
+    if event.state == ShortcutState::Pressed {
+        commands::window::toggle_window_visibility(app);
+    }
 }
 
 fn shortcut_has_modifier(shortcut: &str) -> bool {
@@ -449,32 +456,20 @@ async fn enable_winv_replacement(app: tauri::AppHandle) -> Result<(), String> {
         if let Some(sc) = saved_shortcut {
             let _ = app
                 .global_shortcut()
-                .on_shortcut(sc, |app, _shortcut, event| {
-                    if event.state == ShortcutState::Pressed {
-                        commands::window::toggle_window_visibility(app);
-                    }
-                });
+                .on_shortcut(sc, on_toggle_shortcut);
         }
         return Err(e);
     }
     let winv_shortcut = Shortcut::new(Some(Modifiers::SUPER), Code::KeyV);
     if let Err(e) = app
         .global_shortcut()
-        .on_shortcut(winv_shortcut, |app, _shortcut, event| {
-            if event.state == ShortcutState::Pressed {
-                commands::window::toggle_window_visibility(app);
-            }
-        })
+        .on_shortcut(winv_shortcut, on_toggle_shortcut)
     {
         let _ = win_v_registry::enable_win_v_hotkey(true);
         if let Some(sc) = saved_shortcut {
             let _ = app
                 .global_shortcut()
-                .on_shortcut(sc, |app, _shortcut, event| {
-                    if event.state == ShortcutState::Pressed {
-                        commands::window::toggle_window_visibility(app);
-                    }
-                });
+                .on_shortcut(sc, on_toggle_shortcut);
         }
         return Err(format!("Failed to register Win+V shortcut: {}", e));
     }
@@ -495,11 +490,7 @@ async fn disable_winv_replacement(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(shortcut) = parse_shortcut(&get_current_shortcut()) {
         let _ = app
             .global_shortcut()
-            .on_shortcut(shortcut, |app, _shortcut, event| {
-                if event.state == ShortcutState::Pressed {
-                    commands::window::toggle_window_visibility(app);
-                }
-            });
+            .on_shortcut(shortcut, on_toggle_shortcut);
     }
 
     let state = app.state::<Arc<AppState>>();
@@ -527,11 +518,7 @@ async fn update_shortcut(app: tauri::AppHandle, new_shortcut: String) -> Result<
     }
 
     app.global_shortcut()
-        .on_shortcut(new_sc, |app, _shortcut, event| {
-            if event.state == ShortcutState::Pressed {
-                commands::window::toggle_window_visibility(app);
-            }
-        })
+        .on_shortcut(new_sc, on_toggle_shortcut)
         .map_err(|e| format!("Failed to register shortcut: {}", e))?;
 
     *CURRENT_SHORTCUT.write() = Some(new_shortcut.clone());
@@ -683,8 +670,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .setup(|app| {
-            let config = AppConfig::load();
+        .setup(move |app| {
             let db_path = config.get_db_path();
             let images_path = config.get_images_path();
 
@@ -708,12 +694,7 @@ pub fn run() {
             // 安装更新后注册表 Run 条目会被清除，根据数据库偏好自动恢复自启动
             {
                 use tauri_plugin_autostart::ManagerExt;
-                let want_autostart = settings_repo
-                    .get("autostart_enabled")
-                    .ok()
-                    .flatten()
-                    .map(|v| v == "true")
-                    .unwrap_or(false);
+                let want_autostart = settings_repo.get_bool("autostart_enabled", false);
                 if want_autostart {
                     match app.autolaunch().is_enabled() {
                         Ok(false) => {
@@ -729,11 +710,7 @@ pub fn run() {
                 }
             }
 
-            let saved_shortcut = settings_repo
-                .get("global_shortcut")
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| "Alt+C".to_string());
+            let saved_shortcut = settings_repo.get_or("global_shortcut", "Alt+C");
 
             state.monitor.start(app.handle().clone());
             app.manage(state);
@@ -750,11 +727,7 @@ pub fn run() {
 
             let _ = app
                 .global_shortcut()
-                .on_shortcut(shortcut, |app, _shortcut, event| {
-                    if event.state == ShortcutState::Pressed {
-                        commands::window::toggle_window_visibility(app);
-                    }
-                });
+                .on_shortcut(shortcut, on_toggle_shortcut);
 
             for kind in [PasteKind::Quick, PasteKind::Favorite] {
                 let failures = reload_paste_shortcuts_from_settings(app.handle(), kind);

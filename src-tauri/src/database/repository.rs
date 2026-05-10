@@ -1072,6 +1072,28 @@ impl SettingsRepository {
         }
     }
 
+    /// 读取字符串设置，缺失或出错时返回 default。
+    pub fn get_or(&self, key: &str, default: &str) -> String {
+        self.get(key)
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| default.to_string())
+    }
+
+    /// 读取布尔设置（"true"/"false"），缺失或出错时返回 default。
+    pub fn get_bool(&self, key: &str, default: bool) -> bool {
+        self.get(key)
+            .ok()
+            .flatten()
+            .map(|v| v == "true")
+            .unwrap_or(default)
+    }
+
+    /// 读取并解析为指定类型，缺失/出错/解析失败时返回 None。
+    pub fn get_parsed<T: std::str::FromStr>(&self, key: &str) -> Option<T> {
+        self.get(key).ok().flatten().and_then(|v| v.parse().ok())
+    }
+
     pub fn set(&self, key: &str, value: &str) -> Result<(), rusqlite::Error> {
         let conn = self.write_conn.lock();
         conn.execute(

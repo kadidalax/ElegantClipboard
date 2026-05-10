@@ -64,16 +64,8 @@ fn position_main_window(app: &tauri::AppHandle, window: &tauri::WebviewWindow) {
                 .map(|v| v != "false")
                 .unwrap_or(true);
             if persist {
-                let w = repo
-                    .get("window_width")
-                    .ok()
-                    .flatten()
-                    .and_then(|v| v.parse::<f64>().ok());
-                let h = repo
-                    .get("window_height")
-                    .ok()
-                    .flatten()
-                    .and_then(|v| v.parse::<f64>().ok());
+                let w = repo.get_parsed::<f64>("window_width");
+                let h = repo.get_parsed::<f64>("window_height");
                 if let (Some(w), Some(h)) = (w, h) {
                     let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
                         width: w,
@@ -102,16 +94,8 @@ fn position_main_window(app: &tauri::AppHandle, window: &tauri::WebviewWindow) {
     if position_mode == crate::positioning::PositionMode::FixedPosition {
         if let Some(state) = app.try_state::<std::sync::Arc<AppState>>() {
             let repo = database::SettingsRepository::new(&state.db);
-            let x = repo
-                .get("window_x")
-                .ok()
-                .flatten()
-                .and_then(|v| v.parse::<i32>().ok());
-            let y = repo
-                .get("window_y")
-                .ok()
-                .flatten()
-                .and_then(|v| v.parse::<i32>().ok());
+            let x = repo.get_parsed::<i32>("window_x");
+            let y = repo.get_parsed::<i32>("window_y");
             if let (Some(x), Some(y)) = (x, y) {
                 let _ = window.set_position(tauri::Position::Physical(
                     tauri::PhysicalPosition::new(x, y),

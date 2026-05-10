@@ -308,6 +308,16 @@ textarea,
 [contenteditable="true"] {
     user-select: text;
     -webkit-user-select: text;
+    caret-color: var(--color-primary);
+}
+
+/* Themed text selection — overrides browser default blue */
+::selection {
+    background-color: hsl(from var(--color-primary) h s l / 0.25);
+    color: inherit;
+}
+.dark ::selection {
+    background-color: hsl(from var(--color-primary) h s l / 0.35);
 }
 
 /* OverlayScrollbars custom styling */
