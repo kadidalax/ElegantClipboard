@@ -28,6 +28,19 @@ pub async fn set_setting(
     repo.set(&key, &value).map_err(|e| e.to_string())
 }
 
+/// 显示或隐藏系统托盘图标，并持久化设置
+#[tauri::command]
+pub async fn set_tray_icon_visibility(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+    visible: bool,
+) -> Result<(), String> {
+    crate::tray::set_tray_visibility(&app, visible)?;
+    let repo = SettingsRepository::new(&state.db);
+    repo.set("tray_icon_visible", if visible { "true" } else { "false" })
+        .map_err(|e| e.to_string())
+}
+
 /// 获取所有设置
 #[tauri::command]
 pub async fn get_all_settings(

@@ -984,6 +984,7 @@ pub fn run() {
             commands::settings::get_running_apps,
             commands::settings::get_setting,
             commands::settings::set_setting,
+            commands::settings::set_tray_icon_visibility,
             commands::settings::get_all_settings,
             commands::settings::pause_monitor,
             commands::settings::resume_monitor,
