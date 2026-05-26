@@ -64,8 +64,8 @@ import { translateText } from "@/lib/translate";
 import { cn } from "@/lib/utils";
 import { useClipboardStore, ClipboardItem } from "@/stores/clipboard";
 import { useGroupStore } from "@/stores/groups";
-import { useUISettings } from "@/stores/ui-settings";
 import { useTranslateSettings } from "@/stores/translate-settings";
+import { useUISettings } from "@/stores/ui-settings";
 
 // ============ 类型定义 ============
 

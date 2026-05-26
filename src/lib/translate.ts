@@ -21,6 +21,7 @@ export const LANGUAGES = [
 function isChinese(text: string): boolean {
   const sample = text.slice(0, 200);
   let cjkCount = 0;
+  let kanaCount = 0;
   let totalLetters = 0;
   for (const ch of sample) {
     const code = ch.codePointAt(0) ?? 0;
@@ -31,8 +32,17 @@ function isChinese(text: string): boolean {
     ) {
       cjkCount++;
     }
+    // 日文假名（平假名 + 片假名）→ 非中文
+    if (
+      (code >= 0x3040 && code <= 0x309f) ||
+      (code >= 0x30a0 && code <= 0x30ff)
+    ) {
+      kanaCount++;
+    }
     if (/\p{L}/u.test(ch)) totalLetters++;
   }
+  // 含日文假名则判定为日文，非中文
+  if (kanaCount > 0) return false;
   return totalLetters > 0 && cjkCount / totalLetters > 0.3;
 }
 

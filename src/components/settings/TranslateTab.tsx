@@ -50,10 +50,16 @@ export function TranslateTab() {
   const [tsShortcutError, setTsShortcutError] = useState("");
   const [tsSaving, setTsSaving] = useState(false);
 
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const debounced = useCallback(<T extends (...args: string[]) => void>(fn: T, value: string) => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => fn(value), 300);
+  const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const debounced = useCallback((key: string, fn: (v: string) => void, value: string) => {
+    if (timersRef.current[key]) clearTimeout(timersRef.current[key]);
+    timersRef.current[key] = setTimeout(() => fn(value), 300);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      Object.values(timersRef.current).forEach(clearTimeout);
+    };
   }, []);
 
   useEffect(() => {
@@ -63,6 +69,10 @@ export function TranslateTab() {
   const handleTsKeyDown = useCallback((e: KeyboardEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (e.key === "Escape") {
+      setTsRecording(false); setTsTempShortcut(""); setTsShortcutError("");
+      return;
+    }
     const parts: string[] = [];
     if (e.ctrlKey) parts.push("Ctrl");
     if (e.altKey) parts.push("Alt");
@@ -87,6 +97,12 @@ export function TranslateTab() {
   const saveTsShortcut = async () => {
     if (!tsTempShortcut || tsTempShortcut.includes("...")) {
       setTsShortcutError("请输入完整的快捷键"); return;
+    }
+    const hasModifier = tsTempShortcut.split("+").some((p) =>
+      ["Ctrl", "Alt", "Shift", "Win"].includes(p.trim())
+    );
+    if (!hasModifier) {
+      setTsShortcutError("快捷键至少包含一个修饰键 (Ctrl/Alt/Win)"); return;
     }
     setTsSaving(true);
     try {
@@ -178,7 +194,7 @@ export function TranslateTab() {
                   <div className="relative">
                     <Input className="h-8 text-xs pr-8" type={showGoogleKey ? "text" : "password"}
                       placeholder="输入 Google Cloud API Key" value={googleApiKey}
-                      onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ googleApiKey: v }); debounced(setGoogleApiKey, v); }}
+                      onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ googleApiKey: v }); debounced("googleApiKey", setGoogleApiKey, v); }}
                     />
                     <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                       onClick={() => setShowGoogleKey(!showGoogleKey)}>
@@ -200,7 +216,7 @@ export function TranslateTab() {
                 <div className="space-y-1.5 pt-1">
                   <Label className="text-xs">请求地址</Label>
                   <Input className="h-8 text-xs" placeholder="http://127.0.0.1:1188/translate" value={deeplxEndpoint}
-                    onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ deeplxEndpoint: v }); debounced(setDeeplxEndpoint, v); }}
+                    onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ deeplxEndpoint: v }); debounced("deeplxEndpoint", setDeeplxEndpoint, v); }}
                   />
                 </div>
               )}
@@ -210,7 +226,7 @@ export function TranslateTab() {
                   <div className="space-y-1.5">
                     <Label className="text-xs">百度翻译 APP ID</Label>
                     <Input className="h-8 text-xs" placeholder="输入 APP ID" value={baiduAppId}
-                      onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ baiduAppId: v }); debounced(setBaiduAppId, v); }}
+                      onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ baiduAppId: v }); debounced("baiduAppId", setBaiduAppId, v); }}
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -218,7 +234,7 @@ export function TranslateTab() {
                     <div className="relative">
                       <Input className="h-8 text-xs pr-8" type={showBaiduKey ? "text" : "password"}
                         placeholder="输入密钥" value={baiduSecretKey}
-                        onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ baiduSecretKey: v }); debounced(setBaiduSecretKey, v); }}
+                        onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ baiduSecretKey: v }); debounced("baiduSecretKey", setBaiduSecretKey, v); }}
                       />
                       <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                         onClick={() => setShowBaiduKey(!showBaiduKey)}>
@@ -242,7 +258,7 @@ export function TranslateTab() {
                   <div className="space-y-1.5">
                     <Label className="text-xs">API 接口地址</Label>
                     <Input className="h-8 text-xs" placeholder="https://api.openai.com/v1" value={openaiEndpoint}
-                      onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ openaiEndpoint: v }); debounced(setOpenaiEndpoint, v); }}
+                      onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ openaiEndpoint: v }); debounced("openaiEndpoint", setOpenaiEndpoint, v); }}
                     />
                     <p className="text-xs text-muted-foreground">支持自定义接口，兼容 OpenAI API 格式</p>
                   </div>
@@ -251,7 +267,7 @@ export function TranslateTab() {
                     <div className="relative">
                       <Input className="h-8 text-xs pr-8" type={showOpenaiKey ? "text" : "password"}
                         placeholder="输入 API Key" value={openaiApiKey}
-                        onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ openaiApiKey: v }); debounced(setOpenaiApiKey, v); }}
+                        onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ openaiApiKey: v }); debounced("openaiApiKey", setOpenaiApiKey, v); }}
                       />
                       <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                         onClick={() => setShowOpenaiKey(!showOpenaiKey)}>
@@ -262,7 +278,7 @@ export function TranslateTab() {
                   <div className="space-y-1.5">
                     <Label className="text-xs">模型 ID</Label>
                     <Input className="h-8 text-xs" placeholder="gpt-4o-mini" value={openaiModel}
-                      onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ openaiModel: v }); debounced(setOpenaiModel, v); }}
+                      onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ openaiModel: v }); debounced("openaiModel", setOpenaiModel, v); }}
                     />
                   </div>
                 </div>
@@ -286,7 +302,7 @@ export function TranslateTab() {
               {proxyMode === "custom" && (
                 <Input className="h-8 text-xs mt-2" placeholder="http://127.0.0.1:7890 或 socks5://127.0.0.1:1080"
                   value={proxyUrl}
-                  onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ proxyUrl: v }); debounced(setProxyUrl, v); }}
+                  onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ proxyUrl: v }); debounced("proxyUrl", setProxyUrl, v); }}
                 />
               )}
 

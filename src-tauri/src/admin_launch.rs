@@ -83,6 +83,97 @@ pub fn is_running_as_admin() -> bool {
 
 // ─── 自提权 ───────────────────────────────────────────────────────────────────
 
+/// 等待新的提权实例启动（轮询进程列表，最多等待 `secs` 秒）
+/// 防止计划任务 Queued 状态或 UAC 进程初始化崩溃导致应用"消失"
+#[cfg(target_os = "windows")]
+fn wait_for_new_instance(secs: u32) -> bool {
+    use windows::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+    use windows::Win32::Security::{
+        GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation,
+    };
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW,
+        TH32CS_SNAPPROCESS,
+    };
+    use windows::Win32::System::Threading::{OpenProcess, OpenProcessToken};
+
+    let Ok(exe_path) = get_exe_path() else {
+        return false;
+    };
+    let exe_name = exe_path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_lowercase();
+
+    let my_pid = std::process::id();
+
+    for _ in 0..(secs as u64 * 5) {
+        std::thread::sleep(std::time::Duration::from_millis(200));
+
+        unsafe {
+            let Ok(snapshot) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) else {
+                continue;
+            };
+            if snapshot == INVALID_HANDLE_VALUE {
+                continue;
+            }
+
+            let mut entry = PROCESSENTRY32W {
+                dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+                ..Default::default()
+            };
+
+            if Process32FirstW(snapshot, &mut entry).is_err() {
+                let _ = CloseHandle(snapshot);
+                continue;
+            }
+
+            loop {
+                let name = String::from_utf16_lossy(
+                    &entry.szExeFile[..entry
+                        .szExeFile
+                        .iter()
+                        .position(|&c| c == 0)
+                        .unwrap_or(entry.szExeFile.len())],
+                );
+                if name.to_lowercase() == exe_name && entry.th32ProcessID != my_pid {
+                    if let Ok(h) = OpenProcess(
+                        windows::Win32::System::Threading::PROCESS_QUERY_LIMITED_INFORMATION,
+                        false,
+                        entry.th32ProcessID,
+                    ) {
+                        let mut token = Default::default();
+                        if OpenProcessToken(h, TOKEN_QUERY, &mut token).is_ok() {
+                            let mut elevation = TOKEN_ELEVATION::default();
+                            let mut len = 0u32;
+                            let ok = GetTokenInformation(
+                                token,
+                                TokenElevation,
+                                Some(&mut elevation as *mut _ as *mut _),
+                                std::mem::size_of::<TOKEN_ELEVATION>() as u32,
+                                &mut len,
+                            );
+                            let _ = CloseHandle(token);
+                            if ok.is_ok() && elevation.TokenIsElevated != 0 {
+                                let _ = CloseHandle(h);
+                                let _ = CloseHandle(snapshot);
+                                return true;
+                            }
+                        }
+                        let _ = CloseHandle(h);
+                    }
+                }
+                if Process32NextW(snapshot, &mut entry).is_err() {
+                    break;
+                }
+            }
+            let _ = CloseHandle(snapshot);
+        }
+    }
+    false
+}
+
 /// 尝试启动一个新的提权实例
 /// 优先使用计划任务（免 UAC 弹窗），失败则回退到 UAC 提示
 /// 返回 `true` 表示新实例已启动（调用方应立即退出以释放单例锁）
@@ -97,11 +188,19 @@ pub fn self_elevate() -> bool {
         && task_scheduler::is_elevation_task_path_valid()
         && task_scheduler::run_elevation_task()
     {
-        return true;
+        // 验证提权进程是否真正启动（防止 Queued 状态导致的假成功）
+        if wait_for_new_instance(5) {
+            return true;
+        }
+        tracing::warn!("计划任务声称成功但未检测到提权进程，回退到 UAC");
     }
 
     // 回退到 UAC 弹窗提权
-    elevate_with_uac()
+    if elevate_with_uac() {
+        // 验证新进程存活（防止初始化崩溃导致两个实例都退出）
+        return wait_for_new_instance(3);
+    }
+    false
 }
 
 #[cfg(not(target_os = "windows"))]

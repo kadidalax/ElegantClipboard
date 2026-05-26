@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Translate16Regular, Copy16Regular } from "@fluentui/react-icons";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -23,6 +23,7 @@ export function TranslateResult() {
 
   const recordTranslation = useTranslateSettings((s) => s.recordTranslation);
   const translateLoaded = useTranslateSettings((s) => s.loaded);
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
     if (!translateLoaded) useTranslateSettings.getState().loadSettings();
@@ -43,23 +44,34 @@ export function TranslateResult() {
 
   const doTranslate = useCallback(async (sourceText: string) => {
     if (!sourceText.trim()) return;
+    const reqId = ++requestIdRef.current;
     setTranslating(true);
     setTranslateError("");
     setTranslatedText("");
     try {
       const result = await translateText(sourceText);
+      if (reqId !== requestIdRef.current) return; // 过期请求，丢弃结果
       setTranslatedText(result);
     } catch (error) {
+      if (reqId !== requestIdRef.current) return;
       setTranslateError(String(error));
     } finally {
-      setTranslating(false);
+      if (reqId === requestIdRef.current) setTranslating(false);
     }
   }, []);
 
   useEffect(() => {
-    invoke<string>("get_pending_translate_text").then((t) => {
-      if (t) { setText(t); doTranslate(t); }
-    }).catch(() => {});
+    const load = async () => {
+      // 确保设置加载完成后再翻译
+      if (!useTranslateSettings.getState().loaded) {
+        await useTranslateSettings.getState().loadSettings();
+      }
+      try {
+        const t = await invoke<string>("get_pending_translate_text");
+        if (t) { setText(t); doTranslate(t); }
+      } catch {}
+    };
+    load();
   }, [doTranslate]);
 
   useEffect(() => {

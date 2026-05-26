@@ -32,13 +32,15 @@ pub fn register(shortcut_str: &str, callback: ShortcutCallback) -> bool {
     };
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
     let cb = callback.clone();
-    match app.global_shortcut().on_shortcut(parsed, move |app, _sc, event| {
-        let state = match event.state {
-            tauri_plugin_global_shortcut::ShortcutState::Pressed => KeyState::Pressed,
-            tauri_plugin_global_shortcut::ShortcutState::Released => KeyState::Released,
-        };
-        cb(app, state);
-    }) {
+    match app
+        .global_shortcut()
+        .on_shortcut(parsed, move |app, _sc, event| {
+            let state = match event.state {
+                tauri_plugin_global_shortcut::ShortcutState::Pressed => KeyState::Pressed,
+                tauri_plugin_global_shortcut::ShortcutState::Released => KeyState::Released,
+            };
+            cb(app, state);
+        }) {
         Ok(_) => {
             tracing::info!("热键: 已注册 '{}'", shortcut_str);
             true

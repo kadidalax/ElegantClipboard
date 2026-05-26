@@ -9,15 +9,31 @@ use tauri::State;
 fn load_webdav_config(state: &Arc<AppState>) -> Result<WebDavConfig, String> {
     let repo = SettingsRepository::new(&state.db);
     let url = repo.get("webdav_url").ok().flatten().unwrap_or_default();
-    let username = repo.get("webdav_username").ok().flatten().unwrap_or_default();
-    let password = repo.get("webdav_password").ok().flatten().unwrap_or_default();
+    let username = repo
+        .get("webdav_username")
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+    let password = repo
+        .get("webdav_password")
+        .ok()
+        .flatten()
+        .unwrap_or_default();
     let remote_dir = repo
         .get("webdav_remote_dir")
         .ok()
         .flatten()
         .unwrap_or_else(|| "/elegant-clipboard".to_string());
-    let proxy_mode = repo.get("webdav_proxy_mode").ok().flatten().unwrap_or_else(|| "system".to_string());
-    let proxy_url = repo.get("webdav_proxy_url").ok().flatten().unwrap_or_default();
+    let proxy_mode = repo
+        .get("webdav_proxy_mode")
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "system".to_string());
+    let proxy_url = repo
+        .get("webdav_proxy_url")
+        .ok()
+        .flatten()
+        .unwrap_or_default();
     let accept_invalid_certs = repo
         .get("webdav_accept_invalid_certs")
         .ok()
@@ -151,14 +167,17 @@ pub async fn webdav_download(
 
         let media_map = webdav::download_media_map(&config).unwrap_or_default();
         if !media_map.is_empty() {
-            let invalid_paths = crate::database::ClipboardRepository::new(&db)
-                .get_invalid_file_paths_set();
-            let filtered: Vec<_> = media_map.into_iter().filter(|e| {
-                if e.media_type == "file" && invalid_paths.contains(&e.local_path) {
-                    return false;
-                }
-                true
-            }).collect();
+            let invalid_paths =
+                crate::database::ClipboardRepository::new(&db).get_invalid_file_paths_set();
+            let filtered: Vec<_> = media_map
+                .into_iter()
+                .filter(|e| {
+                    if e.media_type == "file" && invalid_paths.contains(&e.local_path) {
+                        return false;
+                    }
+                    true
+                })
+                .collect();
             if !filtered.is_empty() {
                 spawn_media_download(&app, &config, &data_dir, filtered);
             }
@@ -207,7 +226,13 @@ fn spawn_media_upload_worker(
         .name(thread_name.into())
         .spawn(move || {
             let msg = match webdav::upload_media_files(&cfg, &entries, &dir) {
-                Ok((u, s, bytes)) => format!("{}上传完成：{} 新 ({})，{} 已存在跳过", label, u, format_size(bytes), s),
+                Ok((u, s, bytes)) => format!(
+                    "{}上传完成：{} 新 ({})，{} 已存在跳过",
+                    label,
+                    u,
+                    format_size(bytes),
+                    s
+                ),
                 Err(e) => format!("{}上传失败: {}", label, e),
             };
             emit_media_sync_done(&handle, &msg);
@@ -251,11 +276,30 @@ fn spawn_media_upload_files(
     if media_map.is_empty() {
         return;
     }
-    let images: Vec<_> = media_map.iter().filter(|e| e.media_type == "image").cloned().collect();
-    let files: Vec<_> = media_map.iter().filter(|e| e.media_type == "file").cloned().collect();
-    let icons: Vec<_> = media_map.iter().filter(|e| e.media_type == "icon").cloned().collect();
+    let images: Vec<_> = media_map
+        .iter()
+        .filter(|e| e.media_type == "image")
+        .cloned()
+        .collect();
+    let files: Vec<_> = media_map
+        .iter()
+        .filter(|e| e.media_type == "file")
+        .cloned()
+        .collect();
+    let icons: Vec<_> = media_map
+        .iter()
+        .filter(|e| e.media_type == "icon")
+        .cloned()
+        .collect();
 
-    spawn_media_upload_worker(app, config, data_dir, images, "webdav-upload-images", "图片");
+    spawn_media_upload_worker(
+        app,
+        config,
+        data_dir,
+        images,
+        "webdav-upload-images",
+        "图片",
+    );
     spawn_media_upload_worker(app, config, data_dir, files, "webdav-upload-files", "文件");
     spawn_media_upload_worker(app, config, data_dir, icons, "webdav-upload-icons", "图标");
 }
@@ -266,11 +310,33 @@ fn spawn_media_download(
     data_dir: &std::path::Path,
     media_map: Vec<webdav::MediaEntry>,
 ) {
-    let images: Vec<_> = media_map.iter().filter(|e| e.media_type == "image").cloned().collect();
-    let files: Vec<_> = media_map.iter().filter(|e| e.media_type == "file").cloned().collect();
+    let images: Vec<_> = media_map
+        .iter()
+        .filter(|e| e.media_type == "image")
+        .cloned()
+        .collect();
+    let files: Vec<_> = media_map
+        .iter()
+        .filter(|e| e.media_type == "file")
+        .cloned()
+        .collect();
 
-    spawn_media_download_worker(app, config, data_dir, images, "webdav-download-images", "图片");
-    spawn_media_download_worker(app, config, data_dir, files, "webdav-download-files", "文件");
+    spawn_media_download_worker(
+        app,
+        config,
+        data_dir,
+        images,
+        "webdav-download-images",
+        "图片",
+    );
+    spawn_media_download_worker(
+        app,
+        config,
+        data_dir,
+        files,
+        "webdav-download-files",
+        "文件",
+    );
 }
 
 fn emit_media_sync_done(app: &tauri::AppHandle, message: &str) {

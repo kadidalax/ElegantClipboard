@@ -1,8 +1,8 @@
 /// 从 Windows 注册表读取系统代理设置
 #[cfg(target_os = "windows")]
 pub fn get_windows_system_proxy() -> Option<String> {
-    use winreg::enums::HKEY_CURRENT_USER;
     use winreg::RegKey;
+    use winreg::enums::HKEY_CURRENT_USER;
 
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     let key = hkcu
@@ -58,7 +58,11 @@ pub fn get_windows_system_proxy() -> Option<String> {
 
 #[cfg(target_os = "windows")]
 fn format_proxy_url(addr: &str) -> String {
-    if addr.starts_with("http://") || addr.starts_with("https://") || addr.starts_with("socks5://") || addr.starts_with("socks4://") {
+    if addr.starts_with("http://")
+        || addr.starts_with("https://")
+        || addr.starts_with("socks5://")
+        || addr.starts_with("socks4://")
+    {
         addr.to_string()
     } else {
         format!("http://{}", addr)
@@ -83,8 +87,7 @@ pub fn apply_proxy(
         "custom" => {
             let url = proxy_url.trim();
             if !url.is_empty() {
-                let proxy = reqwest::Proxy::all(url)
-                    .map_err(|e| format!("代理配置无效: {}", e))?;
+                let proxy = reqwest::Proxy::all(url).map_err(|e| format!("代理配置无效: {}", e))?;
                 builder = builder.proxy(proxy);
             } else {
                 builder = builder.no_proxy();

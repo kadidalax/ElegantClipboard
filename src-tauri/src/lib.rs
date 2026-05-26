@@ -3,10 +3,10 @@ mod clipboard;
 mod commands;
 mod config;
 mod database;
+mod hotkey;
 mod input_monitor;
 mod keyboard_hook;
 mod positioning;
-mod hotkey;
 mod proxy;
 mod shortcut;
 mod task_scheduler;
@@ -122,6 +122,7 @@ pub fn toggle_shortcuts_disabled(app: &tauri::AppHandle) -> bool {
         }
         unregister_shortcut_list(app, &CURRENT_QUICK_PASTE_SHORTCUTS.read());
         unregister_shortcut_list(app, &CURRENT_FAVORITE_PASTE_SHORTCUTS.read());
+        commands::translate::unregister_translate_selection_shortcut(app);
         tracing::info!("All shortcuts disabled (except Win+V)");
     } else {
         if let Some(sc) = parse_shortcut(&get_current_shortcut()) {
@@ -131,6 +132,7 @@ pub fn toggle_shortcuts_disabled(app: &tauri::AppHandle) -> bool {
         apply_paste_shortcuts(app, &shortcuts, PasteKind::Quick);
         let fav_shortcuts = CURRENT_FAVORITE_PASTE_SHORTCUTS.read().clone();
         apply_paste_shortcuts(app, &fav_shortcuts, PasteKind::Favorite);
+        commands::translate::register_translate_selection_shortcut(app);
         tracing::info!("All shortcuts re-enabled");
     }
     disabled
@@ -161,7 +163,7 @@ fn on_toggle_shortcut(
     }
 }
 
-fn shortcut_has_modifier(shortcut: &str) -> bool {
+pub(crate) fn shortcut_has_modifier(shortcut: &str) -> bool {
     shortcut
         .split('+')
         .map(|part| part.trim().to_uppercase())

@@ -1073,9 +1073,8 @@ impl ClipboardRepository {
 
         let tx = conn.transaction()?;
         {
-            let mut exists_stmt = tx.prepare_cached(
-                "SELECT 1 FROM clipboard_items WHERE content_hash = ?1 LIMIT 1"
-            )?;
+            let mut exists_stmt =
+                tx.prepare_cached("SELECT 1 FROM clipboard_items WHERE content_hash = ?1 LIMIT 1")?;
             let mut insert_stmt = tx.prepare_cached(
                 "INSERT INTO clipboard_items
                  (content_type, text_content, html_content, rtf_content, image_path, file_paths,
@@ -1222,16 +1221,24 @@ impl SettingsRepository {
     }
 
     /// 批量获取指定 key 的设置值，缺失的 key 不包含在结果中
-    pub fn get_multiple(&self, keys: &[&str]) -> Result<std::collections::HashMap<String, String>, rusqlite::Error> {
+    pub fn get_multiple(
+        &self,
+        keys: &[&str],
+    ) -> Result<std::collections::HashMap<String, String>, rusqlite::Error> {
         if keys.is_empty() {
             return Ok(std::collections::HashMap::new());
         }
         let conn = self.read_conn.lock();
-        let placeholders = keys.iter().enumerate()
+        let placeholders = keys
+            .iter()
+            .enumerate()
             .map(|(i, _)| format!("?{}", i + 1))
             .collect::<Vec<_>>()
             .join(", ");
-        let sql = format!("SELECT key, value FROM settings WHERE key IN ({})", placeholders);
+        let sql = format!(
+            "SELECT key, value FROM settings WHERE key IN ({})",
+            placeholders
+        );
         let mut stmt = conn.prepare(&sql)?;
         let map = stmt
             .query_map(rusqlite::params_from_iter(keys.iter()), |row| {

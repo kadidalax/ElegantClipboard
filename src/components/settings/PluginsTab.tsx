@@ -1,4 +1,5 @@
 import { ArrowSync16Regular, Translate16Regular } from "@fluentui/react-icons";
+import { SettingRow, SettingSection } from "@/components/settings/SettingSection";
 import { Switch } from "@/components/ui/switch";
 
 interface PluginMeta {
@@ -32,24 +33,27 @@ type PluginsTabProps = {
 
 export function PluginsTab({ enabledMap, onToggle }: PluginsTabProps) {
   return (
-    <div className="space-y-4">
-      {PLUGINS.map((plugin) => (
-        <div key={plugin.id} className="rounded-lg border bg-card">
-          <div className="flex items-center justify-between p-4">
-            <div className="space-y-0.5 pr-4">
-              <div className="flex items-center gap-2">
-                {(() => { const Icon = PLUGIN_ICONS[plugin.id] ?? ArrowSync16Regular; return <Icon className="w-4 h-4 text-muted-foreground" />; })()}
-                <span className="text-sm font-medium">{plugin.name}</span>
-              </div>
-              <p className="text-xs text-muted-foreground">{plugin.description}</p>
-            </div>
-            <Switch
-              checked={!!enabledMap[plugin.id]}
-              onCheckedChange={(v) => onToggle(plugin.id, v)}
+    <div className="space-y-3">
+      {PLUGINS.map((plugin) => {
+        const Icon = PLUGIN_ICONS[plugin.id] ?? ArrowSync16Regular;
+
+        return (
+          <SettingSection key={plugin.id}>
+            <SettingRow
+              icon={<Icon className="w-4 h-4 text-muted-foreground" />}
+              title={plugin.name}
+              description={plugin.description}
+              action={
+                <Switch
+                  checked={!!enabledMap[plugin.id]}
+                  onCheckedChange={(v) => onToggle(plugin.id, v)}
+                  aria-label={`${plugin.name}开关`}
+                />
+              }
             />
-          </div>
-        </div>
-      ))}
+          </SettingSection>
+        );
+      })}
     </div>
   );
 }

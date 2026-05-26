@@ -58,7 +58,6 @@ impl Default for SyncOptions {
     }
 }
 
-
 const SYNC_FILENAME: &str = "clipboard_sync.zip";
 const MAX_SYNC_DOWNLOAD_BYTES: u64 = 64 * 1024 * 1024;
 
@@ -94,8 +93,8 @@ pub fn get_or_create_device_id(db: &crate::database::Database) -> String {
 
 /// 计算文件内容的 blake3 hash（hex）
 fn file_hash_from_path(path: &Path) -> Result<(String, u64), String> {
-    let mut file = std::fs::File::open(path)
-        .map_err(|e| format!("读取文件失败 {}: {}", path.display(), e))?;
+    let mut file =
+        std::fs::File::open(path).map_err(|e| format!("读取文件失败 {}: {}", path.display(), e))?;
     let mut hasher = blake3::Hasher::new();
     let bytes = std::io::copy(&mut file, &mut hasher)
         .map_err(|e| format!("计算文件 hash 失败 {}: {}", path.display(), e))?;
@@ -112,7 +111,8 @@ fn file_len_if_within_limit(path: &Path, max_bytes: i64) -> Option<u64> {
 
 /// 构建 Basic Auth 头
 fn basic_auth(username: &str, password: &str) -> String {
-    let encoded = base64::engine::general_purpose::STANDARD.encode(format!("{}:{}", username, password));
+    let encoded =
+        base64::engine::general_purpose::STANDARD.encode(format!("{}:{}", username, password));
     format!("Basic {}", encoded)
 }
 
@@ -127,7 +127,9 @@ fn normalize_url(base_url: &str, remote_dir: &str) -> String {
     }
 }
 
-fn default_proxy_mode() -> String { "system".to_string() }
+fn default_proxy_mode() -> String {
+    "system".to_string()
+}
 
 /// 构建 HTTP 客户端（根据配置决定代理模式）
 fn build_client(config: &WebDavConfig) -> Result<reqwest::blocking::Client, String> {
@@ -142,7 +144,9 @@ fn build_client(config: &WebDavConfig) -> Result<reqwest::blocking::Client, Stri
 
     let builder = crate::proxy::apply_proxy(builder, &config.proxy_mode, &config.proxy_url)?;
 
-    builder.build().map_err(|e| format!("创建 HTTP 客户端失败: {}", e))
+    builder
+        .build()
+        .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))
 }
 
 /// 测试 WebDAV 连接
@@ -221,13 +225,26 @@ pub fn calc_max_byte_size(max_size_kb: u64) -> i64 {
 /// 取所有类型限制的最大值，用于 SQL 粗筛
 pub fn calc_max_query_size(options: &SyncOptions) -> i64 {
     let vals = [
-        if options.sync_image { calc_max_byte_size(options.max_image_size_kb) } else { 0 },
-        if options.sync_files { calc_max_byte_size(options.max_file_size_kb) } else { 0 },
-        if options.sync_video { calc_max_byte_size(options.max_video_size_kb) } else { 0 },
+        if options.sync_image {
+            calc_max_byte_size(options.max_image_size_kb)
+        } else {
+            0
+        },
+        if options.sync_files {
+            calc_max_byte_size(options.max_file_size_kb)
+        } else {
+            0
+        },
+        if options.sync_video {
+            calc_max_byte_size(options.max_video_size_kb)
+        } else {
+            0
+        },
     ];
-    vals.into_iter().max().unwrap_or(i64::MAX).max(
-        if options.sync_text { i64::MAX } else { 0 }
-    )
+    vals.into_iter()
+        .max()
+        .unwrap_or(i64::MAX)
+        .max(if options.sync_text { i64::MAX } else { 0 })
 }
 
 /// 构建内容类型 SQL 过滤片段
@@ -287,8 +304,8 @@ pub fn export_sync_data(
 
     info!("轻量同步导出: {} 条记录", items.len());
 
-    let json = serde_json::to_string_pretty(&items)
-        .map_err(|e| format!("序列化条目失败: {}", e))?;
+    let json =
+        serde_json::to_string_pretty(&items).map_err(|e| format!("序列化条目失败: {}", e))?;
     zip.start_file("items.json", zip_options)
         .map_err(|e| e.to_string())?;
     zip.write_all(json.as_bytes()).map_err(|e| e.to_string())?;
@@ -300,7 +317,8 @@ pub fn export_sync_data(
             .map_err(|e| format!("序列化媒体映射失败: {}", e))?;
         zip.start_file("media_map.json", zip_options)
             .map_err(|e| e.to_string())?;
-        zip.write_all(map_json.as_bytes()).map_err(|e| e.to_string())?;
+        zip.write_all(map_json.as_bytes())
+            .map_err(|e| e.to_string())?;
         info!("媒体映射: {} 条（已去重）", media_map.len());
     }
 
@@ -333,18 +351,22 @@ pub fn build_media_map(
                         images_dir.join(img_path)
                     };
                     if file_len_if_within_limit(&full_path, max_image_bytes).is_some()
-                        && let Ok((hash, _)) = file_hash_from_path(&full_path) {
-                            if seen_hashes.insert(hash.clone()) {
-                                let ext = full_path.extension()
-                                    .unwrap_or_default().to_string_lossy().to_string();
-                                map.push(MediaEntry {
-                                    hash,
-                                    ext,
-                                    media_type: "image".to_string(),
-                                    local_path: img_path.clone(),
-                                    device_id: device_id.to_string(),
-                                });
-                            }
+                        && let Ok((hash, _)) = file_hash_from_path(&full_path)
+                    {
+                        if seen_hashes.insert(hash.clone()) {
+                            let ext = full_path
+                                .extension()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .to_string();
+                            map.push(MediaEntry {
+                                hash,
+                                ext,
+                                media_type: "image".to_string(),
+                                local_path: img_path.clone(),
+                                device_id: device_id.to_string(),
+                            });
+                        }
                     }
                 }
             }
@@ -367,8 +389,11 @@ pub fn build_media_map(
                 if full_path.is_file() {
                     if let Ok((hash, _)) = file_hash_from_path(&full_path) {
                         if seen_hashes.insert(hash.clone()) {
-                            let ext = full_path.extension()
-                                .unwrap_or_default().to_string_lossy().to_string();
+                            let ext = full_path
+                                .extension()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .to_string();
                             map.push(MediaEntry {
                                 hash,
                                 ext,
@@ -393,18 +418,22 @@ pub fn build_media_map(
                 for file_path in &paths {
                     let p = Path::new(file_path);
                     if file_len_if_within_limit(p, max_file_bytes).is_some()
-                        && let Ok((hash, _)) = file_hash_from_path(p) {
-                            if seen_hashes.insert(hash.clone()) {
-                                let ext = p.extension()
-                                    .unwrap_or_default().to_string_lossy().to_string();
-                                map.push(MediaEntry {
-                                    hash,
-                                    ext,
-                                    media_type: "file".to_string(),
-                                    local_path: file_path.clone(),
-                                    device_id: device_id.to_string(),
-                                });
-                            }
+                        && let Ok((hash, _)) = file_hash_from_path(p)
+                    {
+                        if seen_hashes.insert(hash.clone()) {
+                            let ext = p
+                                .extension()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .to_string();
+                            map.push(MediaEntry {
+                                hash,
+                                ext,
+                                media_type: "file".to_string(),
+                                local_path: file_path.clone(),
+                                device_id: device_id.to_string(),
+                            });
+                        }
                     }
                 }
             }
@@ -438,7 +467,8 @@ pub fn upload_media_files(
         let remote_path = format!("media/{}.{}", entry.hash, entry.ext);
         let remote_url = format!("{}{}", base_url, remote_path);
 
-        let exists = client.head(&remote_url)
+        let exists = client
+            .head(&remote_url)
             .header("Authorization", &auth)
             .send()
             .map(|r| r.status().is_success())
@@ -477,11 +507,16 @@ pub fn upload_media_files(
         let data_len = match file.metadata() {
             Ok(metadata) => metadata.len(),
             Err(e) => {
-                debug!("媒体上传跳过，无法读取 metadata {}: {}", local_path.display(), e);
+                debug!(
+                    "媒体上传跳过，无法读取 metadata {}: {}",
+                    local_path.display(),
+                    e
+                );
                 continue;
             }
         };
-        let resp = client.put(&remote_url)
+        let resp = client
+            .put(&remote_url)
             .header("Authorization", &auth)
             .header("Content-Type", "application/octet-stream")
             .header("Content-Length", data_len)
@@ -495,7 +530,10 @@ pub fn upload_media_files(
         }
     }
 
-    info!("媒体上传: {} 个新文件, {} 个已存在跳过, 共 {} bytes", uploaded, skipped, total_bytes);
+    info!(
+        "媒体上传: {} 个新文件, {} 个已存在跳过, 共 {} bytes",
+        uploaded, skipped, total_bytes
+    );
     Ok((uploaded, skipped, total_bytes))
 }
 
@@ -542,7 +580,8 @@ pub fn download_missing_media(
         let remote_path = format!("media/{}.{}", entry.hash, entry.ext);
         let remote_url = format!("{}{}", base_url, remote_path);
 
-        let resp = client.get(&remote_url)
+        let resp = client
+            .get(&remote_url)
             .header("Authorization", &auth)
             .send()
             .map_err(|e| format!("下载 {} 失败: {}", remote_path, e))?;
@@ -596,17 +635,33 @@ pub fn import_sync_data(
         if let Ok(mut entry) = archive.by_name("settings.json") {
             let mut json = String::new();
             entry.read_to_string(&mut json).map_err(|e| e.to_string())?;
-            if let Ok(settings) = serde_json::from_str::<std::collections::HashMap<String, String>>(&json) {
+            if let Ok(settings) =
+                serde_json::from_str::<std::collections::HashMap<String, String>>(&json)
+            {
                 let settings_repo = crate::database::SettingsRepository::new(db);
                 let skip_keys: std::collections::HashSet<&str> = [
-                    "webdav_url", "webdav_username", "webdav_password",
-                    "webdav_remote_dir", "webdav_enabled", "webdav_auto_sync",
-                    "webdav_sync_interval", "webdav_sync_text", "webdav_sync_image",
-                    "webdav_sync_files", "webdav_sync_video", "webdav_sync_settings",
-                    "webdav_max_image_size_kb", "webdav_max_file_size_kb", "webdav_max_video_size_kb",
-                    "webdav_last_sync_time", "webdav_proxy_mode", "webdav_proxy_url",
+                    "webdav_url",
+                    "webdav_username",
+                    "webdav_password",
+                    "webdav_remote_dir",
+                    "webdav_enabled",
+                    "webdav_auto_sync",
+                    "webdav_sync_interval",
+                    "webdav_sync_text",
+                    "webdav_sync_image",
+                    "webdav_sync_files",
+                    "webdav_sync_video",
+                    "webdav_sync_settings",
+                    "webdav_max_image_size_kb",
+                    "webdav_max_file_size_kb",
+                    "webdav_max_video_size_kb",
+                    "webdav_last_sync_time",
+                    "webdav_proxy_mode",
+                    "webdav_proxy_url",
                     "device_id",
-                ].into_iter().collect();
+                ]
+                .into_iter()
+                .collect();
 
                 for (key, value) in &settings {
                     if !skip_keys.contains(key.as_str()) {
@@ -670,7 +725,11 @@ pub fn download_media_map(config: &WebDavConfig) -> Result<Vec<MediaEntry>, Stri
 }
 
 /// 上传 media_map.json（多设备安全合并）
-pub fn upload_media_map(config: &WebDavConfig, local_entries: &[MediaEntry], device_id: &str) -> Result<Vec<MediaEntry>, String> {
+pub fn upload_media_map(
+    config: &WebDavConfig,
+    local_entries: &[MediaEntry],
+    device_id: &str,
+) -> Result<Vec<MediaEntry>, String> {
     let mut map = download_media_map(config).unwrap_or_default();
 
     let local_hashes: std::collections::HashSet<&str> =
@@ -685,8 +744,10 @@ pub fn upload_media_map(config: &WebDavConfig, local_entries: &[MediaEntry], dev
     });
     let removed = before - map.len();
 
-    let existing: std::collections::HashSet<(String, String)> =
-        map.iter().map(|e| (e.hash.clone(), e.device_id.clone())).collect();
+    let existing: std::collections::HashSet<(String, String)> = map
+        .iter()
+        .map(|e| (e.hash.clone(), e.device_id.clone()))
+        .collect();
     let mut added = 0usize;
     for entry in local_entries {
         if !existing.contains(&(entry.hash.clone(), entry.device_id.clone())) {
@@ -698,7 +759,12 @@ pub fn upload_media_map(config: &WebDavConfig, local_entries: &[MediaEntry], dev
     let json = serde_json::to_string_pretty(&map).map_err(|e| e.to_string())?;
     upload_sync(config, json.as_bytes(), "media_map.json")?;
     if added > 0 || removed > 0 {
-        info!("上传 media_map.json: {} 条 (新增 {}, 移除 {})", map.len(), added, removed);
+        info!(
+            "上传 media_map.json: {} 条 (新增 {}, 移除 {})",
+            map.len(),
+            added,
+            removed
+        );
     }
     Ok(map)
 }
@@ -711,7 +777,10 @@ fn list_remote_media_files(config: &WebDavConfig) -> Result<Vec<String>, String>
     let media_url = format!("{}media/", base_url);
 
     let resp = client
-        .request(reqwest::Method::from_bytes(b"PROPFIND").unwrap(), &media_url)
+        .request(
+            reqwest::Method::from_bytes(b"PROPFIND").unwrap(),
+            &media_url,
+        )
         .header("Authorization", &auth)
         .header("Depth", "1")
         .send()
@@ -721,7 +790,9 @@ fn list_remote_media_files(config: &WebDavConfig) -> Result<Vec<String>, String>
         return Ok(Vec::new());
     }
 
-    let body = resp.text().map_err(|e| format!("读取 PROPFIND 响应失败: {}", e))?;
+    let body = resp
+        .text()
+        .map_err(|e| format!("读取 PROPFIND 响应失败: {}", e))?;
     let lower = body.to_lowercase();
 
     let mut files = Vec::new();
@@ -759,9 +830,7 @@ fn percent_decode(input: &str) -> String {
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let Ok(val) = u8::from_str_radix(
-                &input[i + 1..i + 3], 16,
-            ) {
+            if let Ok(val) = u8::from_str_radix(&input[i + 1..i + 3], 16) {
                 result.push(val);
                 i += 3;
                 continue;
@@ -789,13 +858,16 @@ pub fn cleanup_orphaned_remote_media(
     fn remote_hash(filename: &str) -> Option<&str> {
         filename.rsplit_once('.').map(|(hash, _)| hash)
     }
-    let orphan_files: Vec<&String> = remote_files.iter().filter(|f| {
-        if let Some(hash) = remote_hash(f) {
-            !referenced_hashes.contains(hash)
-        } else {
-            false
-        }
-    }).collect();
+    let orphan_files: Vec<&String> = remote_files
+        .iter()
+        .filter(|f| {
+            if let Some(hash) = remote_hash(f) {
+                !referenced_hashes.contains(hash)
+            } else {
+                false
+            }
+        })
+        .collect();
 
     if orphan_files.is_empty() {
         return Ok(0);
@@ -821,9 +893,8 @@ pub fn cleanup_orphaned_remote_media(
         }
     }
 
-    let orphan_hashes: std::collections::HashSet<&str> = orphan_files.iter().filter_map(|f| {
-        remote_hash(f)
-    }).collect();
+    let orphan_hashes: std::collections::HashSet<&str> =
+        orphan_files.iter().filter_map(|f| remote_hash(f)).collect();
     if !orphan_hashes.is_empty() {
         if let Ok(mut map) = download_media_map(config) {
             let before = map.len();
@@ -874,8 +945,16 @@ fn load_config_and_options(db: &crate::database::Database) -> Option<(WebDavConf
     if url.is_empty() {
         return None;
     }
-    let username = repo.get("webdav_username").ok().flatten().unwrap_or_default();
-    let password = repo.get("webdav_password").ok().flatten().unwrap_or_default();
+    let username = repo
+        .get("webdav_username")
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+    let password = repo
+        .get("webdav_password")
+        .ok()
+        .flatten()
+        .unwrap_or_default();
     let remote_dir = repo
         .get("webdav_remote_dir")
         .ok()
@@ -883,10 +962,18 @@ fn load_config_and_options(db: &crate::database::Database) -> Option<(WebDavConf
         .unwrap_or_else(|| "/elegant-clipboard".to_string());
 
     let get_bool = |key: &str, default: bool| -> bool {
-        repo.get(key).ok().flatten().map(|v| v != "false").unwrap_or(default)
+        repo.get(key)
+            .ok()
+            .flatten()
+            .map(|v| v != "false")
+            .unwrap_or(default)
     };
     let get_u64 = |key: &str, default: u64| -> u64 {
-        repo.get(key).ok().flatten().and_then(|v| v.parse().ok()).unwrap_or(default)
+        repo.get(key)
+            .ok()
+            .flatten()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(default)
     };
     let options = SyncOptions {
         sync_text: get_bool("webdav_sync_text", true),
@@ -899,15 +986,35 @@ fn load_config_and_options(db: &crate::database::Database) -> Option<(WebDavConf
         max_video_size_kb: get_u64("webdav_max_video_size_kb", 5120),
     };
 
-    let proxy_mode = repo.get("webdav_proxy_mode").ok().flatten().unwrap_or_else(|| "system".to_string());
-    let proxy_url = repo.get("webdav_proxy_url").ok().flatten().unwrap_or_default();
+    let proxy_mode = repo
+        .get("webdav_proxy_mode")
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "system".to_string());
+    let proxy_url = repo
+        .get("webdav_proxy_url")
+        .ok()
+        .flatten()
+        .unwrap_or_default();
     let accept_invalid_certs = get_bool("webdav_accept_invalid_certs", false);
 
-    Some((WebDavConfig { url, username, password, remote_dir, proxy_mode, proxy_url, accept_invalid_certs }, options))
+    Some((
+        WebDavConfig {
+            url,
+            username,
+            password,
+            remote_dir,
+            proxy_mode,
+            proxy_url,
+            accept_invalid_certs,
+        },
+        options,
+    ))
 }
 
 /// 用于追踪媒体同步是否正在进行
-static MEDIA_SYNC_RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static MEDIA_SYNC_RUNNING: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 /// 启动后台自动同步任务（仅在插件启用时调用）
 pub fn start_auto_sync_task(db: crate::database::Database, data_dir: std::path::PathBuf) {
@@ -948,7 +1055,9 @@ pub fn start_auto_sync_task(db: crate::database::Database, data_dir: std::path::
                                 if let Err(e) = upload_sync(&config, &zip_data, SYNC_FILENAME) {
                                     info!("WebDAV 轻量同步上传失败: {}", e);
                                 } else {
-                                    let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+                                    let now = chrono::Local::now()
+                                        .format("%Y-%m-%d %H:%M:%S")
+                                        .to_string();
                                     let _ = settings_repo.set("webdav_last_sync_time", &now);
                                     info!("WebDAV 轻量同步: 上传完成");
                                 }
@@ -956,7 +1065,8 @@ pub fn start_auto_sync_task(db: crate::database::Database, data_dir: std::path::
                             Err(e) => info!("WebDAV 轻量同步导出失败: {}", e),
                         }
 
-                        let need_media = (options.sync_image || options.sync_files) && cycle_count % 3 == 0;
+                        let need_media =
+                            (options.sync_image || options.sync_files) && cycle_count % 3 == 0;
                         if need_media
                             && !MEDIA_SYNC_RUNNING.load(std::sync::atomic::Ordering::Relaxed)
                         {
@@ -973,19 +1083,33 @@ pub fn start_auto_sync_task(db: crate::database::Database, data_dir: std::path::
                             } else {
                                 Vec::new()
                             };
-                            let local_map = build_media_map(&local_items, &data_dir, &options, &device_id);
+                            let local_map =
+                                build_media_map(&local_items, &data_dir, &options, &device_id);
 
                             let merged_map = if !local_map.is_empty() {
-                                upload_media_map(&config, &local_map, &device_id).unwrap_or_default()
+                                upload_media_map(&config, &local_map, &device_id)
+                                    .unwrap_or_default()
                             } else {
                                 download_media_map(&config).unwrap_or_default()
                             };
 
                             let _ = cleanup_orphaned_remote_media(&config, &merged_map);
 
-                            let local_images: Vec<MediaEntry> = local_map.iter().filter(|e| e.media_type == "image").cloned().collect();
-                            let local_files: Vec<MediaEntry> = local_map.iter().filter(|e| e.media_type == "file").cloned().collect();
-                            let local_icons: Vec<MediaEntry> = local_map.iter().filter(|e| e.media_type == "icon").cloned().collect();
+                            let local_images: Vec<MediaEntry> = local_map
+                                .iter()
+                                .filter(|e| e.media_type == "image")
+                                .cloned()
+                                .collect();
+                            let local_files: Vec<MediaEntry> = local_map
+                                .iter()
+                                .filter(|e| e.media_type == "file")
+                                .cloned()
+                                .collect();
+                            let local_icons: Vec<MediaEntry> = local_map
+                                .iter()
+                                .filter(|e| e.media_type == "icon")
+                                .cloned()
+                                .collect();
 
                             let mut local_referenced_paths = std::collections::HashSet::new();
                             for item in &local_items {
@@ -999,7 +1123,9 @@ pub fn start_auto_sync_task(db: crate::database::Database, data_dir: std::path::
                                 }
                                 if item.content_type == "files" {
                                     if let Some(ref paths_json) = item.file_paths {
-                                        if let Ok(paths) = serde_json::from_str::<Vec<String>>(paths_json) {
+                                        if let Ok(paths) =
+                                            serde_json::from_str::<Vec<String>>(paths_json)
+                                        {
                                             for p in paths {
                                                 local_referenced_paths.insert(p);
                                             }
@@ -1009,21 +1135,37 @@ pub fn start_auto_sync_task(db: crate::database::Database, data_dir: std::path::
                             }
                             let invalid_paths = crate::database::ClipboardRepository::new(&db)
                                 .get_invalid_file_paths_set();
-                            let dl_images: Vec<MediaEntry> = merged_map.iter()
-                                .filter(|e| e.media_type == "image" && local_referenced_paths.contains(&e.local_path))
-                                .cloned().collect();
-                            let dl_icons: Vec<MediaEntry> = merged_map.iter()
-                                .filter(|e| e.media_type == "icon" && local_referenced_paths.contains(&e.local_path))
-                                .cloned().collect();
-                            let dl_files: Vec<MediaEntry> = merged_map.into_iter()
-                                .filter(|e| e.media_type == "file"
-                                    && local_referenced_paths.contains(&e.local_path)
-                                    && !invalid_paths.contains(&e.local_path))
+                            let dl_images: Vec<MediaEntry> = merged_map
+                                .iter()
+                                .filter(|e| {
+                                    e.media_type == "image"
+                                        && local_referenced_paths.contains(&e.local_path)
+                                })
+                                .cloned()
+                                .collect();
+                            let dl_icons: Vec<MediaEntry> = merged_map
+                                .iter()
+                                .filter(|e| {
+                                    e.media_type == "icon"
+                                        && local_referenced_paths.contains(&e.local_path)
+                                })
+                                .cloned()
+                                .collect();
+                            let dl_files: Vec<MediaEntry> = merged_map
+                                .into_iter()
+                                .filter(|e| {
+                                    e.media_type == "file"
+                                        && local_referenced_paths.contains(&e.local_path)
+                                        && !invalid_paths.contains(&e.local_path)
+                                })
                                 .collect();
 
-                            let pending = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+                            let pending =
+                                std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
 
-                            if options.sync_image && (!local_images.is_empty() || !dl_images.is_empty()) {
+                            if options.sync_image
+                                && (!local_images.is_empty() || !dl_images.is_empty())
+                            {
                                 pending.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                                 let cfg = config.clone();
                                 let dir = data_dir.clone();
@@ -1033,24 +1175,35 @@ pub fn start_auto_sync_task(db: crate::database::Database, data_dir: std::path::
                                     .spawn(move || {
                                         if !local_images.is_empty() {
                                             match upload_media_files(&cfg, &local_images, &dir) {
-                                                Ok((u, s, _)) => info!("图片上传: {} 新, {} 跳过", u, s),
+                                                Ok((u, s, _)) => {
+                                                    info!("图片上传: {} 新, {} 跳过", u, s)
+                                                }
                                                 Err(e) => info!("图片上传失败: {}", e),
                                             }
                                         }
                                         if !dl_images.is_empty() {
                                             match download_missing_media(&cfg, &dl_images, &dir) {
-                                                Ok(n) => { if n > 0 { info!("图片下载: {} 个", n); } }
+                                                Ok(n) => {
+                                                    if n > 0 {
+                                                        info!("图片下载: {} 个", n);
+                                                    }
+                                                }
                                                 Err(e) => info!("图片下载失败: {}", e),
                                             }
                                         }
-                                        if cnt.fetch_sub(1, std::sync::atomic::Ordering::Relaxed) == 1 {
-                                            MEDIA_SYNC_RUNNING.store(false, std::sync::atomic::Ordering::Relaxed);
+                                        if cnt.fetch_sub(1, std::sync::atomic::Ordering::Relaxed)
+                                            == 1
+                                        {
+                                            MEDIA_SYNC_RUNNING
+                                                .store(false, std::sync::atomic::Ordering::Relaxed);
                                         }
                                     })
                                     .ok();
                             }
 
-                            if options.sync_files && (!local_files.is_empty() || !dl_files.is_empty()) {
+                            if options.sync_files
+                                && (!local_files.is_empty() || !dl_files.is_empty())
+                            {
                                 pending.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                                 let cfg = config.clone();
                                 let dir = data_dir.clone();
@@ -1060,18 +1213,27 @@ pub fn start_auto_sync_task(db: crate::database::Database, data_dir: std::path::
                                     .spawn(move || {
                                         if !local_files.is_empty() {
                                             match upload_media_files(&cfg, &local_files, &dir) {
-                                                Ok((u, s, _)) => info!("文件上传: {} 新, {} 跳过", u, s),
+                                                Ok((u, s, _)) => {
+                                                    info!("文件上传: {} 新, {} 跳过", u, s)
+                                                }
                                                 Err(e) => info!("文件上传失败: {}", e),
                                             }
                                         }
                                         if !dl_files.is_empty() {
                                             match download_missing_media(&cfg, &dl_files, &dir) {
-                                                Ok(n) => { if n > 0 { info!("文件下载: {} 个", n); } }
+                                                Ok(n) => {
+                                                    if n > 0 {
+                                                        info!("文件下载: {} 个", n);
+                                                    }
+                                                }
                                                 Err(e) => info!("文件下载失败: {}", e),
                                             }
                                         }
-                                        if cnt.fetch_sub(1, std::sync::atomic::Ordering::Relaxed) == 1 {
-                                            MEDIA_SYNC_RUNNING.store(false, std::sync::atomic::Ordering::Relaxed);
+                                        if cnt.fetch_sub(1, std::sync::atomic::Ordering::Relaxed)
+                                            == 1
+                                        {
+                                            MEDIA_SYNC_RUNNING
+                                                .store(false, std::sync::atomic::Ordering::Relaxed);
                                         }
                                     })
                                     .ok();
@@ -1087,25 +1249,35 @@ pub fn start_auto_sync_task(db: crate::database::Database, data_dir: std::path::
                                     .spawn(move || {
                                         if !local_icons.is_empty() {
                                             match upload_media_files(&cfg, &local_icons, &dir) {
-                                                Ok((u, s, _)) => info!("图标上传: {} 新, {} 跳过", u, s),
+                                                Ok((u, s, _)) => {
+                                                    info!("图标上传: {} 新, {} 跳过", u, s)
+                                                }
                                                 Err(e) => info!("图标上传失败: {}", e),
                                             }
                                         }
                                         if !dl_icons.is_empty() {
                                             match download_missing_media(&cfg, &dl_icons, &dir) {
-                                                Ok(n) => { if n > 0 { info!("图标下载: {} 个", n); } }
+                                                Ok(n) => {
+                                                    if n > 0 {
+                                                        info!("图标下载: {} 个", n);
+                                                    }
+                                                }
                                                 Err(e) => info!("图标下载失败: {}", e),
                                             }
                                         }
-                                        if cnt.fetch_sub(1, std::sync::atomic::Ordering::Relaxed) == 1 {
-                                            MEDIA_SYNC_RUNNING.store(false, std::sync::atomic::Ordering::Relaxed);
+                                        if cnt.fetch_sub(1, std::sync::atomic::Ordering::Relaxed)
+                                            == 1
+                                        {
+                                            MEDIA_SYNC_RUNNING
+                                                .store(false, std::sync::atomic::Ordering::Relaxed);
                                         }
                                     })
                                     .ok();
                             }
 
                             if pending.load(std::sync::atomic::Ordering::Relaxed) == 0 {
-                                MEDIA_SYNC_RUNNING.store(false, std::sync::atomic::Ordering::Relaxed);
+                                MEDIA_SYNC_RUNNING
+                                    .store(false, std::sync::atomic::Ordering::Relaxed);
                             }
                         }
                     }

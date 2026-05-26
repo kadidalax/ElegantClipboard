@@ -110,11 +110,7 @@ struct MonitorInfo {
 }
 
 /// 查找指定坐标所在的显示器，找不到则回退到主显示器，最后回退到 1920×1080 默认值。
-fn find_monitor_at(
-    window: &WebviewWindow,
-    x: i32,
-    y: i32,
-) -> (i32, i32, i32, i32, f64) {
+fn find_monitor_at(window: &WebviewWindow, x: i32, y: i32) -> (i32, i32, i32, i32, f64) {
     if let Ok(monitors) = window.available_monitors() {
         for m in monitors {
             let pos = m.position();
