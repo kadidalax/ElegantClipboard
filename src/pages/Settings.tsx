@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Settings16Regular,
   Options16Regular,
@@ -10,6 +10,7 @@ import {
   ArrowSync16Regular,
   Speaker216Regular,
   Filter16Regular,
+  PlugConnected16Regular,
 } from "@fluentui/react-icons";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -23,6 +24,8 @@ import {
   ShortcutsTab,
   ShortcutSettings,
 } from "@/components/settings/ShortcutsTab";
+import { PluginsTab } from "@/components/settings/PluginsTab";
+import { SyncTab } from "@/components/settings/SyncTab";
 import { ThemeTab } from "@/components/settings/ThemeTab";
 import { UpdateDialog } from "@/components/settings/UpdateDialog";
 import { Card, CardContent } from "@/components/ui/card";
@@ -40,13 +43,9 @@ function normalizePositionMode(raw: string | null | undefined): import("@/compon
   return "follow_cursor";
 }
 
-type TabType = "general" | "display" | "theme" | "data" | "appfilter" | "audio" | "shortcuts" | "about";
+type TabType = "general" | "display" | "theme" | "data" | "appfilter" | "audio" | "shortcuts" | "plugins" | "webdav" | "about";
 
-const navItems: {
-  id: TabType;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-}[] = [
+const BASE_NAV_ITEMS: { id: TabType; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "general", label: "常规设置", icon: Options16Regular },
   { id: "display", label: "显示设置", icon: LayoutColumnTwo16Regular },
   { id: "theme", label: "外观主题", icon: Color16Regular },
@@ -54,11 +53,30 @@ const navItems: {
   { id: "appfilter", label: "监听过滤", icon: Filter16Regular },
   { id: "audio", label: "音效设置", icon: Speaker216Regular },
   { id: "shortcuts", label: "快捷按键", icon: Keyboard16Regular },
+  { id: "plugins", label: "插件扩展", icon: PlugConnected16Regular },
   { id: "about", label: "关于软件", icon: Info16Regular },
 ];
 
 export function Settings() {
   const [activeTab, setActiveTab] = useState<TabType>("general");
+  const [pluginsEnabled, setPluginsEnabled] = useState<Record<string, boolean>>({ webdav: false });
+
+  const handlePluginToggle = useCallback(async (id: string, value: boolean) => {
+    setPluginsEnabled((prev) => ({ ...prev, [id]: value }));
+    if (!value && activeTab === id) setActiveTab("plugins");
+    try {
+      await invoke("set_setting", { key: `plugin_${id}_enabled`, value: value ? "true" : "false" });
+    } catch (e) {
+      logError(`保存插件 ${id} 设置失败:`, e);
+    }
+  }, [activeTab]);
+
+  const navItems = [
+    ...BASE_NAV_ITEMS.slice(0, 7),
+    BASE_NAV_ITEMS[7],
+    ...(pluginsEnabled.webdav ? [{ id: "webdav" as TabType, label: "WebDAV 同步", icon: ArrowSync16Regular }] : []),
+    BASE_NAV_ITEMS[8],
+  ];
   
   const [settings, setSettings] = useState<AppSettings>({
     data_path: "",
@@ -101,6 +119,13 @@ export function Settings() {
       setThemeReady(true);
       loadSettings();
     });
+  }, []);
+
+  // 加载插件启用状态
+  useEffect(() => {
+    invoke<Record<string, string>>("get_settings_batch", { keys: ["plugin_webdav_enabled"] })
+      .then((m) => setPluginsEnabled({ webdav: m["plugin_webdav_enabled"] === "true" }))
+      .catch((e) => logError("加载插件设置失败:", e));
   }, []);
 
   // ESC 关闭设置窗口
@@ -333,6 +358,15 @@ export function Settings() {
                   }
                 />
               )}
+
+              {activeTab === "plugins" && (
+                <PluginsTab
+                  enabledMap={pluginsEnabled}
+                  onToggle={handlePluginToggle}
+                />
+              )}
+
+              {activeTab === "webdav" && <SyncTab />}
             </div>
           </ScrollArea>
         )}

@@ -6,10 +6,12 @@ mod database;
 mod input_monitor;
 mod keyboard_hook;
 mod positioning;
+mod proxy;
 mod shortcut;
 mod task_scheduler;
 mod tray;
 mod updater;
+mod webdav;
 mod win_v_registry;
 
 use clipboard::ClipboardMonitor;
@@ -854,6 +856,19 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             commands::settings::start_accent_color_watcher(app.handle().clone());
 
+            // 启动 WebDAV 同步插件（仅在启用时初始化，禁用时零占用）
+            {
+                let app_state = app.state::<Arc<AppState>>();
+                let plugin_enabled = SettingsRepository::new(&app_state.db)
+                    .get_bool("plugin_webdav_enabled", false);
+                if plugin_enabled {
+                    webdav::start_auto_sync_task(
+                        app_state.db.clone(),
+                        AppConfig::load().get_data_dir(),
+                    );
+                }
+            }
+
             {
                 use tauri_plugin_notification::NotificationExt;
                 let shortcut_display = if win_v_registry::is_win_v_hotkey_disabled() {
@@ -1019,6 +1034,10 @@ pub fn run() {
             commands::groups::update_group_color,
             commands::groups::delete_group,
             commands::groups::move_item_to_group,
+            commands::sync::webdav_test_connection,
+            commands::sync::webdav_upload,
+            commands::sync::webdav_download,
+            commands::settings::get_settings_batch,
         ])
         .run(tauri::generate_context!());
 
