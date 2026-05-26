@@ -67,9 +67,11 @@ fn position_main_window(app: &tauri::AppHandle, window: &tauri::WebviewWindow) {
                 let w = repo.get_parsed::<f64>("window_width");
                 let h = repo.get_parsed::<f64>("window_height");
                 if let (Some(w), Some(h)) = (w, h) {
-                    let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
-                        width: w,
-                        height: h,
+                    let (cx, cy) = crate::positioning::get_cursor_position();
+                    let target_scale = crate::positioning::get_cursor_monitor_scale(window, cx, cy);
+                    let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
+                        width: (w * target_scale).round() as u32,
+                        height: (h * target_scale).round() as u32,
                     }));
                 }
             }

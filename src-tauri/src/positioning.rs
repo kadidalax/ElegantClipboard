@@ -143,6 +143,22 @@ fn get_monitor_at_cursor(window: &WebviewWindow, cx: i32, cy: i32) -> Result<Mon
     })
 }
 
+/// 获取光标所在显示器的缩放因子，用于将逻辑尺寸换算为目标屏幕的物理尺寸。
+pub fn get_cursor_monitor_scale(window: &WebviewWindow, cx: i32, cy: i32) -> f64 {
+    if let Ok(monitors) = window.available_monitors() {
+        for m in monitors {
+            let pos = m.position();
+            let size = m.size();
+            if cx >= pos.x && cx < pos.x + size.width as i32
+                && cy >= pos.y && cy < pos.y + size.height as i32
+            {
+                return m.scale_factor();
+            }
+        }
+    }
+    window.scale_factor().unwrap_or(1.0)
+}
+
 const GAP: i32 = 12;
 
 /// 跟随光标：优先右下方，X 轴溢出翻转，Y 轴溢出钳位
