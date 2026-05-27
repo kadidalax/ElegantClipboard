@@ -76,7 +76,11 @@ export function Settings() {
     if (!value && activeTab === id) setActiveTab("plugins");
     try {
       await invoke("set_setting", { key: `plugin_${id}_enabled`, value: value ? "true" : "false" });
-      if (!value) {
+      if (value) {
+        if (id === "webdav") {
+          await invoke("webdav_enable_plugin");
+        }
+      } else {
         if (id === "webdav") {
           await invoke("set_setting", { key: "webdav_enabled", value: "false" });
         } else if (id === "translate") {

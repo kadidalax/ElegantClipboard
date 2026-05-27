@@ -90,6 +90,13 @@ fn get_data_dir() -> std::path::PathBuf {
     config::AppConfig::load().get_data_dir()
 }
 
+/// 运行时启用 WebDAV 插件（启动自动同步后台任务）
+#[tauri::command]
+pub async fn webdav_enable_plugin(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    webdav::start_auto_sync_task(state.db.clone(), get_data_dir());
+    Ok(())
+}
+
 /// 测试 WebDAV 连接
 #[tauri::command]
 pub async fn webdav_test_connection(state: State<'_, Arc<AppState>>) -> Result<String, String> {
@@ -320,6 +327,11 @@ fn spawn_media_download(
         .filter(|e| e.media_type == "file")
         .cloned()
         .collect();
+    let icons: Vec<_> = media_map
+        .iter()
+        .filter(|e| e.media_type == "icon")
+        .cloned()
+        .collect();
 
     spawn_media_download_worker(
         app,
@@ -336,6 +348,14 @@ fn spawn_media_download(
         files,
         "webdav-download-files",
         "文件",
+    );
+    spawn_media_download_worker(
+        app,
+        config,
+        data_dir,
+        icons,
+        "webdav-download-icons",
+        "图标",
     );
 }
 

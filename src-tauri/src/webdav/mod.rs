@@ -1016,8 +1016,14 @@ fn load_config_and_options(db: &crate::database::Database) -> Option<(WebDavConf
 static MEDIA_SYNC_RUNNING: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
+/// 防止重复启动自动同步后台线程
+static AUTO_SYNC_STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// 启动后台自动同步任务（仅在插件启用时调用）
 pub fn start_auto_sync_task(db: crate::database::Database, data_dir: std::path::PathBuf) {
+    if AUTO_SYNC_STARTED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
     std::thread::Builder::new()
         .name("webdav-auto-sync".into())
         .spawn(move || {

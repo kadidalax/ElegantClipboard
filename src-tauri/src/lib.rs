@@ -1042,6 +1042,7 @@ pub fn run() {
             commands::groups::update_group_color,
             commands::groups::delete_group,
             commands::groups::move_item_to_group,
+            commands::sync::webdav_enable_plugin,
             commands::sync::webdav_test_connection,
             commands::sync::webdav_upload,
             commands::sync::webdav_download,

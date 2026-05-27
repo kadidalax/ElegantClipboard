@@ -30,7 +30,7 @@ export function useWebDAVSettings() {
   const [maxVideoSizeKb, setMaxVideoSizeKb] = useState("5120");
   const [lastSyncTime, setLastSyncTime] = useState("");
   const [loaded, setLoaded] = useState(false);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const loadSettings = useCallback(async () => {
     try {
@@ -78,8 +78,9 @@ export function useWebDAVSettings() {
   }, []);
 
   const debouncedSave = useCallback((key: string, value: string) => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => saveSetting(key, value), 300);
+    const existing = saveTimersRef.current.get(key);
+    if (existing) clearTimeout(existing);
+    saveTimersRef.current.set(key, setTimeout(() => saveSetting(key, value), 300));
   }, [saveSetting]);
 
   useEffect(() => { if (!loaded) return; saveSetting("webdav_enabled", enabled ? "true" : "false"); }, [enabled, loaded, saveSetting]);
