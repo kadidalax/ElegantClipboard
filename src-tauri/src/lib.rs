@@ -176,6 +176,46 @@ pub(crate) fn shortcut_has_modifier(shortcut: &str) -> bool {
         })
 }
 
+#[cfg(test)]
+mod tests {
+    use super::shortcut_has_modifier;
+
+    #[test]
+    fn pure_letter_has_no_modifier() {
+        assert!(!shortcut_has_modifier("A"));
+        assert!(!shortcut_has_modifier("V"));
+    }
+
+    #[test]
+    fn ctrl_modifier() {
+        assert!(shortcut_has_modifier("CTRL+V"));
+        assert!(shortcut_has_modifier("CONTROL+V"));
+    }
+
+    #[test]
+    fn alt_modifier() {
+        assert!(shortcut_has_modifier("ALT+N"));
+    }
+
+    #[test]
+    fn win_modifier() {
+        assert!(shortcut_has_modifier("WIN+V"));
+        assert!(shortcut_has_modifier("SUPER+V"));
+        assert!(shortcut_has_modifier("META+V"));
+        assert!(shortcut_has_modifier("CMD+V"));
+    }
+
+    #[test]
+    fn empty_string() {
+        assert!(!shortcut_has_modifier(""));
+    }
+
+    #[test]
+    fn with_spaces() {
+        assert!(shortcut_has_modifier("CTRL + SHIFT + V"));
+    }
+}
+
 fn load_quick_paste_shortcuts(repo: &SettingsRepository) -> Vec<String> {
     let mut shortcuts = default_quick_paste_shortcuts();
     for slot in 1..=10 {

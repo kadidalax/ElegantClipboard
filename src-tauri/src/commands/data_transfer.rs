@@ -326,3 +326,64 @@ pub fn restart_app(app: tauri::AppHandle) {
         tauri::process::restart(&app.env());
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::sanitize_zip_relative_path;
+    use std::path::PathBuf;
+
+    #[test]
+    fn normal_relative_path() {
+        assert_eq!(
+            sanitize_zip_relative_path("images/screenshot.png"),
+            Some(PathBuf::from("images/screenshot.png"))
+        );
+    }
+
+    #[test]
+    fn simple_filename() {
+        assert_eq!(
+            sanitize_zip_relative_path("clipboard.db"),
+            Some(PathBuf::from("clipboard.db"))
+        );
+    }
+
+    #[test]
+    fn rejects_parent_dir_traversal() {
+        assert_eq!(sanitize_zip_relative_path("../etc/passwd"), None);
+        assert_eq!(sanitize_zip_relative_path("images/../../secret"), None);
+    }
+
+    #[test]
+    fn rejects_absolute_path() {
+        assert_eq!(sanitize_zip_relative_path("/etc/passwd"), None);
+        assert_eq!(sanitize_zip_relative_path("C:\\Windows\\system32"), None);
+    }
+
+    #[test]
+    fn rejects_empty_path() {
+        assert_eq!(sanitize_zip_relative_path(""), None);
+    }
+
+    #[test]
+    fn rejects_dot_only() {
+        assert_eq!(sanitize_zip_relative_path("."), None);
+        assert_eq!(sanitize_zip_relative_path("./"), None);
+    }
+
+    #[test]
+    fn strips_current_dir_prefix() {
+        assert_eq!(
+            sanitize_zip_relative_path("./images/test.png"),
+            Some(PathBuf::from("images/test.png"))
+        );
+    }
+
+    #[test]
+    fn nested_path_ok() {
+        assert_eq!(
+            sanitize_zip_relative_path("a/b/c/d.txt"),
+            Some(PathBuf::from("a/b/c/d.txt"))
+        );
+    }
+}

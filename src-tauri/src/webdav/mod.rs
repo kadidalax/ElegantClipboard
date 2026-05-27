@@ -1344,3 +1344,90 @@ pub fn download_sync(config: &WebDavConfig, filename: &str) -> Result<Option<Vec
         _ => Err(format!("下载失败: HTTP {}", status)),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{SyncOptions, build_type_filter, calc_max_query_size};
+
+    fn default_options() -> SyncOptions {
+        SyncOptions {
+            sync_text: true,
+            sync_image: true,
+            sync_files: true,
+            sync_video: false,
+            sync_settings: true,
+            max_image_size_kb: 5120,
+            max_file_size_kb: 5120,
+            max_video_size_kb: 5120,
+        }
+    }
+
+    #[test]
+    fn type_filter_all_enabled() {
+        let opts = default_options();
+        let types = build_type_filter(&opts);
+        assert!(types.contains(&"'text'"));
+        assert!(types.contains(&"'html'"));
+        assert!(types.contains(&"'rtf'"));
+        assert!(types.contains(&"'image'"));
+        assert!(types.contains(&"'files'"));
+    }
+
+    #[test]
+    fn type_filter_text_only() {
+        let opts = SyncOptions {
+            sync_text: true,
+            sync_image: false,
+            sync_files: false,
+            ..default_options()
+        };
+        let types = build_type_filter(&opts);
+        assert_eq!(types.len(), 3);
+        assert!(types.contains(&"'text'"));
+        assert!(!types.contains(&"'image'"));
+    }
+
+    #[test]
+    fn type_filter_nothing_enabled() {
+        let opts = SyncOptions {
+            sync_text: false,
+            sync_image: false,
+            sync_files: false,
+            ..default_options()
+        };
+        let types = build_type_filter(&opts);
+        assert!(types.is_empty());
+    }
+
+    #[test]
+    fn max_query_size_text_enabled_returns_max() {
+        let opts = default_options();
+        let size = calc_max_query_size(&opts);
+        assert_eq!(size, i64::MAX);
+    }
+
+    #[test]
+    fn max_query_size_image_only() {
+        let opts = SyncOptions {
+            sync_text: false,
+            sync_image: true,
+            sync_files: false,
+            max_image_size_kb: 1024,
+            ..default_options()
+        };
+        let size = calc_max_query_size(&opts);
+        assert_eq!(size, 1024 * 1024);
+    }
+
+    #[test]
+    fn max_query_size_nothing_enabled() {
+        let opts = SyncOptions {
+            sync_text: false,
+            sync_image: false,
+            sync_files: false,
+            ..default_options()
+        };
+        let size = calc_max_query_size(&opts);
+        assert_eq!(size, 0);
+    }
+}
