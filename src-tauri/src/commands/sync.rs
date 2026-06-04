@@ -121,17 +121,23 @@ pub async fn webdav_upload(
     tokio::task::spawn_blocking(move || {
         let zip_data = webdav::export_sync_data(&db, &data_dir, &options)?;
         let size = zip_data.len();
-        webdav::upload_sync(&config, &zip_data, "clipboard_sync.zip")?;
+        webdav::upload_sync(&config, &zip_data, "clipboard_sync.zip", "application/zip")?;
 
         let device_id = webdav::get_or_create_device_id(&db);
         let local_map = build_local_media_map(&db, &data_dir, &options, &device_id);
-        let merged_map = if !local_map.is_empty() {
-            webdav::upload_media_map(&config, &local_map, &device_id).unwrap_or_default()
+        if !local_map.is_empty() {
+            match webdav::upload_media_map(&config, &local_map, &device_id) {
+                Ok(map) => {
+                    let _ = webdav::cleanup_orphaned_remote_media(&config, &map);
+                }
+                Err(e) => {
+                    tracing::warn!("上传 media map 失败，跳过清理: {}", e);
+                }
+            }
         } else {
-            webdav::download_media_map(&config).unwrap_or_default()
-        };
-
-        let _ = webdav::cleanup_orphaned_remote_media(&config, &merged_map);
+            let map = webdav::download_media_map(&config).unwrap_or_default();
+            let _ = webdav::cleanup_orphaned_remote_media(&config, &map);
+        }
 
         spawn_media_upload_files(&app, &config, &data_dir, &local_map);
 

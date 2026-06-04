@@ -594,7 +594,7 @@ fn set_paste_shortcut_inner(
     kind: PasteKind,
 ) -> Result<(), String> {
     if !(1..=10).contains(&slot) {
-        return Err("slot must be between 1 and 9".to_string());
+        return Err("slot must be between 1 and 10".to_string());
     }
 
     let normalized = normalize_shortcut_value(&shortcut);

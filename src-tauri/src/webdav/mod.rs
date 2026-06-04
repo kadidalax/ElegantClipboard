@@ -555,22 +555,33 @@ pub fn download_missing_media(
     let mut downloaded = 0usize;
 
     for entry in entries {
-        let local_path = match entry.media_type.as_str() {
-            "image" => {
-                if Path::new(&entry.local_path).is_absolute() {
-                    PathBuf::from(&entry.local_path)
-                } else {
-                    images_dir.join(&entry.local_path)
-                }
+        let local_path = if Path::new(&entry.local_path).is_absolute() {
+            // 绝对路径：必须在预期的数据目录内，否则拒绝（防止路径穿越）
+            let p = std::path::PathBuf::from(&entry.local_path);
+            let safe = match entry.media_type.as_str() {
+                "image" => p.starts_with(&images_dir),
+                "icon" => p.starts_with(&icons_dir),
+                _ => p.starts_with(data_dir),
+            };
+            if !safe {
+                debug!("跳过路径不安全的媒体条目: {}", entry.local_path);
+                continue;
             }
-            "icon" => {
-                if Path::new(&entry.local_path).is_absolute() {
-                    PathBuf::from(&entry.local_path)
-                } else {
-                    icons_dir.join(&entry.local_path)
-                }
+            p
+        } else {
+            // 相对路径：拒绝含 .. 的路径，然后拼接到对应目录
+            if Path::new(&entry.local_path)
+                .components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
+            {
+                debug!("跳过含 .. 的媒体条目: {}", entry.local_path);
+                continue;
             }
-            _ => PathBuf::from(&entry.local_path),
+            match entry.media_type.as_str() {
+                "image" => images_dir.join(&entry.local_path),
+                "icon" => icons_dir.join(&entry.local_path),
+                _ => PathBuf::from(&entry.local_path),
+            }
         };
 
         if local_path.exists() {
@@ -757,7 +768,7 @@ pub fn upload_media_map(
     }
 
     let json = serde_json::to_string_pretty(&map).map_err(|e| e.to_string())?;
-    upload_sync(config, json.as_bytes(), "media_map.json")?;
+    upload_sync(config, json.as_bytes(), "media_map.json", "application/json")?;
     if added > 0 || removed > 0 {
         info!(
             "上传 media_map.json: {} 条 (新增 {}, 移除 {})",
@@ -901,7 +912,7 @@ pub fn cleanup_orphaned_remote_media(
             map.retain(|e| !orphan_hashes.contains(e.hash.as_str()));
             if map.len() < before {
                 let json = serde_json::to_string_pretty(&map).map_err(|e| e.to_string())?;
-                let _ = upload_sync(config, json.as_bytes(), "media_map.json");
+                let _ = upload_sync(config, json.as_bytes(), "media_map.json", "application/json");
             }
         }
     }
@@ -911,7 +922,12 @@ pub fn cleanup_orphaned_remote_media(
 }
 
 /// 上传数据到 WebDAV
-pub fn upload_sync(config: &WebDavConfig, data: &[u8], filename: &str) -> Result<(), String> {
+pub fn upload_sync(
+    config: &WebDavConfig,
+    data: &[u8],
+    filename: &str,
+    content_type: &str,
+) -> Result<(), String> {
     let client = build_client(config)?;
     let auth = basic_auth(&config.username, &config.password);
     let base_url = normalize_url(&config.url, &config.remote_dir);
@@ -924,7 +940,7 @@ pub fn upload_sync(config: &WebDavConfig, data: &[u8], filename: &str) -> Result
     let resp = client
         .put(&file_url)
         .header("Authorization", &auth)
-        .header("Content-Type", "application/zip")
+        .header("Content-Type", content_type)
         .body(data.to_vec())
         .send()
         .map_err(|e| format!("上传失败: {}", e))?;
@@ -1058,7 +1074,7 @@ pub fn start_auto_sync_task(db: crate::database::Database, data_dir: std::path::
                         info!("WebDAV 轻量同步: 开始上传");
                         match export_sync_data(&db, &data_dir, &options) {
                             Ok(zip_data) => {
-                                if let Err(e) = upload_sync(&config, &zip_data, SYNC_FILENAME) {
+                                if let Err(e) = upload_sync(&config, &zip_data, SYNC_FILENAME, "application/zip") {
                                     info!("WebDAV 轻量同步上传失败: {}", e);
                                 } else {
                                     let now = chrono::Local::now()
@@ -1093,13 +1109,21 @@ pub fn start_auto_sync_task(db: crate::database::Database, data_dir: std::path::
                                 build_media_map(&local_items, &data_dir, &options, &device_id);
 
                             let merged_map = if !local_map.is_empty() {
-                                upload_media_map(&config, &local_map, &device_id)
-                                    .unwrap_or_default()
+                                match upload_media_map(&config, &local_map, &device_id) {
+                                    Ok(map) => {
+                                        let _ = cleanup_orphaned_remote_media(&config, &map);
+                                        map
+                                    }
+                                    Err(e) => {
+                                        info!("上传 media map 失败，跳过清理: {}", e);
+                                        Vec::new()
+                                    }
+                                }
                             } else {
-                                download_media_map(&config).unwrap_or_default()
+                                let map = download_media_map(&config).unwrap_or_default();
+                                let _ = cleanup_orphaned_remote_media(&config, &map);
+                                map
                             };
-
-                            let _ = cleanup_orphaned_remote_media(&config, &merged_map);
 
                             let local_images: Vec<MediaEntry> = local_map
                                 .iter()
@@ -1173,7 +1197,7 @@ pub fn start_auto_sync_task(db: crate::database::Database, data_dir: std::path::
                                 let cfg = config.clone();
                                 let dir = data_dir.clone();
                                 let cnt = pending.clone();
-                                std::thread::Builder::new()
+                                match std::thread::Builder::new()
                                     .name("webdav-sync-images".into())
                                     .spawn(move || {
                                         if !local_images.is_empty() {
@@ -1200,8 +1224,20 @@ pub fn start_auto_sync_task(db: crate::database::Database, data_dir: std::path::
                                             MEDIA_SYNC_RUNNING
                                                 .store(false, std::sync::atomic::Ordering::Relaxed);
                                         }
-                                    })
-                                    .ok();
+                                    }) {
+                                    Ok(_) => {}
+                                    Err(e) => {
+                                        info!("图片同步线程创建失败: {}", e);
+                                        if pending.fetch_sub(1, std::sync::atomic::Ordering::Relaxed)
+                                            == 1
+                                        {
+                                            MEDIA_SYNC_RUNNING.store(
+                                                false,
+                                                std::sync::atomic::Ordering::Relaxed,
+                                            );
+                                        }
+                                    }
+                                }
                             }
 
                             if options.sync_files
@@ -1211,7 +1247,7 @@ pub fn start_auto_sync_task(db: crate::database::Database, data_dir: std::path::
                                 let cfg = config.clone();
                                 let dir = data_dir.clone();
                                 let cnt = pending.clone();
-                                std::thread::Builder::new()
+                                match std::thread::Builder::new()
                                     .name("webdav-sync-files".into())
                                     .spawn(move || {
                                         if !local_files.is_empty() {
@@ -1238,8 +1274,20 @@ pub fn start_auto_sync_task(db: crate::database::Database, data_dir: std::path::
                                             MEDIA_SYNC_RUNNING
                                                 .store(false, std::sync::atomic::Ordering::Relaxed);
                                         }
-                                    })
-                                    .ok();
+                                    }) {
+                                    Ok(_) => {}
+                                    Err(e) => {
+                                        info!("文件同步线程创建失败: {}", e);
+                                        if pending.fetch_sub(1, std::sync::atomic::Ordering::Relaxed)
+                                            == 1
+                                        {
+                                            MEDIA_SYNC_RUNNING.store(
+                                                false,
+                                                std::sync::atomic::Ordering::Relaxed,
+                                            );
+                                        }
+                                    }
+                                }
                             }
 
                             if !local_icons.is_empty() || !dl_icons.is_empty() {
@@ -1247,7 +1295,7 @@ pub fn start_auto_sync_task(db: crate::database::Database, data_dir: std::path::
                                 let cfg = config.clone();
                                 let dir = data_dir.clone();
                                 let cnt = pending.clone();
-                                std::thread::Builder::new()
+                                match std::thread::Builder::new()
                                     .name("webdav-sync-icons".into())
                                     .spawn(move || {
                                         if !local_icons.is_empty() {
@@ -1274,8 +1322,20 @@ pub fn start_auto_sync_task(db: crate::database::Database, data_dir: std::path::
                                             MEDIA_SYNC_RUNNING
                                                 .store(false, std::sync::atomic::Ordering::Relaxed);
                                         }
-                                    })
-                                    .ok();
+                                    }) {
+                                    Ok(_) => {}
+                                    Err(e) => {
+                                        info!("图标同步线程创建失败: {}", e);
+                                        if pending.fetch_sub(1, std::sync::atomic::Ordering::Relaxed)
+                                            == 1
+                                        {
+                                            MEDIA_SYNC_RUNNING.store(
+                                                false,
+                                                std::sync::atomic::Ordering::Relaxed,
+                                            );
+                                        }
+                                    }
+                                }
                             }
 
                             if pending.load(std::sync::atomic::Ordering::Relaxed) == 0 {

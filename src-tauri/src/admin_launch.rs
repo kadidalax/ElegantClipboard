@@ -198,7 +198,10 @@ pub fn self_elevate() -> bool {
     // 回退到 UAC 弹窗提权
     if elevate_with_uac() {
         // 验证新进程存活（防止初始化崩溃导致两个实例都退出）
-        return wait_for_new_instance(3);
+        if wait_for_new_instance(3) {
+            return true;
+        }
+        tracing::warn!("UAC 提权声称成功但未检测到提权进程");
     }
     false
 }
