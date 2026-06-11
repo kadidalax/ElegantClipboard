@@ -59,6 +59,11 @@ pub fn get_app_version() -> String {
 }
 
 #[tauri::command]
+pub fn get_build_time() -> String {
+    env!("BUILD_TIME").to_string()
+}
+
+#[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn show_image_preview(
     app: tauri::AppHandle,

@@ -955,6 +955,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::preview::get_app_version,
+            commands::preview::get_build_time,
             commands::data_transfer::get_default_data_path,
             commands::data_transfer::get_original_default_path,
             commands::data_transfer::check_path_has_data,

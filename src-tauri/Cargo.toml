@@ -21,6 +21,7 @@ panic = "abort"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 [dependencies]
 # Tauri core
