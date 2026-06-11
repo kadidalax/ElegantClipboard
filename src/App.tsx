@@ -14,6 +14,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import debounce from "lodash.debounce";
+import { useShallow } from "zustand/react/shallow";
 import { ClipboardList } from "@/components/ClipboardList";
 import { Button } from "@/components/ui/button";
 import {
@@ -65,7 +66,20 @@ function App() {
   const [deleteGroupDialogOpen, setDeleteGroupDialogOpen] = useState(false);
   const [deleteGroupTarget, setDeleteGroupTarget] = useState<Group | null>(null);
 
-  const { searchQuery, selectedGroup, selectedGroupId, setSearchQuery, setSelectedGroup, setSelectedGroupId, fetchItems, clearHistory, refresh, resetView } = useClipboardStore();
+  const { searchQuery, selectedGroup, selectedGroupId, setSearchQuery, setSelectedGroup, setSelectedGroupId, fetchItems, clearHistory, refresh, resetView } = useClipboardStore(
+    useShallow((s) => ({
+      searchQuery: s.searchQuery,
+      selectedGroup: s.selectedGroup,
+      selectedGroupId: s.selectedGroupId,
+      setSearchQuery: s.setSearchQuery,
+      setSelectedGroup: s.setSelectedGroup,
+      setSelectedGroupId: s.setSelectedGroupId,
+      fetchItems: s.fetchItems,
+      clearHistory: s.clearHistory,
+      refresh: s.refresh,
+      resetView: s.resetView,
+    })),
+  );
   const batchMode = useClipboardStore((s) => s.batchMode);
   const selectedIds = useClipboardStore((s) => s.selectedIds);
   const setBatchMode = useClipboardStore((s) => s.setBatchMode);

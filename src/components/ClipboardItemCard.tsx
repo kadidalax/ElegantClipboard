@@ -15,6 +15,7 @@ import {
 } from "@fluentui/react-icons";
 import { invoke } from "@tauri-apps/api/core";
 import { emitTo, listen } from "@tauri-apps/api/event";
+import { useShallow } from "zustand/react/shallow";
 import {
   CardFooter,
   FileContent,
@@ -67,7 +68,6 @@ import { useClipboardStore, ClipboardItem } from "@/stores/clipboard";
 import { useGroupStore } from "@/stores/groups";
 import { useTranslateSettings } from "@/stores/translate-settings";
 import { useUISettings } from "@/stores/ui-settings";
-import { useShallow } from "zustand/react/shallow";
 
 // ============ 类型定义 ============
 
@@ -80,7 +80,18 @@ interface ClipboardItemCardProps {
 }
 
 const clipboardActions = () => useClipboardStore.getState();
+
+// LRU 缓存：文件有效性检查结果，上限 500 条
+const FILE_VALIDITY_CACHE_MAX = 500;
 const fileValidityCache = new Map<string, boolean>();
+function setFileValidityCache(key: string, value: boolean) {
+  if (fileValidityCache.size >= FILE_VALIDITY_CACHE_MAX) {
+    // 删除最早的条目
+    const firstKey = fileValidityCache.keys().next().value;
+    if (firstKey !== undefined) fileValidityCache.delete(firstKey);
+  }
+  fileValidityCache.set(key, value);
+}
 const textPreviewLM = createLeaseManager("allocate_text_preview_lease");
 
 // ============ 主卡片组件 ============
@@ -228,7 +239,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
     )
       .then((checkResult) => {
         const allExist = filePaths.every((path) => checkResult[path]?.exists);
-        fileValidityCache.set(cacheKey, allExist);
+        setFileValidityCache(cacheKey, allExist);
         if (!cancelled) setRuntimeFilesValid(allExist);
       })
       .catch((error) => {
@@ -616,6 +627,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
         )}
         onClick={handlePaste}
       >
+        {justPasted && <div className="paste-flash-overlay" />}
         {!isDragging && !isDragOverlay && !batchMode && (
           <>
             <button

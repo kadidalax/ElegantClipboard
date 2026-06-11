@@ -98,6 +98,15 @@ struct ContentHashes {
     semantic_hash: String,
 }
 
+/// 处理剪贴板内容所需的设置，批量读取避免多次数据库查询
+struct ProcessSettings {
+    max_content_size: usize,
+    dedup_strategy: String,
+    text_dedup_mode: String,
+    max_history_count: i64,
+    auto_cleanup_days: i64,
+}
+
 pub struct ClipboardHandler {
     repository: ClipboardRepository,
     settings_repo: SettingsRepository,
@@ -121,14 +130,55 @@ impl ClipboardHandler {
         }
     }
 
-    fn get_max_content_size(&self) -> usize {
-        self.settings_repo
+    /// 批量读取处理所需的全部设置，单次数据库查询
+    fn get_process_settings(&self) -> ProcessSettings {
+        let keys = [
+            "max_content_size_kb",
+            "dedup_strategy",
+            "text_dedup_mode",
+            "max_history_count",
+            "auto_cleanup_days",
+        ];
+        let batch = self.settings_repo.get_batch(&keys);
+
+        let max_content_size = batch
             .get("max_content_size_kb")
-            .ok()
-            .flatten()
+            .and_then(|v| v.as_deref())
             .and_then(|s| s.parse::<usize>().ok())
             .map(|kb| kb * 1024)
-            .unwrap_or(DEFAULT_MAX_CONTENT_SIZE)
+            .unwrap_or(DEFAULT_MAX_CONTENT_SIZE);
+
+        let dedup_strategy = batch
+            .get("dedup_strategy")
+            .and_then(|v| v.as_deref())
+            .unwrap_or("move_to_top")
+            .to_string();
+
+        let text_dedup_mode = batch
+            .get("text_dedup_mode")
+            .and_then(|v| v.as_deref())
+            .unwrap_or("semantic")
+            .to_string();
+
+        let max_history_count = batch
+            .get("max_history_count")
+            .and_then(|v| v.as_deref())
+            .and_then(|s| s.parse::<i64>().ok())
+            .unwrap_or(DEFAULT_MAX_HISTORY_COUNT);
+
+        let auto_cleanup_days = batch
+            .get("auto_cleanup_days")
+            .and_then(|v| v.as_deref())
+            .and_then(|s| s.parse::<i64>().ok())
+            .unwrap_or(DEFAULT_AUTO_CLEANUP_DAYS);
+
+        ProcessSettings {
+            max_content_size,
+            dedup_strategy,
+            text_dedup_mode,
+            max_history_count,
+            auto_cleanup_days,
+        }
     }
 
     /// 图片大小上限（字节），0 表示不限制
@@ -142,54 +192,9 @@ impl ClipboardHandler {
             .unwrap_or(DEFAULT_MAX_IMAGE_SIZE)
     }
 
-    fn get_max_history_count(&self) -> i64 {
-        self.settings_repo
-            .get("max_history_count")
-            .ok()
-            .flatten()
-            .and_then(|s| s.parse::<i64>().ok())
-            .unwrap_or(DEFAULT_MAX_HISTORY_COUNT)
-    }
-
-    fn get_auto_cleanup_days(&self) -> i64 {
-        self.settings_repo
-            .get("auto_cleanup_days")
-            .ok()
-            .flatten()
-            .and_then(|s| s.parse::<i64>().ok())
-            .unwrap_or(DEFAULT_AUTO_CLEANUP_DAYS)
-    }
-
-    fn get_dedup_strategy(&self) -> &str {
-        // 每次读取策略（用户可能修改设置）
-        match self
-            .settings_repo
-            .get("dedup_strategy")
-            .ok()
-            .flatten()
-            .as_deref()
-        {
-            Some("ignore") => "ignore",
-            Some("always_new") => "always_new",
-            _ => "move_to_top", // 默认行为
-        }
-    }
-
     /// 检查内容类型是否被允许监听
     /// 读取 `monitor_types` 设置（逗号分隔，如 "text,html,rtf,image,files"）
     /// 默认全部允许
-    fn get_text_dedup_mode(&self) -> &str {
-        match self
-            .settings_repo
-            .get("text_dedup_mode")
-            .ok()
-            .flatten()
-            .as_deref()
-        {
-            Some("strict") => "strict",
-            _ => "semantic",
-        }
-    }
     pub fn is_content_type_allowed(&self, content: &ClipboardContent) -> bool {
         let allowed = self.settings_repo.get("monitor_types").ok().flatten();
 
@@ -279,7 +284,9 @@ impl ClipboardHandler {
         source: Option<SourceAppInfo>,
         group_id: Option<i64>,
     ) -> Result<Option<i64>, String> {
-        let max_content_size = self.get_max_content_size();
+        // 批量读取所有设置，单次数据库查询替代 5-6 次独立查询
+        let settings = self.get_process_settings();
+        let max_content_size = settings.max_content_size;
 
         // max_content_size 仅限制文本类内容
         if max_content_size > 0 {
@@ -297,9 +304,9 @@ impl ClipboardHandler {
         }
 
         let hashes = self.calculate_hashes(&content);
-        let dedup = self.get_dedup_strategy();
+        let dedup = &settings.dedup_strategy;
         let text_like = Self::is_text_like_content(&content);
-        let text_dedup_mode = self.get_text_dedup_mode();
+        let text_dedup_mode = &settings.text_dedup_mode;
         let text_use_strict = text_like && text_dedup_mode == "strict";
 
         if dedup != "always_new"
@@ -317,7 +324,7 @@ impl ClipboardHandler {
             }
             .map_err(|e| e.to_string())?
         {
-            match dedup {
+            match dedup.as_str() {
                 "ignore" => {
                     debug!("Content already exists, ignoring (dedup=ignore)");
                     return Ok(None);
@@ -386,11 +393,10 @@ impl ClipboardHandler {
         );
 
         // 执行最大历史数限制，清理旧图片
-        let max_history_count = self.get_max_history_count();
-        if max_history_count > 0 {
+        if settings.max_history_count > 0 {
             match self
                 .repository
-                .enforce_max_count(max_history_count, group_id)
+                .enforce_max_count(settings.max_history_count, group_id)
             {
                 Ok((deleted, image_paths)) => {
                     super::cleanup_image_files(&image_paths);
@@ -403,18 +409,17 @@ impl ClipboardHandler {
         }
 
         // 自动清理超过指定天数的旧记录
-        let auto_cleanup_days = self.get_auto_cleanup_days();
-        if auto_cleanup_days > 0 {
+        if settings.auto_cleanup_days > 0 {
             match self
                 .repository
-                .delete_older_than(auto_cleanup_days, group_id)
+                .delete_older_than(settings.auto_cleanup_days, group_id)
             {
                 Ok((deleted, image_paths)) => {
                     super::cleanup_image_files(&image_paths);
                     if deleted > 0 {
                         info!(
                             "Auto-cleanup: removed {} items older than {} days",
-                            deleted, auto_cleanup_days
+                            deleted, settings.auto_cleanup_days
                         );
                     }
                 }

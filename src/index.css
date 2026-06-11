@@ -325,11 +325,11 @@ textarea,
     --os-size: 6px;
     --os-padding-perpendicular: 0px;
     --os-padding-axis: 0px;
-    --os-track-border-radius: 2px;
+    --os-track-border-radius: 100px;
     --os-track-bg: transparent;
     --os-track-bg-hover: transparent;
     --os-track-bg-active: transparent;
-    --os-handle-border-radius: 2px;
+    --os-handle-border-radius: 100px;
     --os-handle-bg: hsl(from var(--color-primary) h s l / 0.2);
     --os-handle-bg-hover: hsl(from var(--color-primary) h s l / 0.35);
     --os-handle-bg-active: hsl(from var(--color-primary) h s l / 0.45);
@@ -478,18 +478,23 @@ textarea,
     }
 }
 
-/* Paste feedback flash */
-@keyframes paste-flash {
-    0% {
-        background-color: hsl(from var(--color-primary) h s l / 0.15);
-    }
-    100% {
-        background-color: transparent;
-    }
+/* Paste feedback flash — 使用 opacity 动画避免 paint 重绘 */
+.paste-flash-overlay {
+    position: absolute;
+    inset: 0;
+    background-color: hsl(from var(--color-primary) h s l / 0.15);
+    opacity: 0;
+    pointer-events: none;
+    border-radius: inherit;
 }
 
-.animate-paste-flash {
-    animation: paste-flash 0.3s ease-out;
+@keyframes paste-flash {
+    0% { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+.animate-paste-flash .paste-flash-overlay {
+    animation: paste-flash 0.3s ease-out forwards;
 }
 
 /* Dragging cursor - 使用系统 move 光标，避免与自定义 Windows 指针主题不一致 */

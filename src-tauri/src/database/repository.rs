@@ -1172,6 +1172,35 @@ impl SettingsRepository {
         }
     }
 
+    /// 批量读取多个设置项，单次查询
+    pub fn get_batch(&self, keys: &[&str]) -> std::collections::HashMap<String, Option<String>> {
+        let conn = self.read_conn.lock();
+        let mut result = std::collections::HashMap::new();
+        let placeholders: Vec<String> = keys.iter().enumerate().map(|(i, _)| format!("?{}", i + 1)).collect();
+        let sql = format!("SELECT key, value FROM settings WHERE key IN ({})", placeholders.join(", "));
+        let params: Vec<&dyn rusqlite::types::ToSql> = keys.iter().map(|k| k as &dyn rusqlite::types::ToSql).collect();
+
+        if let Ok(mut stmt) = conn.prepare(&sql) {
+            let rows = stmt.query_map(params.as_slice(), |row| {
+                let key: String = row.get(0)?;
+                let value: Option<String> = row.get(1)?;
+                Ok((key, value))
+            });
+
+            if let Ok(rows) = rows {
+                for row in rows.flatten() {
+                    result.insert(row.0, row.1);
+                }
+            }
+        }
+
+        // 确保所有请求的 key 都有条目
+        for key in keys {
+            result.entry(key.to_string()).or_insert(None);
+        }
+        result
+    }
+
     /// 读取字符串设置，缺失或出错时返回 default。
     pub fn get_or(&self, key: &str, default: &str) -> String {
         self.get(key)

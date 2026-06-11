@@ -547,7 +547,6 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
               setCustomScrollParent(viewport);
             },
           }}
-          defer
           style={{ height: "100%" }}
         >
           <SortableContext
