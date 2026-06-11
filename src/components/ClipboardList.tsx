@@ -49,7 +49,7 @@ const OS_OPTIONS = {
   scrollbars: {
     theme: "os-theme-custom",
     visibility: "auto",
-    autoHide: "scroll",
+    autoHide: "leave",
     autoHideDelay: 1000,
   },
   overflow: {
@@ -458,7 +458,7 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
       const DENSITY_PADDING: Record<string, string> = { compact: "pb-1", spacious: "pb-3", normal: "pb-2" };
       const densityPb = DENSITY_PADDING[cardDensity] ?? "pb-2";
       return (
-        <div className={`px-2 ${densityPb}${index === 0 ? ' pt-1.5' : ''}`}>
+        <div className={`px-2 ${densityPb}${index === 0 ? ' pt-1.5' : ''} list-item-enter`}>
           {showSeparator && <Separator className="mb-2" />}
           <ClipboardItemCard item={item} index={index} showBadge={showSlotBadges} sortId={item._sortId} />
         </div>

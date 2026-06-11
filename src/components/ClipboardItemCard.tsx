@@ -188,6 +188,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
   const [translatedText, setTranslatedText] = useState("");
 
   const [justPasted, setJustPasted] = useState(false);
+  const [justCopied, setJustCopied] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [fileListItems, setFileListItems] = useState<FileListItem[]>([]);
   const { groups, moveItemToGroup } = useGroupStore();
@@ -540,6 +541,8 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
     copyToClipboard(item.id);
+    setJustCopied(true);
+    setTimeout(() => setJustCopied(false), 700);
   };
   const handleCopyCtxMenu = () => copyToClipboard(item.id);
   const handleTogglePin = (e: React.MouseEvent) => {
@@ -628,6 +631,11 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
         onClick={handlePaste}
       >
         {justPasted && <div className="paste-flash-overlay" />}
+        {justCopied && (
+          <div className="copy-success-overlay">
+            <CheckmarkCircle16Filled className="copy-success-icon w-8 h-8 text-primary" />
+          </div>
+        )}
         {!isDragging && !isDragOverlay && !batchMode && (
           <>
             <button
