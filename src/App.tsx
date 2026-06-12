@@ -16,6 +16,7 @@ import { listen } from "@tauri-apps/api/event";
 import debounce from "lodash.debounce";
 import { useShallow } from "zustand/react/shallow";
 import { ClipboardList } from "@/components/ClipboardList";
+import { Onboarding } from "@/components/Onboarding";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -94,6 +95,8 @@ function App() {
   const showCategoryFilter = useUISettings((s) => s.showCategoryFilter);
   const toolbarButtons = useUISettings((s) => s.toolbarButtons);
   const windowAnimation = useUISettings((s) => s.windowAnimation);
+  const onboardingCompleted = useUISettings((s) => s.onboardingCompleted);
+  const setOnboardingCompleted = useUISettings((s) => s.setOnboardingCompleted);
   const inputRef = useInputFocus<HTMLInputElement>();
   // 追踪窗口隐藏期间是否有剪贴板变化
   const clipboardDirtyRef = useRef(false);
@@ -299,6 +302,11 @@ function App() {
 
   // ESC 键处理（后端钩子 + DOM 双通道）
   const handleEscape = useCallback(async () => {
+    // 先关闭新手引导
+    if (!onboardingCompleted) {
+      setOnboardingCompleted(true);
+      return;
+    }
     if (dismissOverlays()) return;
     if (useClipboardStore.getState().batchMode) {
       setBatchMode(false);
@@ -309,7 +317,7 @@ function App() {
     } catch (error) {
       logError("Failed to hide window:", error);
     }
-  }, [setBatchMode]);
+  }, [setBatchMode, onboardingCompleted, setOnboardingCompleted]);
 
   // 通道1：后端键盘钩子
   useEffect(() => {
@@ -798,6 +806,11 @@ function App() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 新手引导 */}
+      {!onboardingCompleted && (
+        <Onboarding onComplete={() => setOnboardingCompleted(true)} />
+      )}
     </div>
   );
 }

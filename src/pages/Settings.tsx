@@ -12,7 +12,6 @@ import {
   Filter16Regular,
   PlugConnected16Regular,
   Translate16Regular,
-  Search16Regular,
 } from "@fluentui/react-icons";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -32,7 +31,6 @@ import { ThemeTab } from "@/components/settings/ThemeTab";
 import { TranslateTab } from "@/components/settings/TranslateTab";
 import { UpdateDialog } from "@/components/settings/UpdateDialog";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { WindowTitleBar } from "@/components/WindowTitleBar";
 import { logError } from "@/lib/logger";
@@ -68,26 +66,6 @@ const BASE_NAV_ITEMS: NavItem[] = [
   { id: "plugins", label: "插件扩展", icon: PlugConnected16Regular },
   { id: "about", label: "关于软件", icon: Info16Regular },
 ];
-/** 设置项关键词 → Tab 映射，用于搜索时自动跳转 */
-const SETTINGS_KEYWORD_MAP: { keywords: string[]; tab: TabType }[] = [
-  // 常规设置
-  { keywords: ["开机自启", "自动启动", "管理员", "管理员启动", "位置", "跟随光标", "屏幕中心", "固定位置", "日志", "日志文件", "路径", "数据路径"], tab: "general" },
-  // 显示设置
-  { keywords: ["字体", "字号", "密度", "紧凑", "宽松", "行数", "显示时间", "字符数", "字节", "来源应用", "拖拽", "图片", "预览", "分组", "置顶", "收藏"], tab: "display" },
-  // 外观主题
-  { keywords: ["主题", "颜色", "暗色", "亮色", "透明", "毛玻璃", "亚克力", "窗口效果", "圆角", "圆角半径"], tab: "theme" },
-  // 数据管理
-  { keywords: ["历史记录", "最大数量", "自动清理", "过期", "内容大小", "图片大小", "删除", "清空", "导出", "导入"], tab: "data" },
-  // 监听过滤
-  { keywords: ["过滤", "排除", "应用", "监听", "剪贴板监控"], tab: "appfilter" },
-  // 音效设置
-  { keywords: ["音效", "声音", "复制音效", "粘贴音效", "音量"], tab: "audio" },
-  // 快捷按键
-  { keywords: ["快捷键", "热键", "键盘", "快捷", "全局快捷", "唤出"], tab: "shortcuts" },
-  // 插件扩展
-  { keywords: ["插件", "扩展", "webdav", "同步", "翻译", "文本翻译"], tab: "plugins" },
-];
-
 type NavIndicator = {
   visible: boolean;
   top: number;
@@ -98,7 +76,6 @@ type NavIndicator = {
 
 export function Settings() {
   const [activeTab, setActiveTab] = useState<TabType>("general");
-  const [settingsSearch, setSettingsSearch] = useState("");
   const [pluginsEnabled, setPluginsEnabled] = useState<Record<string, boolean>>({ webdav: false, translate: false });
   const navRef = useRef<HTMLElement>(null);
   const [navIndicator, setNavIndicator] = useState<NavIndicator>({
@@ -146,19 +123,6 @@ export function Settings() {
     },
     [pluginsEnabled.webdav, pluginsEnabled.translate],
   );
-
-  // 搜索时自动跳转到匹配的 Tab
-  const handleSettingsSearch = useCallback((query: string) => {
-    setSettingsSearch(query);
-    if (!query.trim()) return;
-    const q = query.toLowerCase();
-    for (const entry of SETTINGS_KEYWORD_MAP) {
-      if (entry.keywords.some((kw) => kw.toLowerCase().includes(q))) {
-        setActiveTab(entry.tab);
-        return;
-      }
-    }
-  }, []);
 
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
@@ -399,20 +363,6 @@ export function Settings() {
       <WindowTitleBar
         icon={<Settings16Regular className="w-5 h-5 text-muted-foreground" />}
         title="设置"
-        center={
-          activeTab !== "about" ? (
-            <div className="relative w-72">
-              <Search16Regular className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                type="text"
-                placeholder="搜索设置项..."
-                value={settingsSearch}
-                onChange={(e) => handleSettingsSearch(e.target.value)}
-                className="h-8 pl-9 pr-3 text-sm"
-              />
-            </div>
-          ) : undefined
-        }
       />
 
       {/* Main Content */}
