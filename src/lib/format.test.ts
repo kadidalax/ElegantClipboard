@@ -4,6 +4,9 @@ import {
   formatCharCount,
   formatSize,
   contentTypeConfig,
+  getFileNameFromPath,
+  parseFilePaths,
+  isImageFile,
 } from "./format";
 
 describe("formatTime", () => {
@@ -121,5 +124,63 @@ describe("contentTypeConfig", () => {
     expect(contentTypeConfig.text.label).toBe("文本");
     expect(contentTypeConfig.image.label).toBe("图片");
     expect(contentTypeConfig.files.label).toBe("文件");
+  });
+});
+
+describe("getFileNameFromPath", () => {
+  it("extracts filename from unix path", () => {
+    expect(getFileNameFromPath("/home/user/file.txt")).toBe("file.txt");
+  });
+
+  it("extracts filename from windows path", () => {
+    expect(getFileNameFromPath("C:\\Users\\test\\doc.pdf")).toBe("doc.pdf");
+  });
+
+  it("returns path if no separator", () => {
+    expect(getFileNameFromPath("filename")).toBe("filename");
+  });
+
+  it("handles trailing slash - returns path as-is", () => {
+    expect(getFileNameFromPath("/path/to/")).toBe("/path/to/");
+  });
+});
+
+describe("parseFilePaths", () => {
+  it("parses valid json array", () => {
+    expect(parseFilePaths('["a.txt","b.txt"]')).toEqual(["a.txt", "b.txt"]);
+  });
+
+  it("returns empty for null", () => {
+    expect(parseFilePaths(null)).toEqual([]);
+  });
+
+  it("returns empty for invalid json", () => {
+    expect(parseFilePaths("not json")).toEqual([]);
+  });
+
+  it("returns empty for non-array json", () => {
+    expect(parseFilePaths('{"key":"value"}')).toEqual([]);
+  });
+});
+
+describe("isImageFile", () => {
+  it("returns true for png", () => {
+    expect(isImageFile("photo.png")).toBe(true);
+  });
+
+  it("returns true for jpg", () => {
+    expect(isImageFile("image.JPG")).toBe(true);
+  });
+
+  it("returns true for gif", () => {
+    expect(isImageFile("anim.gif")).toBe(true);
+  });
+
+  it("returns false for txt", () => {
+    expect(isImageFile("doc.txt")).toBe(false);
+  });
+
+  it("returns false for unknown extension", () => {
+    expect(isImageFile("file.xyz")).toBe(false);
   });
 });
