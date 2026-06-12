@@ -1176,9 +1176,19 @@ impl SettingsRepository {
     pub fn get_batch(&self, keys: &[&str]) -> std::collections::HashMap<String, Option<String>> {
         let conn = self.read_conn.lock();
         let mut result = std::collections::HashMap::new();
-        let placeholders: Vec<String> = keys.iter().enumerate().map(|(i, _)| format!("?{}", i + 1)).collect();
-        let sql = format!("SELECT key, value FROM settings WHERE key IN ({})", placeholders.join(", "));
-        let params: Vec<&dyn rusqlite::types::ToSql> = keys.iter().map(|k| k as &dyn rusqlite::types::ToSql).collect();
+        let placeholders: Vec<String> = keys
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("?{}", i + 1))
+            .collect();
+        let sql = format!(
+            "SELECT key, value FROM settings WHERE key IN ({})",
+            placeholders.join(", ")
+        );
+        let params: Vec<&dyn rusqlite::types::ToSql> = keys
+            .iter()
+            .map(|k| k as &dyn rusqlite::types::ToSql)
+            .collect();
 
         if let Ok(mut stmt) = conn.prepare(&sql) {
             let rows = stmt.query_map(params.as_slice(), |row| {
