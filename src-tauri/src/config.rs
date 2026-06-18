@@ -125,7 +125,7 @@ pub fn migrate_data(old_path: &PathBuf, new_path: &PathBuf) -> Result<MigrationR
     info!("Migrating data: {:?} -> {:?}", old_path, new_path);
 
     // 确保新目录存在
-    fs::create_dir_all(new_path).map_err(|e| format!("创建新目录失败: {}", e))?;
+    fs::create_dir_all(new_path).map_err(|e| format!("创建新目录失败: {e}"))?;
 
     let mut result = MigrationResult::default();
 
@@ -135,8 +135,8 @@ pub fn migrate_data(old_path: &PathBuf, new_path: &PathBuf) -> Result<MigrationR
     if old_db.exists() {
         // 复制数据库相关文件（db, db-wal, db-shm）
         for ext in &["", "-wal", "-shm"] {
-            let old_file = old_path.join(format!("clipboard.db{}", ext));
-            let new_file = new_path.join(format!("clipboard.db{}", ext));
+            let old_file = old_path.join(format!("clipboard.db{ext}"));
+            let new_file = new_path.join(format!("clipboard.db{ext}"));
             if old_file.exists() {
                 match fs::copy(&old_file, &new_file) {
                     Ok(bytes) => {
@@ -148,7 +148,7 @@ pub fn migrate_data(old_path: &PathBuf, new_path: &PathBuf) -> Result<MigrationR
                         error!("Failed to copy {:?}: {}", old_file, e);
                         result
                             .errors
-                            .push(format!("Failed to copy {:?}: {}", old_file, e));
+                            .push(format!("Failed to copy {old_file:?}: {e}"));
                     }
                 }
             }
@@ -176,7 +176,7 @@ pub fn migrate_data(old_path: &PathBuf, new_path: &PathBuf) -> Result<MigrationR
                         Err(e) => {
                             result
                                 .errors
-                                .push(format!("Failed to copy {:?}: {}", file_name, e));
+                                .push(format!("Failed to copy {file_name:?}: {e}"));
                         }
                     }
                 }

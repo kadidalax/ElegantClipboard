@@ -609,11 +609,11 @@ impl ClipboardHandler {
         let tmp_path = image_path.with_extension("tmp");
         if let Err(e) = std::fs::write(&tmp_path, &data) {
             let _ = std::fs::remove_file(&tmp_path);
-            return Err(format!("Failed to save image: {}", e));
+            return Err(format!("Failed to save image: {e}"));
         }
         if let Err(e) = std::fs::rename(&tmp_path, &image_path) {
             let _ = std::fs::remove_file(&tmp_path);
-            return Err(format!("Failed to rename image: {}", e));
+            return Err(format!("Failed to rename image: {e}"));
         }
         debug!("Saved image to {:?}", image_path);
 
@@ -633,9 +633,9 @@ impl ClipboardHandler {
     fn extract_image_dimensions(&self, data: &[u8]) -> Result<(i64, i64), String> {
         let (w, h) = ImageReader::new(std::io::Cursor::new(data))
             .with_guessed_format()
-            .map_err(|e| format!("Failed to guess image format: {}", e))?
+            .map_err(|e| format!("Failed to guess image format: {e}"))?
             .into_dimensions()
-            .map_err(|e| format!("Failed to read image dimensions: {}", e))?;
+            .map_err(|e| format!("Failed to read image dimensions: {e}"))?;
 
         Ok((w as i64, h as i64))
     }

@@ -156,7 +156,7 @@ pub(crate) fn open_path_in_explorer(path: &std::path::Path) -> Result<(), String
         Command::new("explorer")
             .arg(path)
             .spawn()
-            .map_err(|e| format!("Failed to open folder: {}", e))?;
+            .map_err(|e| format!("Failed to open folder: {e}"))?;
     }
     #[cfg(target_os = "macos")]
     {

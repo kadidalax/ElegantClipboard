@@ -15,7 +15,7 @@ pub(super) fn set_clipboard_content(
             if let Some(ref text) = item.text_content {
                 clipboard
                     .set_text(text.clone())
-                    .map_err(|e| format!("Failed to set clipboard text: {}", e))?;
+                    .map_err(|e| format!("Failed to set clipboard text: {e}"))?;
             }
         }
         "image" => {
@@ -26,7 +26,7 @@ pub(super) fn set_clipboard_content(
         "files" => {
             if let Some(ref paths_json) = item.file_paths {
                 let paths: Vec<String> = serde_json::from_str(paths_json)
-                    .map_err(|e| format!("Failed to parse file paths: {}", e))?;
+                    .map_err(|e| format!("Failed to parse file paths: {e}"))?;
                 set_clipboard_files(&paths)?;
             }
         }
@@ -43,13 +43,13 @@ fn set_clipboard_image(path: &str) -> Result<(), String> {
     use clipboard_rs::{Clipboard, ClipboardContext, RustImageData};
 
     let image = RustImageData::from_path(path)
-        .map_err(|e| format!("Failed to load image from path: {}", e))?;
+        .map_err(|e| format!("Failed to load image from path: {e}"))?;
 
-    let ctx = ClipboardContext::new()
-        .map_err(|e| format!("Failed to create clipboard context: {}", e))?;
+    let ctx =
+        ClipboardContext::new().map_err(|e| format!("Failed to create clipboard context: {e}"))?;
 
     ctx.set_image(image)
-        .map_err(|e| format!("Failed to set clipboard image: {}", e))?;
+        .map_err(|e| format!("Failed to set clipboard image: {e}"))?;
 
     Ok(())
 }
@@ -58,11 +58,11 @@ fn set_clipboard_image(path: &str) -> Result<(), String> {
 fn set_clipboard_files(paths: &[String]) -> Result<(), String> {
     use clipboard_rs::{Clipboard, ClipboardContext};
 
-    let ctx = ClipboardContext::new()
-        .map_err(|e| format!("Failed to create clipboard context: {}", e))?;
+    let ctx =
+        ClipboardContext::new().map_err(|e| format!("Failed to create clipboard context: {e}"))?;
 
     ctx.set_files(paths.to_vec())
-        .map_err(|e| format!("Failed to set clipboard files: {}", e))?;
+        .map_err(|e| format!("Failed to set clipboard files: {e}"))?;
 
     Ok(())
 }
@@ -547,7 +547,7 @@ pub async fn copy_to_clipboard(state: State<'_, Arc<AppState>>, id: i64) -> Resu
 
     with_paused_monitor(&state, || {
         let mut clipboard =
-            arboard::Clipboard::new().map_err(|e| format!("Failed to access clipboard: {}", e))?;
+            arboard::Clipboard::new().map_err(|e| format!("Failed to access clipboard: {e}"))?;
         set_clipboard_content(&item, &mut clipboard)?;
         debug!("Copied item {} to clipboard", id);
         Ok(())
@@ -629,7 +629,7 @@ pub async fn merge_paste_content(
         let item = repo
             .get_by_id(*id)
             .map_err(|e| e.to_string())?
-            .ok_or_else(|| format!("Item {} not found", id))?;
+            .ok_or_else(|| format!("Item {id} not found"))?;
 
         // 提取文本内容：text_content > preview > file_paths
         if let Some(text) = item.text_content.filter(|t| !t.is_empty()) {
@@ -664,7 +664,7 @@ pub fn quick_paste_by_slot(
     let item = repo
         .get_by_position((slot - 1) as usize, active_group)
         .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("No clipboard item available for slot {}", slot))?;
+        .ok_or_else(|| format!("No clipboard item available for slot {slot}"))?;
 
     paste_item_to_active_window(state, app, &item, true)?;
     debug!("Quick pasted slot {} with item {}", slot, item.id);
@@ -686,7 +686,7 @@ pub fn quick_paste_favorite_by_slot(
     let item = repo
         .get_favorite_by_position((slot - 1) as usize, active_group)
         .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("收藏槽位 {} 没有可用的收藏条目", slot))?;
+        .ok_or_else(|| format!("收藏槽位 {slot} 没有可用的收藏条目"))?;
 
     paste_item_to_active_window(state, app, &item, true)?;
     debug!("Quick pasted favorite slot {} with item {}", slot, item.id);
@@ -703,7 +703,7 @@ fn paste_item_to_active_window(
     info!("paste_item: id={}, close_window={}", item.id, close_window);
     with_paused_monitor(state, || {
         let mut clipboard =
-            arboard::Clipboard::new().map_err(|e| format!("Failed to access clipboard: {}", e))?;
+            arboard::Clipboard::new().map_err(|e| format!("Failed to access clipboard: {e}"))?;
         set_clipboard_content(item, &mut clipboard)?;
         debug!("paste_item: clipboard set ok");
 
@@ -739,10 +739,10 @@ fn paste_plain_text_to_active_window(
     );
     with_paused_monitor(state, || {
         let mut clipboard =
-            arboard::Clipboard::new().map_err(|e| format!("Failed to access clipboard: {}", e))?;
+            arboard::Clipboard::new().map_err(|e| format!("Failed to access clipboard: {e}"))?;
         clipboard
             .set_text(text)
-            .map_err(|e| format!("Failed to set clipboard text: {}", e))?;
+            .map_err(|e| format!("Failed to set clipboard text: {e}"))?;
         debug!("paste_plain_text: clipboard set ok");
 
         // 粘贴时隐藏预览窗口
@@ -770,19 +770,19 @@ mod tests {
     #[test]
     fn keyword_at_start() {
         let result = extract_keyword_context("hello world foo bar", "hello", 20);
-        assert!(result.contains("hello"), "result: {}", result);
+        assert!(result.contains("hello"), "result: {result}");
     }
 
     #[test]
     fn keyword_in_middle() {
         let result = extract_keyword_context("aaa bbb ccc ddd eee", "ccc", 15);
-        assert!(result.contains("ccc"), "result: {}", result);
+        assert!(result.contains("ccc"), "result: {result}");
     }
 
     #[test]
     fn keyword_at_end() {
         let result = extract_keyword_context("foo bar baz qux", "qux", 15);
-        assert!(result.contains("qux"), "result: {}", result);
+        assert!(result.contains("qux"), "result: {result}");
     }
 
     #[test]
@@ -795,19 +795,19 @@ mod tests {
     #[test]
     fn case_insensitive() {
         let result = extract_keyword_context("Hello World", "hello", 20);
-        assert!(result.contains("Hello"), "result: {}", result);
+        assert!(result.contains("Hello"), "result: {result}");
     }
 
     #[test]
     fn cjk_keyword() {
         let result = extract_keyword_context("这是一段中文文本用于测试", "中文", 10);
-        assert!(result.contains("中文"), "result: {}", result);
+        assert!(result.contains("中文"), "result: {result}");
     }
 
     #[test]
     fn cjk_text_with_emoji() {
         let result = extract_keyword_context("测试 🎉 emoji 关键词搜索", "关键词", 15);
-        assert!(result.contains("关键词"), "result: {}", result);
+        assert!(result.contains("关键词"), "result: {result}");
     }
 
     #[test]
@@ -815,7 +815,7 @@ mod tests {
         let text = "hello world";
         let result = extract_keyword_context(text, "", 5);
         // 空关键词视为未找到，返回截断前缀（可能带省略号）
-        assert!(result.starts_with("hell"), "result: {}", result);
+        assert!(result.starts_with("hell"), "result: {result}");
     }
 
     #[test]
@@ -834,6 +834,6 @@ mod tests {
     fn unicode_boundary_safety() {
         // 多字节字符不应 panic
         let result = extract_keyword_context("émoji 🎉 test", "🎉", 20);
-        assert!(result.contains("🎉"), "result: {}", result);
+        assert!(result.contains("🎉"), "result: {result}");
     }
 }

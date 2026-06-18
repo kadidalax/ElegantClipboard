@@ -228,10 +228,7 @@ fn get_file_description(exe_path: &str) -> Option<String> {
         {
             let lang = *(lang_ptr as *const u16);
             let cp = *((lang_ptr as *const u16).add(1));
-            let path = format!(
-                "\\StringFileInfo\\{:04x}{:04x}\\FileDescription\0",
-                lang, cp
-            );
+            let path = format!("\\StringFileInfo\\{lang:04x}{cp:04x}\\FileDescription\0");
             if let Some(desc) = query_string(&buf, &path) {
                 return Some(desc);
             }
@@ -271,7 +268,7 @@ fn compute_icon_cache_key(exe_path: &str) -> String {
 /// 提取应用图标并缓存为 PNG，返回缓存文件路径
 #[cfg(target_os = "windows")]
 pub fn extract_and_cache_icon(exe_path: &str, icons_dir: &Path, cache_key: &str) -> Option<String> {
-    let icon_path = icons_dir.join(format!("{}.png", cache_key));
+    let icon_path = icons_dir.join(format!("{cache_key}.png"));
     if icon_path.exists() {
         return Some(icon_path.to_string_lossy().to_string());
     }

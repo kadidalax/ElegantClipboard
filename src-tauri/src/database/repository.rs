@@ -325,16 +325,14 @@ impl ClipboardRepository {
         let count: i64 = match group_id {
             Some(gid) => conn.query_row(
                 &format!(
-                    "SELECT COUNT(*) FROM clipboard_items WHERE {} = ?1 AND group_id = ?2",
-                    column
+                    "SELECT COUNT(*) FROM clipboard_items WHERE {column} = ?1 AND group_id = ?2"
                 ),
                 params![hash, gid],
                 |row| row.get(0),
             )?,
             None => conn.query_row(
                 &format!(
-                    "SELECT COUNT(*) FROM clipboard_items WHERE {} = ?1 AND group_id IS NULL",
-                    column
+                    "SELECT COUNT(*) FROM clipboard_items WHERE {column} = ?1 AND group_id IS NULL"
                 ),
                 params![hash],
                 |row| row.get(0),
@@ -381,10 +379,9 @@ impl ClipboardRepository {
         let column = column.as_sql();
         let select_sql = format!(
             "SELECT id FROM clipboard_items \
-             WHERE {} = ? AND {} \
+             WHERE {column} = ? AND {group_cond} \
              ORDER BY sort_order DESC, created_at DESC, id DESC \
-             LIMIT 1",
-            column, group_cond
+             LIMIT 1"
         );
 
         let target_id: Result<i64, _> = if let Some(gid) = group_param {
@@ -437,10 +434,9 @@ impl ClipboardRepository {
         let (group_cond, group_param) = Self::group_condition(group_id);
         let sql = format!(
             "SELECT * FROM clipboard_items \
-             WHERE {} \
+             WHERE {group_cond} \
              ORDER BY is_pinned DESC, sort_order DESC, created_at DESC \
-             LIMIT 1 OFFSET ?",
-            group_cond
+             LIMIT 1 OFFSET ?"
         );
         let result: Result<ClipboardItem, _> = if let Some(gid) = group_param {
             conn.query_row(&sql, params![gid, index as i64], Self::row_to_item)
@@ -465,10 +461,9 @@ impl ClipboardRepository {
         let (group_cond, group_param) = Self::group_condition(group_id);
         let sql = format!(
             "SELECT * FROM clipboard_items \
-             WHERE {} AND is_favorite = 1 \
+             WHERE {group_cond} AND is_favorite = 1 \
              ORDER BY is_pinned DESC, favorite_order DESC, sort_order DESC, created_at DESC \
-             LIMIT 1 OFFSET ?",
-            group_cond
+             LIMIT 1 OFFSET ?"
         );
         let result: Result<ClipboardItem, _> = if let Some(gid) = group_param {
             conn.query_row(&sql, params![gid, index as i64], Self::row_to_item)
@@ -604,7 +599,7 @@ impl ClipboardRepository {
             Self::LIST_COLUMNS
         };
 
-        let mut sql = format!("SELECT {} FROM clipboard_items", columns);
+        let mut sql = format!("SELECT {columns} FROM clipboard_items");
         let (conditions, mut params_vec) = Self::build_filter_conditions(&options);
         Self::append_where(&mut sql, &conditions);
 
@@ -717,8 +712,7 @@ impl ClipboardRepository {
         let in_clause = placeholders.join(",");
 
         let sql = format!(
-            "SELECT image_path FROM clipboard_items WHERE id IN ({}) AND image_path IS NOT NULL",
-            in_clause
+            "SELECT image_path FROM clipboard_items WHERE id IN ({in_clause}) AND image_path IS NOT NULL"
         );
         let mut stmt = conn.prepare(&sql)?;
         let params_ref: Vec<&dyn rusqlite::ToSql> =
@@ -728,7 +722,7 @@ impl ClipboardRepository {
             .filter_map(|r| r.ok())
             .collect();
 
-        let del_sql = format!("DELETE FROM clipboard_items WHERE id IN ({})", in_clause);
+        let del_sql = format!("DELETE FROM clipboard_items WHERE id IN ({in_clause})");
         let params_ref2: Vec<&dyn rusqlite::ToSql> =
             ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
         let deleted = conn.execute(&del_sql, params_ref2.as_slice())? as i64;
@@ -1050,8 +1044,7 @@ impl ClipboardRepository {
     ) -> Result<Vec<ClipboardItem>, rusqlite::Error> {
         let conn = self.read_conn.lock();
         let sql = format!(
-            "SELECT * FROM clipboard_items WHERE content_type IN ({}) AND byte_size <= ?1 ORDER BY created_at DESC",
-            type_filter_sql
+            "SELECT * FROM clipboard_items WHERE content_type IN ({type_filter_sql}) AND byte_size <= ?1 ORDER BY created_at DESC"
         );
         let mut stmt = conn.prepare(&sql)?;
         let items = stmt
@@ -1269,10 +1262,7 @@ impl SettingsRepository {
             .map(|(i, _)| format!("?{}", i + 1))
             .collect::<Vec<_>>()
             .join(", ");
-        let sql = format!(
-            "SELECT key, value FROM settings WHERE key IN ({})",
-            placeholders
-        );
+        let sql = format!("SELECT key, value FROM settings WHERE key IN ({placeholders})");
         let mut stmt = conn.prepare(&sql)?;
         let map = stmt
             .query_map(rusqlite::params_from_iter(keys.iter()), |row| {
@@ -1436,7 +1426,7 @@ mod tests {
     }
 
     fn make_text_item(text: &str) -> NewClipboardItem {
-        let hash = blake3::hash(format!("text:{}", text).as_bytes())
+        let hash = blake3::hash(format!("text:{text}").as_bytes())
             .to_hex()
             .to_string();
         NewClipboardItem {
@@ -1656,7 +1646,7 @@ mod tests {
         let db = temp_db();
         let repo = ClipboardRepository::new(&db);
         for i in 0..5 {
-            repo.insert(make_text_item(&format!("item_{}", i))).unwrap();
+            repo.insert(make_text_item(&format!("item_{i}"))).unwrap();
         }
 
         let items = repo
@@ -1674,7 +1664,7 @@ mod tests {
         let db = temp_db();
         let repo = ClipboardRepository::new(&db);
         for i in 0..3 {
-            repo.insert(make_text_item(&format!("count_{}", i))).unwrap();
+            repo.insert(make_text_item(&format!("count_{i}"))).unwrap();
         }
         let count = repo.count(QueryOptions::default()).unwrap();
         assert_eq!(count, 3);
@@ -1760,7 +1750,10 @@ mod tests {
         repo.toggle_pin(id).unwrap();
         let original_sort = repo.get_by_id(id).unwrap().unwrap().sort_order;
         repo.bump_to_top(id).unwrap();
-        assert_eq!(repo.get_by_id(id).unwrap().unwrap().sort_order, original_sort);
+        assert_eq!(
+            repo.get_by_id(id).unwrap().unwrap().sort_order,
+            original_sort
+        );
     }
 
     #[test]
@@ -1793,14 +1786,12 @@ mod tests {
         let db = temp_db();
         let repo = ClipboardRepository::new(&db);
         for i in 0..5 {
-            repo.insert(make_text_item(&format!("enforce_{}", i))).unwrap();
+            repo.insert(make_text_item(&format!("enforce_{i}")))
+                .unwrap();
         }
         let (deleted, _) = repo.enforce_max_count(3, None).unwrap();
         assert_eq!(deleted, 2);
-        assert_eq!(
-            repo.count(QueryOptions::default()).unwrap(),
-            3
-        );
+        assert_eq!(repo.count(QueryOptions::default()).unwrap(), 3);
     }
 
     #[test]
@@ -1979,16 +1970,24 @@ mod tests {
         let id = clip_repo.insert(make_text_item("movable")).unwrap();
 
         group_repo.move_item_to_group(id, Some(group.id)).unwrap();
-        assert!(clip_repo.exists_by_hash(
-            &clip_repo.get_by_id(id).unwrap().unwrap().content_hash,
-            Some(group.id),
-        ).unwrap());
+        assert!(
+            clip_repo
+                .exists_by_hash(
+                    &clip_repo.get_by_id(id).unwrap().unwrap().content_hash,
+                    Some(group.id),
+                )
+                .unwrap()
+        );
 
         group_repo.move_item_to_group(id, None).unwrap();
-        assert!(clip_repo.exists_by_hash(
-            &clip_repo.get_by_id(id).unwrap().unwrap().content_hash,
-            None,
-        ).unwrap());
+        assert!(
+            clip_repo
+                .exists_by_hash(
+                    &clip_repo.get_by_id(id).unwrap().unwrap().content_hash,
+                    None,
+                )
+                .unwrap()
+        );
     }
 
     #[test]

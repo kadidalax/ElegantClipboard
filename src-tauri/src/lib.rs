@@ -140,13 +140,13 @@ pub fn toggle_shortcuts_disabled(app: &tauri::AppHandle) -> bool {
 }
 
 fn default_quick_paste_shortcuts() -> Vec<String> {
-    let mut defaults: Vec<String> = (1..=9).map(|slot| format!("Alt+{}", slot)).collect();
+    let mut defaults: Vec<String> = (1..=9).map(|slot| format!("Alt+{slot}")).collect();
     defaults.push("Alt+0".to_string());
     defaults
 }
 
 fn quick_paste_setting_key(slot: u8) -> String {
-    format!("quick_paste_shortcut_{}", slot)
+    format!("quick_paste_shortcut_{slot}")
 }
 
 fn normalize_shortcut_value(value: &str) -> String {
@@ -237,7 +237,7 @@ fn default_favorite_paste_shortcuts() -> Vec<String> {
 }
 
 fn favorite_paste_setting_key(slot: u8) -> String {
-    format!("favorite_paste_shortcut_{}", slot)
+    format!("favorite_paste_shortcut_{slot}")
 }
 
 fn load_favorite_paste_shortcuts(repo: &SettingsRepository) -> Vec<String> {
@@ -260,7 +260,7 @@ fn numpad_variant_str(shortcut_str: &str) -> Option<String> {
         if !result.is_empty() {
             result.push('+');
         }
-        result.push_str(&format!("Numpad{}", last));
+        result.push_str(&format!("Numpad{last}"));
         Some(result)
     } else {
         None
@@ -296,10 +296,7 @@ fn apply_paste_shortcuts(
         let parsed = match parse_shortcut(&normalized) {
             Some(v) => v,
             None => {
-                failures.insert(
-                    slot,
-                    format!("{} {} 快捷键格式无效: {}", label, slot, normalized),
-                );
+                failures.insert(slot, format!("{label} {slot} 快捷键格式无效: {normalized}"));
                 continue;
             }
         };
@@ -386,7 +383,7 @@ fn apply_paste_shortcuts(
         if let Err(err) = reg_result {
             failures.insert(
                 slot,
-                format!("{} {} 注册失败（{}）: {}", label, slot, normalized, err),
+                format!("{label} {slot} 注册失败（{normalized}）: {err}"),
             );
         }
 
@@ -519,7 +516,7 @@ async fn enable_winv_replacement(app: tauri::AppHandle) -> Result<(), String> {
         if let Some(sc) = saved_shortcut {
             let _ = app.global_shortcut().on_shortcut(sc, on_toggle_shortcut);
         }
-        return Err(format!("Failed to register Win+V shortcut: {}", e));
+        return Err(format!("Failed to register Win+V shortcut: {e}"));
     }
 
     let state = app.state::<Arc<AppState>>();
@@ -554,8 +551,8 @@ async fn is_winv_replacement_enabled(_app: tauri::AppHandle) -> bool {
 
 #[tauri::command]
 async fn update_shortcut(app: tauri::AppHandle, new_shortcut: String) -> Result<String, String> {
-    let new_sc = parse_shortcut(&new_shortcut)
-        .ok_or_else(|| format!("Invalid shortcut: {}", new_shortcut))?;
+    let new_sc =
+        parse_shortcut(&new_shortcut).ok_or_else(|| format!("Invalid shortcut: {new_shortcut}"))?;
 
     if !shortcut_has_modifier(&new_shortcut) {
         return Err("快捷键至少包含一个修饰键 (Ctrl/Alt/Win)".to_string());
@@ -567,7 +564,7 @@ async fn update_shortcut(app: tauri::AppHandle, new_shortcut: String) -> Result<
 
     app.global_shortcut()
         .on_shortcut(new_sc, on_toggle_shortcut)
-        .map_err(|e| format!("Failed to register shortcut: {}", e))?;
+        .map_err(|e| format!("Failed to register shortcut: {e}"))?;
 
     *CURRENT_SHORTCUT.write() = Some(new_shortcut.clone());
 
@@ -614,8 +611,8 @@ fn set_paste_shortcut_inner(
         {
             return Err("快速粘贴不支持 Win 修饰键（Win+数字 是系统任务栏快捷键）".to_string());
         }
-        let parsed = parse_shortcut(&normalized)
-            .ok_or_else(|| format!("Invalid shortcut: {}", normalized))?;
+        let parsed =
+            parse_shortcut(&normalized).ok_or_else(|| format!("Invalid shortcut: {normalized}"))?;
         if !shortcut_has_modifier(&normalized) {
             return Err("快捷键至少包含一个修饰键 (Ctrl/Alt)".to_string());
         }
@@ -623,7 +620,7 @@ fn set_paste_shortcut_inner(
         if let Some(main_parsed) = parse_shortcut(&main_sc)
             && parsed == main_parsed
         {
-            return Err(format!("与呼出快捷键 {} 冲突", main_sc));
+            return Err(format!("与呼出快捷键 {main_sc} 冲突"));
         }
     }
 
@@ -911,8 +908,7 @@ pub fn run() {
                     .builder()
                     .title("ElegantClipboard 已启动")
                     .body(format!(
-                        "程序已在后台运行，按 {} 打开剪贴板",
-                        shortcut_display
+                        "程序已在后台运行，按 {shortcut_display} 打开剪贴板"
                     ))
                     .show();
             }

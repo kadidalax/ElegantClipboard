@@ -207,7 +207,7 @@ pub(crate) fn open_settings_window(app: &AppHandle) -> Result<(), String> {
 
     let window = builder
         .build()
-        .map_err(|e| format!("创建设置窗口失败: {}", e))?;
+        .map_err(|e| format!("创建设置窗口失败: {e}"))?;
 
     // 构建后设置物理位置，绕过逻辑→物理坐标换算歧义
     if let Some(pos) = phys_pos {

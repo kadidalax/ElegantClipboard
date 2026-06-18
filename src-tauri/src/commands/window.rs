@@ -247,11 +247,11 @@ pub fn set_window_effect(
 
         let apply_result: Result<(), String> = match effect.as_str() {
             "mica" => window_vibrancy::apply_mica(&window, dark)
-                .map_err(|e| format!("Failed to apply mica: {}", e)),
+                .map_err(|e| format!("Failed to apply mica: {e}")),
             "acrylic" => window_vibrancy::apply_acrylic(&window, Some((0, 0, 0, 0)))
-                .map_err(|e| format!("Failed to apply acrylic: {}", e)),
+                .map_err(|e| format!("Failed to apply acrylic: {e}")),
             "tabbed" => window_vibrancy::apply_tabbed(&window, dark)
-                .map_err(|e| format!("Failed to apply tabbed: {}", e)),
+                .map_err(|e| format!("Failed to apply tabbed: {e}")),
             _ => Ok(()),
         };
 

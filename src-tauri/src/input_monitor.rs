@@ -88,6 +88,7 @@ unsafe extern "system" fn wndproc_subclass(
     }
     unsafe {
         CallWindowProcW(
+            #[allow(clippy::missing_transmute_annotations)]
             Some(std::mem::transmute(original)),
             hwnd,
             msg,

@@ -55,7 +55,7 @@ pub async fn show_in_explorer(path: String) -> Result<(), String> {
         std::process::Command::new("explorer.exe")
             .args(["/select,", &path_str])
             .spawn()
-            .map_err(|e| format!("Failed to open explorer: {}", e))?;
+            .map_err(|e| format!("Failed to open explorer: {e}"))?;
     }
     #[cfg(target_os = "macos")]
     {
@@ -98,7 +98,7 @@ pub async fn paste_as_path(
     let paths_text = if item.content_type == "files" {
         if let Some(ref paths_json) = item.file_paths {
             let paths: Vec<String> = serde_json::from_str(paths_json)
-                .map_err(|e| format!("Failed to parse file paths: {}", e))?;
+                .map_err(|e| format!("Failed to parse file paths: {e}"))?;
             paths.join("\n")
         } else {
             return Err("No file paths found".to_string());
@@ -109,10 +109,10 @@ pub async fn paste_as_path(
 
     with_paused_monitor(&state, || {
         let mut clipboard =
-            arboard::Clipboard::new().map_err(|e| format!("Failed to access clipboard: {}", e))?;
+            arboard::Clipboard::new().map_err(|e| format!("Failed to access clipboard: {e}"))?;
         clipboard
             .set_text(&paths_text)
-            .map_err(|e| format!("Failed to set clipboard text: {}", e))?;
+            .map_err(|e| format!("Failed to set clipboard text: {e}"))?;
 
         hide_main_window_if_not_pinned(&app);
 
@@ -150,7 +150,7 @@ pub async fn save_file_as(app: tauri::AppHandle, source_path: String) -> Result<
     match dest {
         Some(dest_path) => {
             let dest_str = dest_path.to_string();
-            std::fs::copy(&source_path, &dest_str).map_err(|e| format!("保存失败: {}", e))?;
+            std::fs::copy(&source_path, &dest_str).map_err(|e| format!("保存失败: {e}"))?;
             info!("File saved: {} -> {}", source_path, dest_str);
             Ok(true)
         }
@@ -216,7 +216,7 @@ pub async fn get_file_details(path: String) -> Result<FileDetails, String> {
     use std::path::Path;
 
     let path = Path::new(&path);
-    let metadata = fs::metadata(path).map_err(|e| format!("Failed to get file metadata: {}", e))?;
+    let metadata = fs::metadata(path).map_err(|e| format!("Failed to get file metadata: {e}"))?;
 
     let file_type = if metadata.is_dir() {
         "folder".to_string()
