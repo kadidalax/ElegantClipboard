@@ -56,11 +56,19 @@ npm run lint:fix
 
 # Rust 测试
 cd src-tauri && cargo test
+
+# Makefile 快捷命令（PowerShell）
+make check   # lint + tsc + cargo check
+make test    # vitest 单元/组件/性能测试
+make build   # Tauri release 安装包
+make format  # eslint:fix + rustfmt
 ```
 
 ### 最近更新
 
 **v0.x 新功能**：
+- **界面国际化（i18n）**：默认简体中文，支持 English、繁體中文；设置 → 常规 → 界面语言；文案模块见 `src/i18n/`
+- **链接类型识别**：「其它」分类下新增 URL 类型，自动识别 http(s) 链接
 - **窗口毛玻璃特效**：支持 Mica / Acrylic / Tabbed 三种 Windows 11 DWM 背景特效，Win10 自动回退
 - **工具栏自定义**：可配置工具栏按钮的显示、隐藏和排序
 - **数据清理**：三级数据清理操作（清空历史 / 恢复默认配置 / 重置所有数据）
@@ -88,11 +96,16 @@ src/                    # React 前端
 ├── hooks/
 │   └── useSortableList.ts       # 拖拽排序 Hook
 ├── lib/
-│   ├── constants.ts             # 常量（工具栏按钮注册表等）
+│   ├── constants.ts             # 常量（工具栏按钮注册表等，文案走 i18n）
 │   ├── theme-applier.ts         # 主题/窗口特效应用器
 │   └── utils.ts                 # 工具函数
+├── i18n/                        # 国际化模块（见 src/i18n/README.md）
+│   ├── index.ts                 # 对外 API：useTranslation、t、initLocale
+│   ├── runtime.ts               # locale store + 多窗口 locale-changed 同步
+│   ├── messages/{zh-CN,en,zh-TW}/  # core + extended 合并为各语言树
+│   └── locales/*-ext.ts         # 扩展文案源（settings 各 Tab 等）
 ├── stores/            # Zustand 状态管理
-└── main.tsx           # 入口点（简单路由）
+└── main.tsx           # 入口点（initLocale 后渲染；简单路由）
 
 src-tauri/              # Rust 后端
 ├── src/
@@ -194,7 +207,41 @@ listen("clipboard-updated", (event) => { ... });
 import { emit, listen } from "@tauri-apps/api/event";
 emit("ui-settings-changed", state);
 listen("ui-settings-changed", (event) => { ... });
+
+// 界面语言切换（settings 键 language）
+emit("locale-changed", locale);
+listen("locale-changed", (event) => { ... });
 ```
+
+## 国际化（i18n）
+
+模块位置：`src/i18n/`（详见 `src/i18n/README.md`）
+
+**支持语言**：`zh-CN`（默认）、`en`、`zh-TW`
+
+**持久化**：数据库 `settings.language`；切换后通过 `locale-changed` 事件同步多窗口
+
+**用法**：
+```tsx
+import { useTranslation, t } from "@/i18n";
+
+function Component() {
+  const { t, locale, setLocale } = useTranslation();
+  return <span>{t("app.searchPlaceholder")}</span>;
+}
+
+// 非 React 上下文（如 constants.ts、format.ts）
+t("groups.all", { count: 3 });
+```
+
+**文案组织**：
+- `messages/{locale}/core.ts` — 主窗口、分组、工具栏等基础 key
+- `locales/{locale}-ext.ts` — 设置页、卡片 UI、对话框等扩展 key（经 `messages/.../extended.ts` 合并）
+- 新增 UI 字符串必须走 `t()`，三语同步添加 key
+
+**测试**：`src/test/setup.ts` 每个用例前重置 locale 为 `zh-CN`；组件测试应用 `t("key")` 断言，勿硬编码中文
+
+**未覆盖**：系统托盘菜单（`src-tauri/src/tray/mod.rs`）仍为硬编码中文
 
 ## 窗口配置
 
@@ -269,7 +316,7 @@ Windows 的注册表 `Run` 键会静默跳过需要 UAC 提权的程序，因此
 - 自动时间戳更新触发器
 - 性能索引：`created_at`、`is_pinned`、`is_favorite`、`content_type`、`sort_order`、`access_count`
 - 图片元数据：`image_width`、`image_height` 字段
-- 运行时字段：`files_valid`（文��有效性检查结果，不存储）
+- 运行时字段：`files_valid`（文件有效性检查结果，不存储）
 
 **搜索实现**：
 - 使用 SQL `LIKE` 查询，无需 FTS5
