@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS groups (
 -- group_id = <id>  => belongs to that custom group
 CREATE TABLE IF NOT EXISTS clipboard_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    content_type TEXT NOT NULL CHECK(content_type IN ('text', 'image', 'html', 'rtf', 'files')),
+    content_type TEXT NOT NULL CHECK(content_type IN ('text', 'image', 'html', 'rtf', 'files', 'url')),
     text_content TEXT,
     html_content TEXT,
     rtf_content TEXT,
@@ -91,6 +91,7 @@ pub enum ContentType {
     Html,
     Rtf,
     Files,
+    Url,
 }
 
 impl ContentType {
@@ -101,6 +102,7 @@ impl ContentType {
             ContentType::Html => "html",
             ContentType::Rtf => "rtf",
             ContentType::Files => "files",
+            ContentType::Url => "url",
         }
     }
 }

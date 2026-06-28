@@ -11,7 +11,7 @@ pub(super) fn set_clipboard_content(
     clipboard: &mut arboard::Clipboard,
 ) -> Result<(), String> {
     match item.content_type.as_str() {
-        "text" | "html" | "rtf" => {
+        "text" | "html" | "rtf" | "url" => {
             if let Some(ref text) = item.text_content {
                 clipboard
                     .set_text(text.clone())

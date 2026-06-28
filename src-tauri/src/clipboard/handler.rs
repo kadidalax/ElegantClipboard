@@ -1,5 +1,5 @@
 use super::source_app::{self, SourceAppInfo};
-use super::{compute_semantic_hash, semantic_hash_from_text};
+use super::{compute_semantic_hash, is_url, semantic_hash_from_text};
 use crate::database::{
     ClipboardRepository, ContentType, Database, NewClipboardItem, SettingsRepository,
 };
@@ -191,7 +191,7 @@ impl ClipboardHandler {
     }
 
     /// 检查内容类型是否被允许监听
-    /// 读取 `monitor_types` 设置（逗号分隔，如 "text,html,rtf,image,files"）
+    /// 读取 `monitor_types` 设置（逗号分隔，如 "text,html,rtf,image,files,url"）
     /// 默认全部允许
     pub fn is_content_type_allowed(&self, content: &ClipboardContent) -> bool {
         let allowed = self.settings_repo.get("monitor_types").ok().flatten();
@@ -203,12 +203,17 @@ impl ClipboardHandler {
         };
 
         let content_type = match content {
+            ClipboardContent::Text(text) if is_url(text) => "url",
             ClipboardContent::Text(_) => "text",
             ClipboardContent::Html { .. } => "html",
             ClipboardContent::Rtf { .. } => "rtf",
             ClipboardContent::Image(_) => "image",
             ClipboardContent::Files(_) => "files",
         };
+
+        if content_type == "url" && !allowed.split(',').any(|t| t.trim() == "url") {
+            return allowed.split(',').any(|t| t.trim() == "text");
+        }
 
         allowed.split(',').any(|t| t.trim() == content_type)
     }
@@ -446,7 +451,11 @@ impl ClipboardHandler {
         let content_hash = self.calculate_hash(content);
         let semantic_hash = match content {
             ClipboardContent::Text(text) => {
-                semantic_hash_from_text(text).unwrap_or_else(|| content_hash.clone())
+                if is_url(text) {
+                    content_hash.clone()
+                } else {
+                    semantic_hash_from_text(text).unwrap_or_else(|| content_hash.clone())
+                }
             }
             ClipboardContent::Html { text, .. } => {
                 compute_semantic_hash("html", text.as_deref(), &content_hash)
@@ -469,8 +478,13 @@ impl ClipboardHandler {
 
         match content {
             ClipboardContent::Text(text) => {
-                hasher.update(b"text:");
-                hasher.update(text.as_bytes());
+                if is_url(text) {
+                    hasher.update(b"url:");
+                    hasher.update(text.trim().as_bytes());
+                } else {
+                    hasher.update(b"text:");
+                    hasher.update(text.as_bytes());
+                }
             }
             ClipboardContent::Html { html, .. } => {
                 hasher.update(b"html:");
@@ -505,10 +519,15 @@ impl ClipboardHandler {
         let byte_size = text.len() as i64;
         let char_count = Some(text.chars().count() as i64);
         let preview = Self::create_preview(&text);
+        let content_type = if is_url(&text) {
+            ContentType::Url
+        } else {
+            ContentType::Text
+        };
         let text_content = truncate_content(text, max_size, "Text");
 
         Ok(NewClipboardItem {
-            content_type: ContentType::Text,
+            content_type,
             text_content: Some(text_content),
             content_hash: hashes.content_hash.clone(),
             semantic_hash: hashes.semantic_hash.clone(),

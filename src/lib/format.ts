@@ -6,6 +6,7 @@ export const contentTypeConfig: Record<string, { label: string }> = {
   rtf: { label: "RTF" },
   image: { label: "图片" },
   files: { label: "文件" },
+  url: { label: "链接" },
 };
 
 export function formatTime(dateStr: string, format: "absolute" | "relative" = "absolute"): string {

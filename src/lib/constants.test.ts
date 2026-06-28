@@ -53,5 +53,6 @@ describe("GROUPS", () => {
   it("fourth group is other", () => {
     expect(GROUPS[3].label).toBe("其它");
     expect(GROUPS[3].value).toContain("image");
+    expect(GROUPS[3].value).toContain("url");
   });
 });

@@ -118,12 +118,14 @@ describe("contentTypeConfig", () => {
     expect(contentTypeConfig.rtf).toBeDefined();
     expect(contentTypeConfig.image).toBeDefined();
     expect(contentTypeConfig.files).toBeDefined();
+    expect(contentTypeConfig.url).toBeDefined();
   });
 
   it("has labels for each type", () => {
     expect(contentTypeConfig.text.label).toBe("文本");
     expect(contentTypeConfig.image.label).toBe("图片");
     expect(contentTypeConfig.files.label).toBe("文件");
+    expect(contentTypeConfig.url.label).toBe("链接");
   });
 });
 

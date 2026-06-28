@@ -17,13 +17,14 @@ import { logError } from "@/lib/logger";
 interface AppMeta { name: string; icon: string | null }
 type RunningApp = { name: string; process: string; icon: string | null };
 
-const ALL_MONITOR_TYPES = ["text", "html", "rtf", "image", "files"] as const;
+const ALL_MONITOR_TYPES = ["text", "html", "rtf", "image", "files", "url"] as const;
 const TYPE_LABELS: Record<string, string> = {
   text: "纯文本",
   html: "HTML",
   rtf: "RTF",
   image: "图片",
   files: "文件",
+  url: "链接",
 };
 
 export function AppFilterTab() {

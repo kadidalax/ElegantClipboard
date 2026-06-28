@@ -362,7 +362,7 @@ function App() {
     if (selectedGroup === "text,html,rtf") {
       return "确定要清空当前分组内所有文本历史记录吗？此操作不可撤销。";
     }
-    if (selectedGroup === "image,files") {
+    if (selectedGroup === "image,files,url") {
       return "确定要清空当前分组内所有其它历史记录吗？此操作不可撤销。";
     }
     if (selectedGroup === "__favorites__") {

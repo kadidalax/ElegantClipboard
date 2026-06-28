@@ -9,7 +9,7 @@ import { useUISettings } from "@/stores/ui-settings";
 
 export interface ClipboardItem {
   id: number;
-  content_type: "text" | "image" | "html" | "rtf" | "files";
+  content_type: "text" | "image" | "html" | "rtf" | "files" | "url";
   text_content: string | null;
   html_content: string | null;
   rtf_content: string | null;

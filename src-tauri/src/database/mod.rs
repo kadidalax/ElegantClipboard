@@ -4,7 +4,7 @@ mod schema;
 pub use repository::*;
 pub use schema::*;
 
-use crate::clipboard::compute_semantic_hash;
+use crate::clipboard::{compute_semantic_hash, is_url};
 use parking_lot::Mutex;
 use rusqlite::{Connection, OpenFlags, params};
 use std::path::PathBuf;
@@ -356,6 +356,104 @@ impl Database {
         // favorite_order 唯一，所以一次规整后就不会再退化。
         Self::normalize_favorite_order(conn)?;
 
+        // 迁移 10: 新增 url 内容类型，并将存量单行链接从 text 归类为 url
+        Self::migrate_url_content_type(conn)?;
+
+        Ok(())
+    }
+
+    fn migrate_url_content_type(conn: &Connection) -> Result<(), rusqlite::Error> {
+        let table_sql: String = conn.query_row(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='clipboard_items'",
+            [],
+            |row| row.get(0),
+        )?;
+        if table_sql.contains("'url'") {
+            return Ok(());
+        }
+
+        info!("Migrating database: adding url content_type");
+        let tx = conn.unchecked_transaction()?;
+        tx.execute_batch(
+            "CREATE TABLE clipboard_items_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                content_type TEXT NOT NULL CHECK(content_type IN ('text', 'image', 'html', 'rtf', 'files', 'url')),
+                text_content TEXT,
+                html_content TEXT,
+                rtf_content TEXT,
+                image_path TEXT,
+                file_paths TEXT,
+                content_hash TEXT NOT NULL,
+                semantic_hash TEXT NOT NULL,
+                preview TEXT,
+                byte_size INTEGER DEFAULT 0,
+                image_width INTEGER,
+                image_height INTEGER,
+                is_pinned INTEGER DEFAULT 0,
+                is_favorite INTEGER DEFAULT 0,
+                favorite_order INTEGER DEFAULT 0,
+                sort_order INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now', 'localtime')),
+                updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+                access_count INTEGER DEFAULT 0,
+                last_accessed_at TEXT,
+                char_count INTEGER,
+                source_app_name TEXT,
+                source_app_icon TEXT,
+                group_id INTEGER REFERENCES groups(id) ON DELETE CASCADE
+            );
+            INSERT INTO clipboard_items_new SELECT * FROM clipboard_items;
+            DROP TABLE clipboard_items;
+            ALTER TABLE clipboard_items_new RENAME TO clipboard_items;",
+        )?;
+        tx.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_clipboard_created_at ON clipboard_items(created_at DESC);
+             CREATE INDEX IF NOT EXISTS idx_clipboard_pinned ON clipboard_items(is_pinned) WHERE is_pinned = 1;
+             CREATE INDEX IF NOT EXISTS idx_clipboard_favorite ON clipboard_items(is_favorite) WHERE is_favorite = 1;
+             CREATE INDEX IF NOT EXISTS idx_clipboard_type ON clipboard_items(content_type);
+             CREATE INDEX IF NOT EXISTS idx_clipboard_hash_default ON clipboard_items(content_hash) WHERE group_id IS NULL;
+             CREATE INDEX IF NOT EXISTS idx_clipboard_hash_group ON clipboard_items(group_id, content_hash) WHERE group_id IS NOT NULL;
+             CREATE INDEX IF NOT EXISTS idx_clipboard_semantic_hash_default ON clipboard_items(semantic_hash) WHERE group_id IS NULL;
+             CREATE INDEX IF NOT EXISTS idx_clipboard_semantic_hash_group ON clipboard_items(group_id, semantic_hash) WHERE group_id IS NOT NULL;
+             CREATE INDEX IF NOT EXISTS idx_clipboard_access ON clipboard_items(access_count DESC, last_accessed_at DESC);
+             CREATE INDEX IF NOT EXISTS idx_clipboard_favorite_order ON clipboard_items(favorite_order DESC) WHERE is_favorite = 1;
+             CREATE INDEX IF NOT EXISTS idx_clipboard_sort_order ON clipboard_items(sort_order DESC);
+             CREATE INDEX IF NOT EXISTS idx_clipboard_group ON clipboard_items(group_id);
+             CREATE TRIGGER IF NOT EXISTS clipboard_items_update_timestamp
+             AFTER UPDATE ON clipboard_items
+             BEGIN
+                 UPDATE clipboard_items SET updated_at = datetime('now', 'localtime')
+                 WHERE id = new.id;
+             END;",
+        )?;
+        tx.commit()?;
+
+        Self::backfill_url_content_types(conn)?;
+        info!("Migration complete: url content_type added");
+        Ok(())
+    }
+
+    fn backfill_url_content_types(conn: &Connection) -> Result<(), rusqlite::Error> {
+        let mut stmt = conn.prepare(
+            "SELECT id, text_content FROM clipboard_items WHERE content_type = 'text' AND text_content IS NOT NULL",
+        )?;
+        let rows: Vec<(i64, String)> = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .filter_map(std::result::Result::ok)
+            .collect();
+
+        let mut update =
+            conn.prepare_cached("UPDATE clipboard_items SET content_type = 'url' WHERE id = ?1")?;
+        let mut count = 0;
+        for (id, text) in rows {
+            if is_url(&text) {
+                update.execute(params![id])?;
+                count += 1;
+            }
+        }
+        if count > 0 {
+            info!("Backfilled {} url content types", count);
+        }
         Ok(())
     }
 
