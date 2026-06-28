@@ -12,6 +12,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { LOCALE_OPTIONS, useTranslation, type Locale } from "@/i18n";
 import { logError } from "@/lib/logger";
 import { useUISettings } from "@/stores/ui-settings";
 
@@ -33,6 +34,7 @@ interface GeneralTabProps {
 }
 
 export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
+  const { t, locale, setLocale } = useTranslation();
   const autoResetState = useUISettings((s) => s.autoResetState);
   const setAutoResetState = useUISettings((s) => s.setAutoResetState);
   const windowAnimation = useUISettings((s) => s.windowAnimation);
@@ -119,16 +121,35 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
   return (
     <>
       <div className="space-y-4">
+        <div className="rounded-lg border bg-card p-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label className="text-xs">{t("language.label")}</Label>
+              <p className="text-xs text-muted-foreground">{t("language.desc")}</p>
+            </div>
+            <Select value={locale} onValueChange={(v) => void setLocale(v as Locale)}>
+              <SelectTrigger className="w-[140px] h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {LOCALE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {t(option.labelKey)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
         {/* Startup Card */}
         <div className="rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-medium mb-3">启动</h3>
-          <p className="text-xs text-muted-foreground mb-4">配置应用启动行为</p>
+          <h3 className="text-sm font-medium mb-3">{t("settings.general.startupTitle")}</h3>
+          <p className="text-xs text-muted-foreground mb-4">{t("settings.general.startupDesc")}</p>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label className="text-xs">开机自启动</Label>
+                <Label className="text-xs">{t("settings.general.autoStart")}</Label>
                 <p className="text-xs text-muted-foreground">
-                  系统启动时自动运行
+                  {t("settings.general.autoStartDesc")}
                 </p>
               </div>
               <Switch
@@ -139,15 +160,15 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label className="text-xs flex items-center gap-2">
-                  以管理员身份启动
+                  {t("settings.general.adminLaunch")}
                   {settings.is_running_as_admin && (
                     <span className="text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary rounded animate-in fade-in duration-200">
-                      当前已提权
+                      {t("settings.general.adminLaunchBadge")}
                     </span>
                   )}
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  允许监听任务管理器等高权限窗口的点击
+                  {t("settings.general.adminLaunchDesc")}
                 </p>
               </div>
               <Switch
@@ -160,9 +181,9 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
             </div>
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label className="text-xs">自动检查更新</Label>
+                <Label className="text-xs">{t("settings.general.autoCheckUpdate")}</Label>
                 <p className="text-xs text-muted-foreground">
-                  仅在程序启动时自动检查更新
+                  {t("settings.general.autoCheckUpdateDesc")}
                 </p>
               </div>
               <Switch
@@ -172,9 +193,9 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
             </div>
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label className="text-xs">显示系统托盘图标</Label>
+                <Label className="text-xs">{t("settings.general.trayIcon")}</Label>
                 <p className="text-xs text-muted-foreground">
-                  关闭后仍可通过快捷键唤醒主窗口
+                  {t("settings.general.trayIconDesc")}
                 </p>
               </div>
               <Switch
@@ -187,14 +208,14 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
 
         {/* Window Behavior Card */}
         <div className="rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-medium mb-3">窗口</h3>
-          <p className="text-xs text-muted-foreground mb-4">配置窗口显示行为</p>
+          <h3 className="text-sm font-medium mb-3">{t("settings.general.windowTitle")}</h3>
+          <p className="text-xs text-muted-foreground mb-4">{t("settings.general.windowDesc")}</p>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label className="text-xs">唤醒位置</Label>
+                <Label className="text-xs">{t("settings.general.positionMode")}</Label>
                 <p className="text-xs text-muted-foreground">
-                  窗口唤醒时的定位方式
+                  {t("settings.general.positionModeDesc")}
                 </p>
               </div>
               <Select
@@ -203,26 +224,26 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
               >
                 <SelectTrigger className="w-[140px] h-8 text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="follow_cursor">跟随光标</SelectItem>
-                  <SelectItem value="screen_center">屏幕居中</SelectItem>
-                  <SelectItem value="fixed_position">上一次位置</SelectItem>
+                  <SelectItem value="follow_cursor">{t("settings.general.positionFollowCursor")}</SelectItem>
+                  <SelectItem value="screen_center">{t("settings.general.positionScreenCenter")}</SelectItem>
+                  <SelectItem value="fixed_position">{t("settings.general.positionFixed")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label className="text-xs">记住窗口大小</Label>
+                <Label className="text-xs">{t("settings.general.persistSize")}</Label>
                 <p className="text-xs text-muted-foreground">
-                  启用后，手动拖拽调整的窗口大小将被保留
+                  {t("settings.general.persistSizeDesc")}
                 </p>
               </div>
               <Switch checked={persistWindowSize} onCheckedChange={togglePersistWindowSize} />
             </div>
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label className="text-xs">自动重置状态</Label>
+                <Label className="text-xs">{t("settings.general.autoResetState")}</Label>
                 <p className="text-xs text-muted-foreground">
-                  关闭窗口时重置搜索、分组筛选和滚动位置
+                  {t("settings.general.autoResetStateDesc")}
                 </p>
               </div>
               <Switch
@@ -232,9 +253,9 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
             </div>
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label className="text-xs">入场动画</Label>
+                <Label className="text-xs">{t("settings.general.animation")}</Label>
                 <p className="text-xs text-muted-foreground">
-                  窗口显示时播放淡入缩放动画
+                  {t("settings.general.animationDesc")}
                 </p>
               </div>
               <Switch
@@ -247,14 +268,14 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
 
         {/* Search Bar Card */}
         <div className="rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-medium mb-3">搜索栏</h3>
-          <p className="text-xs text-muted-foreground mb-4">配置激活窗口时的搜索栏行为</p>
+          <h3 className="text-sm font-medium mb-3">{t("settings.general.searchTitle")}</h3>
+          <p className="text-xs text-muted-foreground mb-4">{t("settings.general.searchDesc")}</p>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label className="text-xs">默认聚焦</Label>
+                <Label className="text-xs">{t("settings.general.autoFocus")}</Label>
                 <p className="text-xs text-muted-foreground">
-                  激活窗口时，默认聚焦搜索框
+                  {t("settings.general.autoFocusDesc")}
                 </p>
               </div>
               <Switch
@@ -264,9 +285,9 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
             </div>
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label className="text-xs">自动清除</Label>
+                <Label className="text-xs">{t("settings.general.autoClear")}</Label>
                 <p className="text-xs text-muted-foreground">
-                  激活窗口时，仅清空搜索框文字
+                  {t("settings.general.autoClearDesc")}
                 </p>
               </div>
               <Switch
@@ -279,23 +300,23 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
 
         {/* Operation Card */}
         <div className="rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-medium mb-3">操作</h3>
-          <p className="text-xs text-muted-foreground mb-4">配置交互与操作行为</p>
+          <h3 className="text-sm font-medium mb-3">{t("settings.general.operationTitle")}</h3>
+          <p className="text-xs text-muted-foreground mb-4">{t("settings.general.operationDesc")}</p>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label className="text-xs">粘贴后关闭窗口</Label>
+                <Label className="text-xs">{t("settings.general.pasteCloseWindow")}</Label>
                 <p className="text-xs text-muted-foreground">
-                  非锁定模式下，粘贴后自动关闭窗口
+                  {t("settings.general.pasteCloseWindowDesc")}
                 </p>
               </div>
               <Switch checked={pasteCloseWindow} onCheckedChange={setPasteCloseWindow} />
             </div>
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label className="text-xs">粘贴后置顶</Label>
+                <Label className="text-xs">{t("settings.general.pasteMoveToTop")}</Label>
                 <p className="text-xs text-muted-foreground">
-                  粘贴后自动移到列表首位（固定置顶下方）
+                  {t("settings.general.pasteMoveToTopDesc")}
                 </p>
               </div>
               <Switch checked={pasteMoveToTop} onCheckedChange={setPasteMoveToTop} />
@@ -306,14 +327,14 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
 
         {/* Log Card */}
         <div className="rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-medium mb-3">日志</h3>
-          <p className="text-xs text-muted-foreground mb-4">调试与故障排查</p>
+          <h3 className="text-sm font-medium mb-3">{t("settings.general.logTitle")}</h3>
+          <p className="text-xs text-muted-foreground mb-4">{t("settings.general.logDesc")}</p>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label className="text-xs">保存日志到文件</Label>
+                <Label className="text-xs">{t("settings.general.logToFile")}</Label>
                 <p className="text-xs text-muted-foreground">
-                  日志文件上限 10MB，超出自动轮转
+                  {t("settings.general.logToFileDesc")}
                 </p>
               </div>
               <Switch
@@ -326,7 +347,7 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
             </div>
             {settings.log_to_file && settings.log_file_path && (
               <p className="text-xs text-muted-foreground break-all">
-                路径：{settings.log_file_path}
+                {t("settings.general.logFilePath", { path: settings.log_file_path })}
               </p>
             )}
           </div>
@@ -338,10 +359,10 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
         <DialogContent className="max-w-sm" showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>
-              {pendingAdminLaunch ? "启用管理员模式" : "关闭管理员模式"}
+              {pendingAdminLaunch ? t("settings.general.adminEnableTitle") : t("settings.general.adminDisableTitle")}
             </DialogTitle>
             <DialogDescription>
-              此设置需要重启应用后才能生效
+              {t("common.requiresRestart")}
             </DialogDescription>
           </DialogHeader>
           
@@ -353,7 +374,7 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
                 setPendingAdminLaunch(null);
               }}
             >
-              取消
+              {t("common.cancel")}
             </Button>
             <Button
               variant="outline"
@@ -368,14 +389,14 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
                     }
                     onSettingsChange({ ...settings, admin_launch: pendingAdminLaunch });
                   } catch (error) {
-                    alert(`操作失败: ${error}`);
+                    alert(t("common.operationFailed", { error: String(error) }));
                   }
                 }
                 setAdminRestartDialogOpen(false);
                 setPendingAdminLaunch(null);
               }}
             >
-              稍后重启
+              {t("common.restartLater")}
             </Button>
             <Button
               onClick={async () => {
@@ -390,14 +411,14 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
                     onSettingsChange({ ...settings, admin_launch: pendingAdminLaunch });
                     await invoke("restart_app");
                   } catch (error) {
-                    alert(`操作失败: ${error}`);
+                    alert(t("common.operationFailed", { error: String(error) }));
                     setAdminRestartDialogOpen(false);
                     setPendingAdminLaunch(null);
                   }
                 }
               }}
             >
-              立即重启
+              {t("common.restartNow")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -407,10 +428,10 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
         <DialogContent className="max-w-sm" showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>
-              {pendingLogToFile ? "启用日志保存" : "关闭日志保存"}
+              {pendingLogToFile ? t("settings.general.logEnableTitle") : t("settings.general.logDisableTitle")}
             </DialogTitle>
             <DialogDescription>
-              此设置需要重启应用后才能生效
+              {t("common.requiresRestart")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
@@ -421,7 +442,7 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
                 setPendingLogToFile(null);
               }}
             >
-              取消
+              {t("common.cancel")}
             </Button>
             <Button
               variant="outline"
@@ -431,14 +452,14 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
                     await invoke("set_log_to_file", { enabled: pendingLogToFile });
                     onSettingsChange({ ...settings, log_to_file: pendingLogToFile });
                   } catch (error) {
-                    alert(`操作失败: ${error}`);
+                    alert(t("common.operationFailed", { error: String(error) }));
                   }
                 }
                 setLogRestartDialogOpen(false);
                 setPendingLogToFile(null);
               }}
             >
-              稍后重启
+              {t("common.restartLater")}
             </Button>
             <Button
               onClick={async () => {
@@ -448,14 +469,14 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
                     onSettingsChange({ ...settings, log_to_file: pendingLogToFile });
                     await invoke("restart_app");
                   } catch (error) {
-                    alert(`操作失败: ${error}`);
+                    alert(t("common.operationFailed", { error: String(error) }));
                     setLogRestartDialogOpen(false);
                     setPendingLogToFile(null);
                   }
                 }
               }}
             >
-              立即重启
+              {t("common.restartNow")}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -11,7 +11,7 @@ For UI screenshots, see [README_EN.md](README_EN.md) (captured on v0.5.0 and may
 
 ## Clipboard Management
 
-- **Multi-type support** - Text, Image, File, HTML, RTF content types
+- **Multi-type support** - Text, Image, File, URL (link), HTML, RTF
 - **Unlimited history** - Auto record all copied content, always accessible
 - **Smart search** - Real-time search with optimized LIKE queries (CJK text optimized)
 - **Content deduplication** - BLAKE3 hash auto-deduplication, no duplicate storage
@@ -22,7 +22,14 @@ For UI screenshots, see [README_EN.md](README_EN.md) (captured on v0.5.0 and may
 - **Text editing** - Double-click or right-click to edit saved text
 - **Source app recognition** - Auto record source application name and icon
 - **Deduplication strategy** - Three modes: pin/ignore/always create new
-- **Import/Export** - JSON format support for data migration
+- **Import/Export** - ZIP backup and restore (Settings → Data)
+
+## Internationalization
+
+- **Three languages** - Simplified Chinese (default), English, Traditional Chinese
+- **Settings** - General → Interface language
+- **Multi-window sync** - `locale-changed` event syncs main and settings windows
+- **Developer guide** - All UI strings via `t()` in `src/i18n/`; see `src/i18n/README.md`
 
 ## Search Optimization
 
@@ -75,6 +82,7 @@ For UI screenshots, see [README_EN.md](README_EN.md) (captured on v0.5.0 and may
 
 ## Customization
 
+- **Interface language** - Simplified Chinese / English / Traditional Chinese
 - **Toolbar customization** - Configure toolbar button visibility and order
 - **Custom storage path** - Support data migration and custom path
 - **History limit** - Set max records (0 for unlimited)

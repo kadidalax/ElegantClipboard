@@ -52,6 +52,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { useSortable, CSS } from "@/hooks/useSortableList";
+import { useTranslation } from "@/i18n";
 import {
   contentTypeConfig,
   formatTime,
@@ -133,6 +134,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
   sortId,
   isDragOverlay = false,
 }: ClipboardItemCardProps) {
+  const { t } = useTranslation();
   // 每张卡片自行订阅 activeIndex，只有选中态变化的卡片才重渲染
   const isActiveIndex = useClipboardStore(
     (s) => index !== undefined && index >= 0 && s.activeIndex === index,
@@ -654,14 +656,14 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
                   : "border-r border-transparent bg-transparent text-transparent opacity-0",
               )}
               style={{ width: dragHandleWidth }}
-              aria-label="拖拽区域"
+              aria-label={t("clipboard.card.dragAreaAria")}
               tabIndex={showDragAreaIndicator ? 0 : -1}
             >
               <span
                 aria-hidden
                 className="pointer-events-none text-[10px] leading-tight text-center text-primary/80"
               >
-                拖拽区域
+                {t("clipboard.card.dragArea")}
               </span>
             </button>
 
@@ -678,14 +680,14 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
                   : "border-l border-transparent bg-transparent text-transparent opacity-0",
               )}
               style={{ width: dragHandleWidth }}
-              aria-label="拖拽区域"
+              aria-label={t("clipboard.card.dragAreaAria")}
               tabIndex={showDragAreaIndicator ? 0 : -1}
             >
               <span
                 aria-hidden
                 className="pointer-events-none text-[10px] leading-tight text-center text-primary/80"
               >
-                拖拽区域
+                {t("clipboard.card.dragArea")}
               </span>
             </button>
 
@@ -696,9 +698,9 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
                 style={{ left: dragHandleWidth, right: dragHandleWidth }}
               >
                 <div className="text-center">
-                  <div className="text-[10px] leading-none text-amber-700/80 dark:text-amber-300/80">粘贴、预览触发区域</div>
-                  <div className="mt-0.5 text-[10px] leading-none text-amber-700/80 dark:text-amber-300/80">点击卡片可粘贴</div>
-                  <div className="mt-0.5 text-[10px] leading-none text-amber-700/80 dark:text-amber-300/80">可在设置中关闭</div>
+                  <div className="text-[10px] leading-none text-amber-700/80 dark:text-amber-300/80">{t("clipboard.card.pasteZoneHint")}</div>
+                  <div className="mt-0.5 text-[10px] leading-none text-amber-700/80 dark:text-amber-300/80">{t("clipboard.card.clickToPaste")}</div>
+                  <div className="mt-0.5 text-[10px] leading-none text-amber-700/80 dark:text-amber-300/80">{t("clipboard.card.disableInSettings")}</div>
                 </div>
               </div>
             )}
@@ -797,7 +799,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
           onClick={(e) => e.stopPropagation()}
         >
           {translateStatus === "loading" && (
-            <span className="text-xs text-muted-foreground">翻译中…</span>
+            <span className="text-xs text-muted-foreground">{t("clipboard.card.translating")}</span>
           )}
           {(translateStatus === "done" || translateStatus === "error") && (
             <p className={cn(
@@ -824,31 +826,31 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
     // 文本类内容（text/html/rtf）可编辑
     if (item.content_type === "text" || item.content_type === "html" || item.content_type === "rtf") {
       return [
-        { icon: ClipboardPaste16Regular, label: "粘贴", onClick: () => pasteContent(item.id) },
-        { icon: TextDescription16Regular, label: "粘贴为纯文本", onClick: () => pasteAsPlainText(item.id) },
-        { icon: Copy16Regular, label: "复制", onClick: handleCopyCtxMenu },
-        ...(translateEnabled ? [{ icon: Translate16Regular, label: "翻译", onClick: () => triggerTranslate(true) }] : []),
-        { icon: Edit16Regular, label: "编辑", onClick: handleEdit },
-        { icon: Delete16Regular, label: "删除", onClick: () => deleteItem(item.id), destructive: true, separator: true },
+        { icon: ClipboardPaste16Regular, label: t("clipboard.contextMenu.paste"), onClick: () => pasteContent(item.id) },
+        { icon: TextDescription16Regular, label: t("clipboard.contextMenu.pastePlainText"), onClick: () => pasteAsPlainText(item.id) },
+        { icon: Copy16Regular, label: t("clipboard.contextMenu.copy"), onClick: handleCopyCtxMenu },
+        ...(translateEnabled ? [{ icon: Translate16Regular, label: t("clipboard.contextMenu.translate"), onClick: () => triggerTranslate(true) }] : []),
+        { icon: Edit16Regular, label: t("clipboard.contextMenu.edit"), onClick: handleEdit },
+        { icon: Delete16Regular, label: t("clipboard.contextMenu.delete"), onClick: () => deleteItem(item.id), destructive: true, separator: true },
       ];
     }
     if (item.content_type === "files") {
       return [
-        { icon: ClipboardPaste16Regular, label: "粘贴", onClick: () => pasteContent(item.id) },
-        { icon: TextDescription16Regular, label: "粘贴为路径", onClick: handlePasteAsPath },
-        { icon: FolderOpen16Regular, label: "在资源管理器中显示", onClick: handleShowInExplorer, disabled: filesInvalid },
-        { icon: ArrowDownload16Regular, label: "另存为", onClick: handleSaveAs, disabled: filesInvalid },
-        { icon: Info16Regular, label: "查看详细信息", onClick: handleShowDetails, disabled: filesInvalid },
-        { icon: Delete16Regular, label: "删除", onClick: () => deleteItem(item.id), destructive: true, separator: true },
+        { icon: ClipboardPaste16Regular, label: t("clipboard.contextMenu.paste"), onClick: () => pasteContent(item.id) },
+        { icon: TextDescription16Regular, label: t("clipboard.contextMenu.pasteAsPath"), onClick: handlePasteAsPath },
+        { icon: FolderOpen16Regular, label: t("clipboard.contextMenu.showInExplorer"), onClick: handleShowInExplorer, disabled: filesInvalid },
+        { icon: ArrowDownload16Regular, label: t("clipboard.contextMenu.saveAs"), onClick: handleSaveAs, disabled: filesInvalid },
+        { icon: Info16Regular, label: t("clipboard.contextMenu.viewDetails"), onClick: handleShowDetails, disabled: filesInvalid },
+        { icon: Delete16Regular, label: t("clipboard.contextMenu.delete"), onClick: () => deleteItem(item.id), destructive: true, separator: true },
       ];
     }
     if (item.content_type === "image" && item.image_path) {
       return [
-        { icon: ClipboardPaste16Regular, label: "粘贴", onClick: () => pasteContent(item.id) },
-        { icon: Copy16Regular, label: "复制", onClick: handleCopyCtxMenu },
-        { icon: FolderOpen16Regular, label: "在资源管理器中显示", onClick: handleShowImageInExplorer },
-        { icon: ArrowDownload16Regular, label: "另存为", onClick: handleSaveAs },
-        { icon: Delete16Regular, label: "删除", onClick: () => deleteItem(item.id), destructive: true, separator: true },
+        { icon: ClipboardPaste16Regular, label: t("clipboard.contextMenu.paste"), onClick: () => pasteContent(item.id) },
+        { icon: Copy16Regular, label: t("clipboard.contextMenu.copy"), onClick: handleCopyCtxMenu },
+        { icon: FolderOpen16Regular, label: t("clipboard.contextMenu.showInExplorer"), onClick: handleShowImageInExplorer },
+        { icon: ArrowDownload16Regular, label: t("clipboard.contextMenu.saveAs"), onClick: handleSaveAs },
+        { icon: Delete16Regular, label: t("clipboard.contextMenu.delete"), onClick: () => deleteItem(item.id), destructive: true, separator: true },
       ];
     }
     return null;

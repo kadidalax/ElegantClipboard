@@ -1,4 +1,9 @@
 import "@testing-library/jest-dom/vitest";
+import { useLocaleStore } from "@/i18n";
+
+beforeEach(() => {
+  useLocaleStore.setState({ locale: "zh-CN", loaded: true });
+});
 
 // Mock Tauri API
 vi.mock("@tauri-apps/api/core", () => ({

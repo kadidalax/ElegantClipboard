@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { t } from "@/i18n";
 import {
   formatTime,
   formatCharCount,
@@ -21,12 +22,12 @@ describe("formatTime", () => {
 
   it("formats today's time", () => {
     const result = formatTime("2026-06-12T10:15:00");
-    expect(result).toBe("今天 10:15");
+    expect(result).toBe(t("format.timeToday", { time: "10:15" }));
   });
 
   it("formats yesterday's time", () => {
     const result = formatTime("2026-06-11T08:45:00");
-    expect(result).toBe("昨天 08:45");
+    expect(result).toBe(t("format.timeYesterday", { time: "08:45" }));
   });
 
   it("formats older dates", () => {
@@ -38,54 +39,58 @@ describe("formatTime", () => {
     const now = new Date("2026-06-12T14:30:00");
     vi.setSystemTime(now);
     const thirtySecAgo = new Date(now.getTime() - 30 * 1000).toISOString();
-    expect(formatTime(thirtySecAgo, "relative")).toBe("刚刚");
+    expect(formatTime(thirtySecAgo, "relative")).toBe(t("format.relativeJustNow"));
   });
 
   it("formats relative time - minutes ago", () => {
     const now = new Date("2026-06-12T14:30:00");
     vi.setSystemTime(now);
     const fiveMinAgo = new Date(now.getTime() - 5 * 60 * 1000).toISOString();
-    expect(formatTime(fiveMinAgo, "relative")).toBe("5 分钟前");
+    expect(formatTime(fiveMinAgo, "relative")).toBe(t("format.relativeMinutesAgo", { count: 5 }));
   });
 
   it("formats relative time - hours ago", () => {
     const now = new Date("2026-06-12T14:30:00");
     vi.setSystemTime(now);
     const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000).toISOString();
-    expect(formatTime(threeHoursAgo, "relative")).toBe("3 小时前");
+    expect(formatTime(threeHoursAgo, "relative")).toBe(t("format.relativeHoursAgo", { count: 3 }));
   });
 
   it("formats relative time - days ago", () => {
     const now = new Date("2026-06-12T14:30:00");
     vi.setSystemTime(now);
     const tenDaysAgo = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000).toISOString();
-    expect(formatTime(tenDaysAgo, "relative")).toBe("10 天前");
+    expect(formatTime(tenDaysAgo, "relative")).toBe(t("format.relativeDaysAgo", { count: 10 }));
   });
 });
 
 describe("formatCharCount", () => {
-  it("returns '0 字符' for null", () => {
-    expect(formatCharCount(null)).toBe("0 字符");
+  it("returns zero label for null", () => {
+    expect(formatCharCount(null)).toBe(t("format.charCountZero"));
   });
 
-  it("returns '0 字符' for 0", () => {
-    expect(formatCharCount(0)).toBe("0 字符");
+  it("returns zero label for 0", () => {
+    expect(formatCharCount(0)).toBe(t("format.charCountZero"));
   });
 
   it("formats small counts", () => {
-    expect(formatCharCount(42)).toBe("42 字符");
+    expect(formatCharCount(42)).toBe(
+      t("format.charCount", { count: (42).toLocaleString("zh-CN") }),
+    );
   });
 
   it("formats counts with locale separators", () => {
-    expect(formatCharCount(1234)).toBe("1,234 字符");
+    expect(formatCharCount(1234)).toBe(
+      t("format.charCount", { count: (1234).toLocaleString("zh-CN") }),
+    );
   });
 
   it("formats large counts in 万", () => {
-    expect(formatCharCount(15000)).toBe("1.5万 字符");
+    expect(formatCharCount(15000)).toBe(t("format.charCountTenThousands", { count: "1.5" }));
   });
 
   it("formats exact 10000", () => {
-    expect(formatCharCount(10000)).toBe("1.0万 字符");
+    expect(formatCharCount(10000)).toBe(t("format.charCountTenThousands", { count: "1.0" }));
   });
 });
 
@@ -118,12 +123,14 @@ describe("contentTypeConfig", () => {
     expect(contentTypeConfig.rtf).toBeDefined();
     expect(contentTypeConfig.image).toBeDefined();
     expect(contentTypeConfig.files).toBeDefined();
+    expect(contentTypeConfig.url).toBeDefined();
   });
 
   it("has labels for each type", () => {
-    expect(contentTypeConfig.text.label).toBe("文本");
-    expect(contentTypeConfig.image.label).toBe("图片");
-    expect(contentTypeConfig.files.label).toBe("文件");
+    expect(contentTypeConfig.text.label).toBe(t("contentType.text"));
+    expect(contentTypeConfig.image.label).toBe(t("contentType.image"));
+    expect(contentTypeConfig.files.label).toBe(t("contentType.files"));
+    expect(contentTypeConfig.url.label).toBe(t("contentType.url"));
   });
 });
 

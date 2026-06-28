@@ -5,9 +5,12 @@ import {
   Alert16Regular,
 } from "@fluentui/react-icons";
 import { openUrl as tauriOpenUrl } from "@tauri-apps/plugin-opener";
+import { useTranslation } from "@/i18n";
 import { logError } from "@/lib/logger";
 
 export function AboutTab() {
+  const { t } = useTranslation();
+
   const openUrl = async (url: string) => {
     try {
       await tauriOpenUrl(url);
@@ -18,7 +21,6 @@ export function AboutTab() {
 
   return (
     <>
-      {/* App Info Card */}
       <div className="flex-1 rounded-lg border bg-card p-6 flex flex-col justify-center overflow-auto">
         <div className="flex flex-col items-center text-center space-y-4">
           <div className="h-16 w-16 rounded-2xl overflow-hidden">
@@ -30,19 +32,18 @@ export function AboutTab() {
           </div>
           <h3 className="font-semibold text-lg">ElegantClipboard</h3>
           <p className="text-sm text-muted-foreground max-w-xs">
-            低占用 · 高性能 · 现代化 · 完全本地化离线剪贴板
+            {t("settings.about.tagline")}
           </p>
         </div>
       </div>
 
-      {/* Author Info Card */}
       <div className="flex-1 rounded-lg border bg-card p-4 flex flex-col overflow-auto">
-        <h3 className="text-sm font-medium mb-3 text-primary">作者信息</h3>
+        <h3 className="text-sm font-medium mb-3 text-primary">{t("settings.about.authorTitle")}</h3>
         <div className="space-y-2 flex-1 flex flex-col justify-center">
           <div className="flex items-center justify-between py-1.5">
             <div className="flex items-center gap-2">
               <Person16Regular className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">作者</span>
+              <span className="text-sm text-muted-foreground">{t("settings.about.author")}</span>
             </div>
             <span className="text-sm font-medium text-primary">ASLant</span>
           </div>
@@ -61,7 +62,7 @@ export function AboutTab() {
           <div className="flex items-center justify-between py-1.5">
             <div className="flex items-center gap-2">
               <Star16Regular className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">给个Star</span>
+              <span className="text-sm text-muted-foreground">{t("settings.about.star")}</span>
             </div>
             <button
               onClick={() =>
@@ -75,7 +76,7 @@ export function AboutTab() {
           <div className="flex items-center justify-between py-1.5">
             <div className="flex items-center gap-2">
               <Alert16Regular className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">反馈问题</span>
+              <span className="text-sm text-muted-foreground">{t("settings.about.feedback")}</span>
             </div>
             <button
               onClick={() =>
@@ -85,7 +86,7 @@ export function AboutTab() {
               }
               className="text-sm font-medium text-primary hover:underline"
             >
-              提交Issue
+              {t("settings.about.submitIssue")}
             </button>
           </div>
         </div>
@@ -93,4 +94,3 @@ export function AboutTab() {
     </>
   );
 }
-

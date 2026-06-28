@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { useTranslation } from "@/i18n";
 import { logError } from "@/lib/logger";
 import { KEY_CODE_MAP } from "@/lib/shortcut-helpers";
 import { cn } from "@/lib/utils";
@@ -32,7 +33,6 @@ type ShortcutEditTarget =
   | { type: "favorite-paste"; slot: number };
 
 const QUICK_PASTE_SLOT_COUNT = 10;
-const QUICK_PASTE_EMPTY_LABEL = "点击设置快捷键";
 
 interface ShortcutsTabProps {
   settings: ShortcutSettings;
@@ -43,6 +43,7 @@ export function ShortcutsTab({
   settings,
   onSettingsChange,
 }: ShortcutsTabProps) {
+  const { t } = useTranslation();
   const keyboardNavigation = useUISettings((s) => s.keyboardNavigation);
   const setKeyboardNavigation = useUISettings((s) => s.setKeyboardNavigation);
   const [winvLoading, setWinvLoading] = useState(false);
@@ -68,53 +69,47 @@ export function ShortcutsTab({
   const [favPasteExpanded, setFavPasteExpanded] = useState(false);
   const [favSlotErrors, setFavSlotErrors] = useState<Record<number, string>>({});
 
-  // 处理快捷键录入的键盘事件
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
     const parts: string[] = [];
 
-    // 修饰键
     if (e.ctrlKey) parts.push("Ctrl");
     if (e.altKey) parts.push("Alt");
     if (e.shiftKey) parts.push("Shift");
     if (e.metaKey) parts.push("Win");
 
-    // 按键
     let key = "";
     if (e.code.startsWith("Key")) {
       key = e.code.replace("Key", "");
     } else if (e.code.startsWith("Digit")) {
       key = e.code.replace("Digit", "");
     } else if (e.code.startsWith("F") && !isNaN(Number(e.code.slice(1)))) {
-      key = e.code; // F1-F12
+      key = e.code;
     } else {
       key = KEY_CODE_MAP[e.code] || "";
     }
 
     if (key && parts.length > 0) {
-      // Shift 不能单独作为全局快捷键修饰键
       const hasNonShiftModifier = e.ctrlKey || e.altKey || e.metaKey;
       if (!hasNonShiftModifier) {
-        setShortcutError("Shift 不能单独作为修饰键，请配合 Ctrl/Alt 使用");
+        setShortcutError(t("settings.shortcuts.shiftAloneError"));
         return;
       }
-      // 快速粘贴/收藏粘贴禁止使用 Win 键（Win+数字 是系统任务栏快捷键）
       if (e.metaKey && (editTarget?.type === "quick-paste" || editTarget?.type === "favorite-paste")) {
-        setShortcutError("快速粘贴不支持 Win 修饰键（Win+数字 是系统任务栏快捷键）");
+        setShortcutError(t("settings.shortcuts.winNotAllowed"));
         return;
       }
       parts.push(key);
       setTempShortcut(parts.join("+"));
       setShortcutError("");
     } else if (!key && parts.length > 0) {
-      // 仅按了修饰键，显示提示
       setTempShortcut(parts.join("+") + "+...");
     } else if (key && parts.length === 0) {
-      setShortcutError("请至少使用一个修饰键 (Ctrl/Alt)");
+      setShortcutError(t("settings.shortcuts.needModifier"));
     }
-  }, []);
+  }, [editTarget, t]);
 
   // 开始/停止录入
   useEffect(() => {
@@ -185,33 +180,29 @@ export function ShortcutsTab({
   // 当前生效的主快捷键（Win+V 替换开启时为 Win+V）
   const activeMainShortcut = settings.winv_replacement ? "Win+V" : settings.shortcut;
 
-  // 检测快捷键冲突
-  const detectConflict = (shortcut: string, target: ShortcutEditTarget): string | null => {
+  const detectConflict = useCallback((shortcut: string, target: ShortcutEditTarget): string | null => {
     const normalized = normalizeForCompare(shortcut);
-    // 与主快捷键比较
     if (target.type === "quick-paste" && normalized === normalizeForCompare(activeMainShortcut)) {
-      return `与呼出快捷键 ${activeMainShortcut} 冲突`;
+      return t("settings.shortcuts.conflictMain", { shortcut: activeMainShortcut });
     }
-    // 与快速粘贴槽位比较（编辑时跳过自身）
     for (let i = 0; i < quickPasteShortcuts.length; i++) {
       const s = quickPasteShortcuts[i];
       if (!s) continue;
       if (target.type === "quick-paste" && target.slot === i) continue;
       if (normalized === normalizeForCompare(s)) {
-        return `与快捷粘贴位置 ${i + 1} 冲突`;
+        return t("settings.shortcuts.conflictQuick", { num: i + 1 });
       }
     }
-    // 与收藏快速粘贴槽位比较（编辑时跳过自身）
     for (let i = 0; i < favPasteShortcuts.length; i++) {
       const s = favPasteShortcuts[i];
       if (!s) continue;
       if (target.type === "favorite-paste" && target.slot === i) continue;
       if (normalized === normalizeForCompare(s)) {
-        return `与收藏快捷粘贴位置 ${i + 1} 冲突`;
+        return t("settings.shortcuts.conflictFavorite", { num: i + 1 });
       }
     }
     return null;
-  };
+  }, [activeMainShortcut, quickPasteShortcuts, favPasteShortcuts, t]);
 
   // 通用槽位操作工厂，消除 quick/favorite 重复逻辑
   const createSlotOps = (
@@ -236,7 +227,7 @@ export function ShortcutsTab({
       for (let i = 0; i < QUICK_PASTE_SLOT_COUNT; i++) {
         if (currentShortcuts[i] === defaults[i]) continue;
         if (defaults[i] && normalizeForCompare(defaults[i]) === mainNorm) {
-          setErrors((prev) => ({ ...prev, [i]: `${defaults[i]} 与呼出快捷键冲突，已跳过` }));
+          setErrors((prev) => ({ ...prev, [i]: t("settings.shortcuts.skippedConflict", { shortcut: defaults[i] }) }));
           continue;
         }
         try { await apply(i, defaults[i]); } catch (error) {
@@ -262,16 +253,15 @@ export function ShortcutsTab({
 
   const saveShortcut = async () => {
     if (!editTarget) {
-      setShortcutError("未选择要编辑的快捷键");
+      setShortcutError(t("settings.shortcuts.noTarget"));
       return;
     }
 
     if (!tempShortcut || tempShortcut.includes("...")) {
-      setShortcutError("请输入完整的快捷键");
+      setShortcutError(t("settings.shortcuts.incomplete"));
       return;
     }
 
-    // 冲突检测
     const conflict = detectConflict(tempShortcut, editTarget);
     if (conflict) {
       setShortcutError(conflict);
@@ -296,7 +286,7 @@ export function ShortcutsTab({
       setTempShortcut("");
       setEditTarget(null);
     } catch (error) {
-      setShortcutError(`保存失败: ${error}`);
+      setShortcutError(t("settings.shortcuts.saveFailed", { error: String(error) }));
       if (editTarget.type === "quick-paste") {
         setSlotErrors((prev) => ({ ...prev, [editTarget.slot]: String(error) }));
       } else if (editTarget.type === "favorite-paste") {
@@ -340,14 +330,14 @@ export function ShortcutsTab({
       <div className="space-y-4">
         {/* Keyboard Navigation Card */}
         <div className="rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-medium mb-3">快捷导航</h3>
-          <p className="text-xs text-muted-foreground mb-4">使用键盘快速操作剪贴板列表</p>
+          <h3 className="text-sm font-medium mb-3">{t("settings.shortcuts.navTitle")}</h3>
+          <p className="text-xs text-muted-foreground mb-4">{t("settings.shortcuts.navDesc")}</p>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label className="text-xs">键盘导航</Label>
+                <Label className="text-xs">{t("settings.shortcuts.keyboardNav")}</Label>
                 <p className="text-xs text-muted-foreground">
-                  方向键选择条目和切换分组、Enter 粘贴、Shift+Enter 纯文本粘贴、Delete 删除
+                  {t("settings.shortcuts.keyboardNavDesc")}
                 </p>
               </div>
               <Switch
@@ -360,9 +350,9 @@ export function ShortcutsTab({
 
         {/* Shortcut Card */}
         <div className="rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-medium mb-3">呼出快捷键</h3>
+          <h3 className="text-sm font-medium mb-3">{t("settings.shortcuts.summonTitle")}</h3>
           <p className="text-xs text-muted-foreground mb-4">
-            自定义呼出剪贴板的快捷键
+            {t("settings.shortcuts.summonDesc")}
           </p>
           <div
             className={cn(
@@ -370,7 +360,7 @@ export function ShortcutsTab({
               settings.winv_replacement && "opacity-50",
             )}
           >
-            <Label className="text-xs">自定义快捷键</Label>
+            <Label className="text-xs">{t("settings.shortcuts.customShortcut")}</Label>
             <div className="flex gap-2">
               <Input
                 value={settings.shortcut}
@@ -384,13 +374,13 @@ export function ShortcutsTab({
                 onClick={() => openEditDialog({ type: "main" }, settings.shortcut)}
                 disabled={settings.winv_replacement}
               >
-                修改
+                {t("settings.shortcuts.modify")}
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
               {settings.winv_replacement
-                ? "已启用 Win+V，自定义快捷键已禁用"
-                : "点击修改按钮自定义快捷键"}
+                ? t("settings.shortcuts.winvEnabled")
+                : t("settings.shortcuts.clickToModify")}
             </p>
           </div>
 
@@ -399,9 +389,9 @@ export function ShortcutsTab({
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label className="text-xs">使用 Win+V</Label>
+                <Label className="text-xs">{t("settings.shortcuts.useWinV")}</Label>
                 <p className="text-xs text-muted-foreground">
-                  替代系统剪贴板（将禁用自定义快捷键）
+                  {t("settings.shortcuts.useWinVDesc")}
                 </p>
               </div>
               <Switch
@@ -415,14 +405,14 @@ export function ShortcutsTab({
             </div>
             {winvLoading && (
               <p className="text-xs text-muted-foreground">
-                正在修改系统设置，请稍候...
+                {t("settings.shortcuts.modifyingSystem")}
               </p>
             )}
             {winvError && (
               <p className="text-xs text-destructive">{winvError}</p>
             )}
             <p className="text-xs text-amber-500">
-              注意：此操作会修改注册表并重启 Windows 资源管理器
+              {t("settings.shortcuts.registryWarning")}
             </p>
           </div>
         </div>
@@ -435,9 +425,9 @@ export function ShortcutsTab({
             onClick={() => setQuickPasteExpanded((v) => !v)}
           >
             <div>
-              <h3 className="text-sm font-medium">快捷粘贴位置</h3>
+              <h3 className="text-sm font-medium">{t("settings.shortcuts.quickPasteTitle")}</h3>
               <p className="text-xs text-muted-foreground mt-1">
-                为前 10 条剪贴板记录设置全局快捷键（按默认排序：置顶优先）
+                {t("settings.shortcuts.quickPasteDesc")}
               </p>
             </div>
             {quickPasteExpanded
@@ -462,7 +452,7 @@ export function ShortcutsTab({
                     disabled={loadingSlot !== null}
                     onClick={() => quickOps.batchReset(QUICK_DEFAULTS, quickPasteShortcuts)}
                   >
-                    全部恢复默认
+                    {t("settings.shortcuts.resetAllDefault")}
                   </Button>
                   <Button
                     variant="outline"
@@ -471,17 +461,17 @@ export function ShortcutsTab({
                     disabled={loadingSlot !== null || quickPasteShortcuts.every((s) => !s)}
                     onClick={() => quickOps.batchDisable(quickPasteShortcuts)}
                   >
-                    全部禁用
+                    {t("settings.shortcuts.disableAll")}
                   </Button>
                 </div>
 
                 {(quickPasteLoaded ? quickPasteShortcuts : Array.from({ length: QUICK_PASTE_SLOT_COUNT }, (_, i) => `Alt+${i === 9 ? 0 : i + 1}`)).map((shortcut, idx) => (
                   <div key={idx}>
                     <div className="flex items-center gap-2">
-                      <Label className="text-xs w-28 shrink-0">{`快速粘贴位置${idx === 9 ? 10 : idx + 1}`}</Label>
+                      <Label className="text-xs w-28 shrink-0">{t("settings.shortcuts.quickPasteSlot", { num: idx === 9 ? 10 : idx + 1 })}</Label>
                       <Input
                         value={shortcut}
-                        placeholder={QUICK_PASTE_EMPTY_LABEL}
+                        placeholder={t("settings.shortcuts.clickToSet")}
                         readOnly
                         className={cn(
                           "h-8 text-sm flex-1 bg-muted",
@@ -496,7 +486,7 @@ export function ShortcutsTab({
                         disabled={loadingSlot === idx}
                         onClick={() => openEditDialog({ type: "quick-paste", slot: idx }, shortcut)}
                       >
-                        修改
+                        {t("settings.shortcuts.modify")}
                       </Button>
                       <Button
                         variant="ghost"
@@ -505,7 +495,7 @@ export function ShortcutsTab({
                         disabled={loadingSlot === idx || !shortcut}
                         onClick={() => quickOps.disable(idx)}
                       >
-                        禁用
+                        {t("common.disable")}
                       </Button>
                     </div>
                     {slotErrors[idx] && (
@@ -515,7 +505,7 @@ export function ShortcutsTab({
                 ))}
               </div>
               <p className="text-xs text-muted-foreground mt-3">
-                建议使用包含修饰键的组合（如 Alt+1、Ctrl+Shift+1）以减少冲突
+                {t("settings.shortcuts.quickPasteHint")}
               </p>
             </div>
           </div>
@@ -529,9 +519,9 @@ export function ShortcutsTab({
             onClick={() => setFavPasteExpanded((v) => !v)}
           >
             <div>
-              <h3 className="text-sm font-medium">收藏快捷粘贴</h3>
+              <h3 className="text-sm font-medium">{t("settings.shortcuts.favoritePasteTitle")}</h3>
               <p className="text-xs text-muted-foreground mt-1">
-                为收藏列表中的前 10 条记录设置全局快捷键
+                {t("settings.shortcuts.favoritePasteDesc")}
               </p>
             </div>
             {favPasteExpanded
@@ -556,7 +546,7 @@ export function ShortcutsTab({
                     disabled={loadingSlot !== null}
                     onClick={() => favOps.batchReset(FAV_DEFAULTS, favPasteShortcuts)}
                   >
-                    全部恢复默认
+                    {t("settings.shortcuts.resetAllDefault")}
                   </Button>
                   <Button
                     variant="outline"
@@ -565,17 +555,17 @@ export function ShortcutsTab({
                     disabled={loadingSlot !== null || favPasteShortcuts.every((s) => !s)}
                     onClick={() => favOps.batchDisable(favPasteShortcuts)}
                   >
-                    全部禁用
+                    {t("settings.shortcuts.disableAll")}
                   </Button>
                 </div>
 
                 {(favPasteLoaded ? favPasteShortcuts : ["Ctrl+Alt+1", "Ctrl+Alt+2", "Ctrl+Alt+3", "", "", "", "", "", "", ""]).map((shortcut, idx) => (
                   <div key={idx}>
                     <div className="flex items-center gap-2">
-                      <Label className="text-xs w-28 shrink-0">{`收藏粘贴位置${idx === 9 ? 10 : idx + 1}`}</Label>
+                      <Label className="text-xs w-28 shrink-0">{t("settings.shortcuts.favoritePasteSlot", { num: idx === 9 ? 10 : idx + 1 })}</Label>
                       <Input
                         value={shortcut}
-                        placeholder={QUICK_PASTE_EMPTY_LABEL}
+                        placeholder={t("settings.shortcuts.clickToSet")}
                         readOnly
                         className={cn(
                           "h-8 text-sm flex-1 bg-muted",
@@ -590,7 +580,7 @@ export function ShortcutsTab({
                         disabled={loadingSlot === idx + 100}
                         onClick={() => openEditDialog({ type: "favorite-paste", slot: idx }, shortcut)}
                       >
-                        修改
+                        {t("settings.shortcuts.modify")}
                       </Button>
                       <Button
                         variant="ghost"
@@ -599,7 +589,7 @@ export function ShortcutsTab({
                         disabled={loadingSlot === idx + 100 || !shortcut}
                         onClick={() => favOps.disable(idx)}
                       >
-                        禁用
+                        {t("common.disable")}
                       </Button>
                     </div>
                     {favSlotErrors[idx] && (
@@ -609,7 +599,7 @@ export function ShortcutsTab({
                 ))}
               </div>
               <p className="text-xs text-muted-foreground mt-3">
-                默认前 3 个槽位启用（Ctrl+Alt+1/2/3），粘贴收藏列表中对应位置的记录
+                {t("settings.shortcuts.favoritePasteHint")}
               </p>
             </div>
           </div>
@@ -617,15 +607,15 @@ export function ShortcutsTab({
 
         {/* Current Active Card */}
         <div className="rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-medium mb-3">当前生效</h3>
+          <h3 className="text-sm font-medium mb-3">{t("settings.shortcuts.activeTitle")}</h3>
           <p className="text-xs text-muted-foreground mb-4">
             {settings.winv_replacement
-              ? "使用 Win+V 呼出剪贴板"
-              : `使用 ${settings.shortcut} 呼出剪贴板`}
+              ? t("settings.shortcuts.activeWinV")
+              : t("settings.shortcuts.activeCustom", { shortcut: settings.shortcut })}
           </p>
           <div className="space-y-2">
             <div className="flex items-center justify-between py-2 px-3 rounded-md bg-primary/10 border border-primary/20">
-              <span className="text-sm font-medium">呼出/隐藏窗口</span>
+              <span className="text-sm font-medium">{t("settings.shortcuts.toggleWindow")}</span>
               <kbd className="pointer-events-none inline-flex h-6 select-none items-center gap-1 rounded border bg-background px-2 font-mono text-xs font-medium">
                 {settings.winv_replacement ? "Win+V" : settings.shortcut}
               </kbd>
@@ -635,7 +625,7 @@ export function ShortcutsTab({
                 {quickPasteShortcuts.map((shortcut, idx) =>
                   shortcut ? (
                     <div key={idx} className="flex items-center justify-between py-1.5 px-3 rounded-md bg-muted/50">
-                      <span className="text-xs text-muted-foreground">快捷粘贴 {idx + 1}</span>
+                      <span className="text-xs text-muted-foreground">{t("settings.shortcuts.quickPasteLabel", { num: idx + 1 })}</span>
                       <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-background px-1.5 font-mono text-[10px] font-medium">
                         {shortcut}
                       </kbd>
@@ -649,7 +639,7 @@ export function ShortcutsTab({
                 {favPasteShortcuts.map((shortcut, idx) =>
                   shortcut ? (
                     <div key={`fav-${idx}`} className="flex items-center justify-between py-1.5 px-3 rounded-md bg-muted/50">
-                      <span className="text-xs text-muted-foreground">收藏粘贴 {idx + 1}</span>
+                      <span className="text-xs text-muted-foreground">{t("settings.shortcuts.favoritePasteLabel", { num: idx + 1 })}</span>
                       <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-background px-1.5 font-mono text-[10px] font-medium">
                         {shortcut}
                       </kbd>
@@ -660,7 +650,7 @@ export function ShortcutsTab({
             )}
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            注：自定义快捷键和 Win+V 只能二选一，不能同时生效
+            {t("settings.shortcuts.mutualExclusive")}
           </p>
         </div>
       </div>
@@ -677,15 +667,15 @@ export function ShortcutsTab({
           <DialogHeader>
             <DialogTitle>
               {editTarget?.type === "quick-paste"
-                ? `修改快速粘贴位置 ${editTarget.slot + 1}`
+                ? t("settings.shortcuts.editQuickPaste", { num: editTarget.slot + 1 })
                 : editTarget?.type === "favorite-paste"
-                  ? `修改收藏粘贴位置 ${editTarget.slot + 1}`
-                  : "修改快捷键"}
+                  ? t("settings.shortcuts.editFavoritePaste", { num: editTarget.slot + 1 })
+                  : t("settings.shortcuts.editShortcut")}
             </DialogTitle>
             <DialogDescription>
               {editTarget?.type === "quick-paste" || editTarget?.type === "favorite-paste"
-                ? "按下新的快捷键组合来设置快速粘贴"
-                : "按下新的快捷键组合来设置呼出剪贴板的快捷键"}
+                ? t("settings.shortcuts.editQuickPasteHint")
+                : t("settings.shortcuts.editSummonHint")}
             </DialogDescription>
           </DialogHeader>
 
@@ -701,11 +691,11 @@ export function ShortcutsTab({
             >
               {recordingShortcut ? (
                 <span className={cn("text-lg font-medium", tempShortcut && "font-mono")}>
-                  {tempShortcut || "按下快捷键..."}
+                  {tempShortcut || t("settings.shortcuts.pressShortcut")}
                 </span>
               ) : (
                 <span className="text-sm text-muted-foreground">
-                  点击此处开始录入快捷键
+                  {t("settings.shortcuts.clickToRecord")}
                 </span>
               )}
             </div>
@@ -716,12 +706,12 @@ export function ShortcutsTab({
 
             {tempShortcut.includes("Shift") && /\d/.test(tempShortcut) && (
               <p className="text-xs text-amber-500">
-                注意：受系统底层机制限制，含有 Shift 键的数字组合不支持使用小键盘触发。
+                {t("settings.shortcuts.numpadWarning")}
               </p>
             )}
 
             <p className="text-xs text-muted-foreground">
-              快捷键必须包含至少一个修饰键 (Ctrl / Alt / Win) 加一个普通按键，Shift 可配合使用
+              {t("settings.shortcuts.modifierHint")}
             </p>
           </div>
 
@@ -742,11 +732,11 @@ export function ShortcutsTab({
               }}
               className="text-muted-foreground"
             >
-              恢复默认
+              {t("settings.shortcuts.restoreDefault")}
             </Button>
             <div className="flex gap-2">
               <Button variant="outline" onClick={cancelRecording}>
-                取消
+                {t("common.cancel")}
               </Button>
               <Button
                 onClick={saveShortcut}
@@ -754,7 +744,7 @@ export function ShortcutsTab({
                   !tempShortcut || tempShortcut.includes("...") || loadingSlot !== null
                 }
               >
-                保存
+                {t("common.save")}
               </Button>
             </div>
           </DialogFooter>
@@ -774,12 +764,12 @@ export function ShortcutsTab({
         <DialogContent className="max-w-[400px]" showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>
-              {winvPendingAction === "enable" ? "启用 Win+V" : "禁用 Win+V"}
+              {winvPendingAction === "enable" ? t("settings.shortcuts.enableWinV") : t("settings.shortcuts.disableWinV")}
             </DialogTitle>
             <DialogDescription>
               {winvPendingAction === "enable"
-                ? "启用 Win+V 需要修改注册表并重启 Windows 资源管理器，桌面会短暂刷新。"
-                : "禁用 Win+V 需要恢复注册表并重启 Windows 资源管理器，桌面会短暂刷新。"}
+                ? t("settings.shortcuts.enableWinVDesc")
+                : t("settings.shortcuts.disableWinVDesc")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -790,9 +780,9 @@ export function ShortcutsTab({
                 setWinvPendingAction(null);
               }}
             >
-              取消
+              {t("common.cancel")}
             </Button>
-            <Button onClick={executeWinvToggle}>确定</Button>
+            <Button onClick={executeWinvToggle}>{t("common.confirm")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

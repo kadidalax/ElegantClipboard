@@ -62,6 +62,7 @@ Hover text preview shares the same preview position and hover preview delay sett
 - **High performance** - Optimized LIKE search (CJK text support), virtual list for 10k+ records, async image processing, content hash deduplication
 - **Modern** - Tauri 2.0 + React 19 + Tailwind CSS 4, type-safe, elegant architecture
 - **Fully local offline** - Data stored locally, no network requests, no cloud sync, privacy first
+- **Multilingual UI** - Simplified Chinese / English / Traditional Chinese, switch in settings, synced across windows
 
 ## Features
 
@@ -81,7 +82,7 @@ See [FEATURES_EN.md](FEATURES_EN.md) for complete feature list and terminology.
 | Shortcut | Action |
 |----------|--------|
 | `↑` / `↓` | Navigate up/down |
-| `←` / `→` | Switch tab (All/Text/Image/File/Favorites) |
+| `←` / `→` | Switch tab (All / Text / Other) |
 | `Enter` | Paste selected item |
 | `Shift+Enter` | Paste as plain text |
 | `Delete` | Delete selected item |
@@ -167,6 +168,10 @@ npm run tauri build -- --target aarch64-pc-windows-msvc
 
 # Code check
 npm run lint
+
+# Unit/component/perf tests
+make test
+# or: npx vitest run
 ```
 
 Notes:

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Folder16Regular, Open16Regular, ArrowSync16Regular, ArrowDownload16Regular, ArrowUpload16Regular, Delete16Regular, ArrowCounterclockwise16Regular, ArrowClockwise16Regular } from "@fluentui/react-icons";
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,18 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useTranslation } from "@/i18n";
 import { logError } from "@/lib/logger";
+
+function isUserCancelled(error: unknown): boolean {
+  const msg = String(error).toLowerCase();
+  return msg.includes("cancel") || msg.includes("取消");
+}
+
+function isErrorMessage(msg: string): boolean {
+  const lower = msg.toLowerCase();
+  return lower.includes("fail") || lower.includes("失败") || lower.includes("error");
+}
 
 export interface DataSettings {
   data_path: string;
@@ -58,14 +69,14 @@ function formatDataSize(bytes: number): string {
 type DedupStrategy = "move_to_top" | "ignore" | "always_new";
 type TextDedupMode = "semantic" | "strict";
 
-const dedupOptions: { value: DedupStrategy; label: string; desc: string }[] = [
-  { value: "move_to_top", label: "置顶已有", desc: "将已有记录更新到最新" },
-  { value: "ignore", label: "忽略", desc: "丢弃重复内容，保留原记录" },
-  { value: "always_new", label: "总是新建", desc: "不去重，允许重复记录" },
+const dedupKeys: { value: DedupStrategy; labelKey: string; descKey: string }[] = [
+  { value: "move_to_top", labelKey: "settings.data.dedupMoveToTop", descKey: "settings.data.dedupMoveToTopDesc" },
+  { value: "ignore", labelKey: "settings.data.dedupIgnore", descKey: "settings.data.dedupIgnoreDesc" },
+  { value: "always_new", labelKey: "settings.data.dedupAlwaysNew", descKey: "settings.data.dedupAlwaysNewDesc" },
 ];
-const textDedupModeOptions: { value: TextDedupMode; label: string; desc: string }[] = [
-  { value: "semantic", label: "语义去重", desc: "忽略空白和格式差异（推荐）" },
-  { value: "strict", label: "严格去重", desc: "内容完全一致才视为重复" },
+const textDedupKeys: { value: TextDedupMode; labelKey: string; descKey: string }[] = [
+  { value: "semantic", labelKey: "settings.data.textDedupSemantic", descKey: "settings.data.textDedupSemanticDesc" },
+  { value: "strict", labelKey: "settings.data.textDedupStrict", descKey: "settings.data.textDedupStrictDesc" },
 ];
 
 interface DedupStrategyCardProps {
@@ -74,6 +85,11 @@ interface DedupStrategyCardProps {
 }
 
 function DedupStrategyCard({ strategy, onChange }: DedupStrategyCardProps) {
+  const { t } = useTranslation();
+  const dedupOptions = useMemo(
+    () => dedupKeys.map((k) => ({ value: k.value, label: t(k.labelKey), desc: t(k.descKey) })),
+    [t],
+  );
   const activeDedupIndex = Math.max(
     0,
     dedupOptions.findIndex((opt) => opt.value === strategy),
@@ -81,11 +97,11 @@ function DedupStrategyCard({ strategy, onChange }: DedupStrategyCardProps) {
 
   return (
     <div className="rounded-lg border bg-card p-4">
-      <h3 className="text-sm font-medium mb-3">重复内容处理</h3>
-      <p className="text-xs text-muted-foreground mb-4">复制相同内容时的处理方式</p>
+      <h3 className="text-sm font-medium mb-3">{t("settings.data.dedupTitle")}</h3>
+      <p className="text-xs text-muted-foreground mb-4">{t("settings.data.dedupDesc")}</p>
       <div
         role="radiogroup"
-        aria-label="重复内容处理"
+        aria-label={t("settings.data.dedupAria")}
         className="relative rounded-lg border bg-muted/40 p-1"
       >
         <div className="relative grid grid-cols-3">
@@ -125,6 +141,11 @@ function DedupStrategyCard({ strategy, onChange }: DedupStrategyCardProps) {
 
 
 function TextDedupModeCard({ dedupStrategy }: { dedupStrategy: DedupStrategy }) {
+  const { t } = useTranslation();
+  const textDedupModeOptions = useMemo(
+    () => textDedupKeys.map((k) => ({ value: k.value, label: t(k.labelKey), desc: t(k.descKey) })),
+    [t],
+  );
   const [mode, setMode] = useState<TextDedupMode>("semantic");
   const dedupEnabled = dedupStrategy !== "always_new";
   const activeIndex = Math.max(
@@ -152,11 +173,11 @@ function TextDedupModeCard({ dedupStrategy }: { dedupStrategy: DedupStrategy }) 
 
   return (
     <div className="rounded-lg border bg-card p-4">
-      <h3 className="text-sm font-medium mb-3">文本去重模式</h3>
-      <p className="text-xs text-muted-foreground mb-4">控制文本/HTML/RTF 的重复判断方式</p>
+      <h3 className="text-sm font-medium mb-3">{t("settings.data.textDedupTitle")}</h3>
+      <p className="text-xs text-muted-foreground mb-4">{t("settings.data.textDedupDesc")}</p>
       <div
         role="radiogroup"
-        aria-label="文本去重模式"
+        aria-label={t("settings.data.textDedupAria")}
         aria-disabled={!dedupEnabled}
         className={`relative rounded-lg border p-1 ${dedupEnabled ? "bg-muted/40" : "bg-muted/30 opacity-70"}`}
       >
@@ -193,18 +214,21 @@ function TextDedupModeCard({ dedupStrategy }: { dedupStrategy: DedupStrategy }) 
       <p className="text-xs text-muted-foreground mt-2">
         {dedupEnabled
           ? textDedupModeOptions.find((o) => o.value === mode)?.desc
-          : "当前为“总是新建”，文本去重模式不会生效。"}
+          : t("settings.data.textDedupDisabled")}
       </p>
     </div>
   );
 }
-function formatKB(kb: number, fractionDigits = 1): string {
-  if (kb === 0) return "无限制";
+function formatKB(kb: number, fractionDigits = 1, unlimitedLabel: string): string {
+  if (kb === 0) return unlimitedLabel;
   if (kb >= 1024) return `${(kb / 1024).toFixed(fractionDigits)} MB`;
   return `${kb} KB`;
 }
 
 export function DataTab({ settings, onSettingsChange }: DataTabProps) {
+  const { t } = useTranslation();
+  const unlimitedLabel = t("common.unlimited");
+  const noAutoCleanupLabel = t("common.noAutoCleanup");
   const [migrationDialogOpen, setMigrationDialogOpen] = useState(false);
   const [pendingPath, setPendingPath] = useState<string | null>(null);
   const [destHasData, setDestHasData] = useState(false);
@@ -234,39 +258,32 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
   const [cleanLoading, setCleanLoading] = useState(false);
   const [cleanMsg, setCleanMsg] = useState<string | null>(null);
 
-  const cleanActionConfig: Record<CleanAction, {
-    title: string;
-    description: string;
-    warning: string;
-    buttonText: string;
-    command: string;
-    needsRestart: boolean;
-  }> = {
+  const cleanActionConfig = useMemo(() => ({
     clear_history: {
-      title: "清空剪贴板历史",
-      description: "删除所有剪贴板历史记录",
-      warning: "此操作将删除包括置顶和收藏在内的所有剪贴板记录，且不可恢复。",
-      buttonText: "确认清空",
+      title: t("settings.data.clearHistoryDialogTitle"),
+      description: t("settings.data.clearHistoryDesc"),
+      warning: t("settings.data.clearHistoryDialogWarning"),
+      buttonText: t("settings.data.clearHistoryConfirm"),
       command: "clear_all_history",
       needsRestart: false,
     },
     reset_settings: {
-      title: "恢复默认配置",
-      description: "重置所有设置为默认值，保留数据内容",
-      warning: "此操作将清除所有应用设置并恢复为默认值，剪贴板数据不受影响，应用将重启。",
-      buttonText: "确认恢复",
+      title: t("settings.data.resetSettingsDialogTitle"),
+      description: t("settings.data.resetSettingsDesc"),
+      warning: t("settings.data.resetSettingsDialogWarning"),
+      buttonText: t("settings.data.resetSettingsConfirm"),
       command: "reset_settings",
       needsRestart: true,
     },
     reset_all: {
-      title: "重置所有数据",
-      description: "删除所有数据并恢复默认设置",
-      warning: "此操作将删除所有剪贴板数据、图片文件及所有设置，恢复应用至初始状态，且不可恢复。",
-      buttonText: "确认重置",
+      title: t("settings.data.resetAllDialogTitle"),
+      description: t("settings.data.resetAllDesc"),
+      warning: t("settings.data.resetAllDialogWarning"),
+      buttonText: t("settings.data.resetAllConfirm"),
       command: "reset_all_data",
       needsRestart: true,
     },
-  };
+  }), [t]);
 
   const handleCleanAction = async () => {
     if (!cleanDialogAction) return;
@@ -280,11 +297,11 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
         sessionStorage.removeItem("data-size-cache");
         await invoke("restart_app");
       } else {
-        setCleanMsg("操作成功。");
+        setCleanMsg(t("common.success"));
         await refreshDataSize();
       }
     } catch (error) {
-      setCleanMsg(`操作失败: ${error}`);
+      setCleanMsg(t("common.operationFailed", { error: String(error) }));
     } finally {
       setCleanLoading(false);
     }
@@ -367,7 +384,7 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
       });
       
       if (result.errors.length > 0) {
-        setMigrationError(`迁移完成但有错误: ${result.errors.join(", ")}`);
+        setMigrationError(t("settings.data.migrationErrors", { errors: result.errors.join(", ") }));
       } else {
         // 成功，重启应用
         setMigrationDialogOpen(false);
@@ -375,7 +392,7 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
         await invoke("restart_app");
       }
     } catch (error) {
-      setMigrationError(`迁移失败: ${error}`);
+      setMigrationError(t("settings.data.migrationFailed", { error: String(error) }));
     } finally {
       setMigrating(false);
     }
@@ -393,7 +410,7 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
       // 重启以使用新路径
       await invoke("restart_app");
     } catch (error) {
-      setMigrationError(`设置失败: ${error}`);
+      setMigrationError(t("settings.data.setPathFailed", { error: String(error) }));
     }
   };
 
@@ -404,9 +421,8 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
       const msg = await invoke<string>("export_data");
       setExportImportMsg(msg);
     } catch (error) {
-      const errStr = `${error}`;
-      if (!errStr.includes("取消")) {
-        setExportImportMsg(`导出失败: ${error}`);
+      if (!isUserCancelled(error)) {
+        setExportImportMsg(t("settings.data.exportFailed", { error: String(error) }));
       }
     } finally {
       setExporting(false);
@@ -422,9 +438,8 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
       // 导入成功后重启应用
       await invoke("restart_app");
     } catch (error) {
-      const errStr = `${error}`;
-      if (!errStr.includes("取消")) {
-        setExportImportMsg(`导入失败: ${error}`);
+      if (!isUserCancelled(error)) {
+        setExportImportMsg(t("settings.data.importFailed", { error: String(error) }));
       }
     } finally {
       setImporting(false);
@@ -458,10 +473,10 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
         {/* Data Size Card */}
         <div className="rounded-lg border bg-card p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-medium">数据统计</h3>
+            <h3 className="text-sm font-medium">{t("settings.data.statsTitle")}</h3>
             <div className="flex items-center gap-2">
               {dataSizeTime && (
-                <span className="text-xs text-muted-foreground">更新于 {dataSizeTime}</span>
+                <span className="text-xs text-muted-foreground">{t("common.updatedAt", { time: dataSizeTime })}</span>
               )}
               <Button
                 variant="ghost"
@@ -478,33 +493,33 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
             <div className="grid grid-cols-3 gap-3">
               <div className="text-center p-2 rounded-md bg-muted/50">
                 <p className="text-sm font-medium tabular-nums">{formatDataSize(dataSize.total_size)}</p>
-                <p className="text-xs text-muted-foreground">总大小</p>
+                <p className="text-xs text-muted-foreground">{t("settings.data.totalSize")}</p>
               </div>
               <div className="text-center p-2 rounded-md bg-muted/50">
                 <p className="text-sm font-medium tabular-nums">{formatDataSize(dataSize.db_size)}</p>
-                <p className="text-xs text-muted-foreground">数据库</p>
+                <p className="text-xs text-muted-foreground">{t("settings.data.database")}</p>
               </div>
               <div className="text-center p-2 rounded-md bg-muted/50">
                 <p className="text-sm font-medium tabular-nums">{formatDataSize(dataSize.images_size)}</p>
-                <p className="text-xs text-muted-foreground">图片（{dataSize.images_count} 张）</p>
+                <p className="text-xs text-muted-foreground">{t("common.imagesCount", { count: dataSize.images_count })}</p>
               </div>
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground">点击右上角刷新按钮查看数据大小</p>
+            <p className="text-xs text-muted-foreground">{t("settings.data.statsRefreshHint")}</p>
           )}
         </div>
 
         {/* Storage Path Card */}
         <div className="rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-medium mb-3">数据存储</h3>
-          <p className="text-xs text-muted-foreground mb-4">配置剪贴板数据的存储位置</p>
+          <h3 className="text-sm font-medium mb-3">{t("settings.data.storageTitle")}</h3>
+          <p className="text-xs text-muted-foreground mb-4">{t("settings.data.storageDesc")}</p>
           <div className="space-y-2">
-            <Label htmlFor="data-path" className="text-xs">存储路径</Label>
+            <Label htmlFor="data-path" className="text-xs">{t("settings.data.storagePath")}</Label>
             <div className="flex gap-2">
               <Input
                 id="data-path"
                 value={settings.data_path}
-                placeholder="加载中..."
+                placeholder={t("settings.data.loadingPath")}
                 readOnly
                 className="flex-1 h-8 text-sm path-text"
               />
@@ -514,7 +529,7 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
                     <Folder16Regular className="w-4 h-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>选择文件夹</TooltipContent>
+                <TooltipContent>{t("settings.data.selectFolder")}</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -522,18 +537,18 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
                     <Open16Regular className="w-4 h-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>打开文件夹</TooltipContent>
+                <TooltipContent>{t("settings.data.openFolder")}</TooltipContent>
               </Tooltip>
             </div>
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground">
-                修改路径将迁移数据并重启应用
+                {t("settings.data.migrateHint")}
               </p>
               <button
                 onClick={resetToDefault}
                 className="text-xs text-primary hover:underline"
               >
-                恢复默认
+                {t("settings.data.restoreDefault")}
               </button>
             </div>
           </div>
@@ -541,8 +556,8 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
 
         {/* Export / Import Card */}
         <div className="rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-medium mb-3">数据备份</h3>
-          <p className="text-xs text-muted-foreground mb-4">导出或导入剪贴板数据（ZIP 格式）</p>
+          <h3 className="text-sm font-medium mb-3">{t("settings.data.backupTitle")}</h3>
+          <p className="text-xs text-muted-foreground mb-4">{t("settings.data.backupDesc")}</p>
           <div className="flex gap-2">
             <Button
               variant="outline"
@@ -552,7 +567,7 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
               className="flex-1"
             >
               <ArrowUpload16Regular className="w-4 h-4 mr-1.5" />
-              {exporting ? "导出中..." : "导出数据"}
+              {exporting ? t("settings.data.exporting") : t("settings.data.exportData")}
             </Button>
             <Button
               variant="outline"
@@ -562,11 +577,11 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
               className="flex-1"
             >
               <ArrowDownload16Regular className="w-4 h-4 mr-1.5" />
-              {importing ? "导入中..." : "导入数据"}
+              {importing ? t("settings.data.importing") : t("settings.data.importData")}
             </Button>
           </div>
           {exportImportMsg && (
-            <p className={`text-xs mt-2 ${exportImportMsg.includes("失败") ? "text-destructive" : "text-muted-foreground"}`}>
+            <p className={`text-xs mt-2 ${isErrorMessage(exportImportMsg) ? "text-destructive" : "text-muted-foreground"}`}>
               {exportImportMsg}
             </p>
           )}
@@ -574,13 +589,13 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
 
         {/* Data Cleanup Card */}
         <div className="rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-medium mb-1">数据清理</h3>
-          <p className="text-xs text-muted-foreground mb-4">清理和重置应用数据</p>
+          <h3 className="text-sm font-medium mb-1">{t("settings.data.cleanupTitle")}</h3>
+          <p className="text-xs text-muted-foreground mb-4">{t("settings.data.cleanupDesc")}</p>
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
-                <p className="text-sm">清空剪贴板历史</p>
-                <p className="text-xs text-muted-foreground">删除所有剪贴板历史记录</p>
+                <p className="text-sm">{t("settings.data.clearHistory")}</p>
+                <p className="text-xs text-muted-foreground">{t("settings.data.clearHistoryDesc")}</p>
               </div>
               <Button
                 variant="destructive"
@@ -589,14 +604,14 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
                 onClick={() => { setCleanMsg(null); setCleanDialogAction("clear_history"); }}
               >
                 <Delete16Regular className="w-4 h-4 mr-1.5" />
-                清空历史
+                {t("settings.data.clearHistoryBtn")}
               </Button>
             </div>
             <div className="h-px bg-border" />
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
-                <p className="text-sm">恢复默认配置</p>
-                <p className="text-xs text-muted-foreground">重置所有设置为默认值，保留数据内容</p>
+                <p className="text-sm">{t("settings.data.resetSettings")}</p>
+                <p className="text-xs text-muted-foreground">{t("settings.data.resetSettingsDesc")}</p>
               </div>
               <Button
                 variant="destructive"
@@ -605,14 +620,14 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
                 onClick={() => { setCleanMsg(null); setCleanDialogAction("reset_settings"); }}
               >
                 <ArrowCounterclockwise16Regular className="w-4 h-4 mr-1.5" />
-                恢复默认
+                {t("settings.data.resetSettingsBtn")}
               </Button>
             </div>
             <div className="h-px bg-border" />
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
-                <p className="text-sm">重置所有数据</p>
-                <p className="text-xs text-muted-foreground">删除所有数据并恢复默认设置</p>
+                <p className="text-sm">{t("settings.data.resetAll")}</p>
+                <p className="text-xs text-muted-foreground">{t("settings.data.resetAllDesc")}</p>
               </div>
               <Button
                 variant="destructive"
@@ -621,12 +636,12 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
                 onClick={() => { setCleanMsg(null); setCleanDialogAction("reset_all"); }}
               >
                 <ArrowClockwise16Regular className="w-4 h-4 mr-1.5" />
-                重置应用
+                {t("settings.data.resetAllBtn")}
               </Button>
             </div>
           </div>
           {cleanMsg && (
-            <p className={`text-xs mt-3 ${cleanMsg.includes("失败") ? "text-destructive" : "text-muted-foreground"}`}>
+            <p className={`text-xs mt-3 ${isErrorMessage(cleanMsg) ? "text-destructive" : "text-muted-foreground"}`}>
               {cleanMsg}
             </p>
           )}
@@ -638,15 +653,15 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
 
         {/* History Limit Card */}
         <div className="rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-medium mb-3">历史记录</h3>
-          <p className="text-xs text-muted-foreground mb-4">配置历史记录的存储限制</p>
+          <h3 className="text-sm font-medium mb-3">{t("settings.data.historyTitle")}</h3>
+          <p className="text-xs text-muted-foreground mb-4">{t("settings.data.historyDesc")}</p>
           
           <div className="space-y-4">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label className="text-xs">最大历史记录数</Label>
+                <Label className="text-xs">{t("settings.data.maxHistory")}</Label>
                 <span className="text-xs font-medium tabular-nums">
-                  {settings.max_history_count === 0 ? "无限制" : settings.max_history_count.toLocaleString()}
+                  {settings.max_history_count === 0 ? unlimitedLabel : settings.max_history_count.toLocaleString()}
                 </span>
               </div>
               <Slider
@@ -657,15 +672,15 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
                 step={100}
               />
               <p className="text-xs text-muted-foreground">
-                设为 0 表示无限制
+                {t("settings.data.maxHistoryHint")}
               </p>
             </div>
 
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label className="text-xs">单条文本最大大小</Label>
+                <Label className="text-xs">{t("settings.data.maxTextSize")}</Label>
                 <span className="text-xs font-medium tabular-nums">
-                  {formatKB(settings.max_content_size_kb)}
+                  {formatKB(settings.max_content_size_kb, 1, unlimitedLabel)}
                 </span>
               </div>
               <Slider
@@ -676,15 +691,15 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
                 step={64}
               />
               <p className="text-xs text-muted-foreground">
-                仅限制文本/HTML/RTF，图片和文件不受此限制，设为 0 表示无限制
+                {t("settings.data.maxTextSizeHint")}
               </p>
             </div>
 
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label className="text-xs">单张图片最大大小</Label>
+                <Label className="text-xs">{t("settings.data.maxImageSize")}</Label>
                 <span className="text-xs font-medium tabular-nums">
-                  {formatKB(settings.max_image_size_kb, 0)}
+                  {formatKB(settings.max_image_size_kb, 0, unlimitedLabel)}
                 </span>
               </div>
               <Slider
@@ -695,15 +710,15 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
                 step={1024}
               />
               <p className="text-xs text-muted-foreground">
-                超过该大小的图片不会被记录，可避免从 NAS 等远程位置复制超大图导致卡顿，设为 0 表示无限制
+                {t("settings.data.maxImageSizeHint")}
               </p>
             </div>
 
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label className="text-xs">自动清理天数</Label>
+                <Label className="text-xs">{t("settings.data.autoCleanup")}</Label>
                 <span className="text-xs font-medium tabular-nums">
-                  {settings.auto_cleanup_days === 0 ? "不自动清理" : `${settings.auto_cleanup_days} 天`}
+                  {settings.auto_cleanup_days === 0 ? noAutoCleanupLabel : t("common.days", { count: settings.auto_cleanup_days })}
                 </span>
               </div>
               <Slider
@@ -714,7 +729,7 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
                 step={5}
               />
               <p className="text-xs text-muted-foreground">
-                自动删除超过指定天数的历史记录，设为 0 表示不自动清理
+                {t("settings.data.autoCleanupHint")}
               </p>
             </div>
           </div>
@@ -741,7 +756,7 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
               onClick={() => setCleanDialogAction(null)}
               disabled={cleanLoading}
             >
-              取消
+              {t("common.cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -749,7 +764,7 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
               disabled={cleanLoading}
             >
               {cleanLoading
-                ? "处理中..."
+                ? t("common.processing")
                 : (cleanDialogAction ? cleanActionConfig[cleanDialogAction].buttonText : "")}
             </Button>
           </DialogFooter>
@@ -760,23 +775,23 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
       <Dialog open={migrationDialogOpen} onOpenChange={setMigrationDialogOpen}>
         <DialogContent className="max-w-md" showCloseButton={false}>
           <DialogHeader>
-            <DialogTitle>{destHasData ? "目标位置已有数据" : "迁移数据"}</DialogTitle>
+            <DialogTitle>{destHasData ? t("settings.data.migrationDestHasData") : t("settings.data.migrationTitle")}</DialogTitle>
             <DialogDescription>
               {destHasData
-                ? "新位置已存在剪贴板数据，请选择保留哪一份数据。"
-                : "是否将现有数据迁移到新位置？"}
+                ? t("settings.data.migrationDestDesc")
+                : t("settings.data.migrationAsk")}
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-3 py-2">
             <div className="text-sm">
-              <span className="text-muted-foreground">当前位置：</span>
+              <span className="text-muted-foreground">{t("settings.data.currentPath")}</span>
               <span className="path-text text-xs block mt-1 p-2 bg-muted rounded">
                 {settings.data_path}
               </span>
             </div>
             <div className="text-sm">
-              <span className="text-muted-foreground">新位置：</span>
+              <span className="text-muted-foreground">{t("settings.data.newPath")}</span>
               <span className="path-text text-xs block mt-1 p-2 bg-muted rounded">
                 {pendingPath}
               </span>
@@ -793,7 +808,7 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
               onClick={() => setMigrationDialogOpen(false)}
               disabled={migrating}
             >
-              取消
+              {t("common.cancel")}
             </Button>
             {destHasData ? (
               <>
@@ -803,13 +818,13 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
                   disabled={migrating}
                   className="text-destructive hover:text-destructive hover:bg-destructive/10"
                 >
-                  {migrating ? "覆盖中..." : "保留旧位置数据"}
+                  {migrating ? t("settings.data.overwriting") : t("settings.data.keepOldData")}
                 </Button>
                 <Button
                   onClick={handleSkipMigration}
                   disabled={migrating}
                 >
-                  保留新位置数据
+                  {t("settings.data.keepNewData")}
                 </Button>
               </>
             ) : (
@@ -820,13 +835,13 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
                   disabled={migrating}
                   className="text-destructive hover:text-destructive hover:bg-destructive/10"
                 >
-                  不迁移
+                  {t("settings.data.skipMigration")}
                 </Button>
                 <Button
                   onClick={handleMigrate}
                   disabled={migrating}
                 >
-                  {migrating ? "迁移中..." : "迁移数据"}
+                  {migrating ? t("settings.data.migrating") : t("settings.data.migrateData")}
                 </Button>
               </>
             )}

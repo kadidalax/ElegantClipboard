@@ -1,22 +1,38 @@
+import { t } from "@/i18n";
 import type { ToolbarButton } from "@/stores/ui-settings";
 
 /** 工具栏按钮注册表 */
-export const TOOLBAR_BUTTON_REGISTRY: Record<
+export function getToolbarButtonRegistry(): Record<
   ToolbarButton,
   { label: string; description: string }
-> = {
-  clear: { label: "清空历史", description: "清空所有非置顶的历史记录" },
-  pin: { label: "锁定窗口", description: "锁定窗口防止自动隐藏" },
-  batch: { label: "批量选择", description: "进入批量选择模式，支持 Ctrl 多选、Shift 连选，批量删除" },
-  settings: { label: "设置", description: "打开设置窗口" },
-};
+> {
+  return {
+    clear: { label: t("toolbar.clearHistory"), description: t("toolbar.clearHistoryDesc") },
+    pin: { label: t("toolbar.pinWindow"), description: t("toolbar.pinWindowDesc") },
+    batch: { label: t("toolbar.batchSelect"), description: t("toolbar.batchSelectDesc") },
+    settings: { label: t("toolbar.settings"), description: t("toolbar.settingsDesc") },
+  };
+}
 
-/** 分类分组（App 标签页和键盘导航共用） */
-export const GROUPS = [
-  { label: "全部", value: null },
-  { label: "收藏", value: "__favorites__" },
-  { label: "文本", value: "text,html,rtf" },
-  { label: "其它", value: "image,files" },
+/** 分类分组值（App 标签页和键盘导航共用） */
+export const GROUP_VALUES = [
+  { value: null, labelKey: "groups.all" },
+  { value: "__favorites__", labelKey: "groups.favorites" },
+  { value: "text,html,rtf", labelKey: "groups.text" },
+  { value: "image,files,url", labelKey: "groups.other" },
 ] as const;
 
-export type GroupValue = (typeof GROUPS)[number]["value"];
+export type GroupValue = (typeof GROUP_VALUES)[number]["value"];
+
+export function getGroups() {
+  return GROUP_VALUES.map((group) => ({
+    label: t(group.labelKey),
+    value: group.value,
+  }));
+}
+
+export function getContentTypeLabel(type: string): string {
+  const key = `contentType.${type}`;
+  const label = t(key);
+  return label === key ? t("contentType.text") : label;
+}

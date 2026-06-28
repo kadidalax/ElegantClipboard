@@ -6,12 +6,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useTranslation } from "@/i18n";
 import { logError } from "@/lib/logger";
 import { KEY_CODE_MAP } from "@/lib/shortcut-helpers";
 import { PROVIDER_OPTIONS, LANGUAGES, translateText } from "@/lib/translate";
 import { useTranslateSettings, type TranslateProvider, type LanguageMode } from "@/stores/translate-settings";
 
 export function TranslateTab() {
+  const { t } = useTranslation();
   const {
     enabled, setEnabled,
     recordTranslation, setRecordTranslation,
@@ -89,13 +91,13 @@ export function TranslateTab() {
 
   const saveTsShortcut = async () => {
     if (!tsTempShortcut || tsTempShortcut.includes("...")) {
-      setTsShortcutError("请输入完整的快捷键"); return;
+      setTsShortcutError(t("settings.translate.shortcutIncomplete")); return;
     }
     const hasModifier = tsTempShortcut.split("+").some((p) =>
       ["Ctrl", "Alt", "Shift", "Win"].includes(p.trim())
     );
     if (!hasModifier) {
-      setTsShortcutError("快捷键至少包含一个修饰键 (Ctrl/Alt/Win)"); return;
+      setTsShortcutError(t("settings.translate.shortcutNeedModifier")); return;
     }
     setTsSaving(true);
     try {
@@ -103,7 +105,7 @@ export function TranslateTab() {
       setTranslateSelectionShortcut(tsTempShortcut);
       setTsRecording(false); setTsTempShortcut("");
     } catch (error) {
-      setTsShortcutError(`保存失败: ${error}`);
+      setTsShortcutError(t("settings.translate.shortcutSaveFailed", { error: String(error) }));
     } finally { setTsSaving(false); }
   };
 
@@ -131,14 +133,14 @@ export function TranslateTab() {
     <div className="space-y-4">
       {/* 总开关 */}
       <div className="rounded-lg border bg-card p-4">
-        <h3 className="text-sm font-medium mb-3">条目翻译</h3>
+        <h3 className="text-sm font-medium mb-3">{t("settings.translate.entryTitle")}</h3>
         <p className="text-xs text-muted-foreground mb-4">
-          开启后，每个条目的工具栏和右键菜单中将出现翻译选项，翻译结果会显示在条目下方
+          {t("settings.translate.entryDesc")}
         </p>
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
-            <Label className="text-xs">启用条目翻译</Label>
-            <p className="text-xs text-muted-foreground">开启后可对剪贴板文本条目进行翻译</p>
+            <Label className="text-xs">{t("settings.translate.enableEntry")}</Label>
+            <p className="text-xs text-muted-foreground">{t("settings.translate.enableEntryDesc")}</p>
           </div>
           <Switch checked={enabled} onCheckedChange={async (value) => {
             setEnabled(value);
@@ -152,8 +154,8 @@ export function TranslateTab() {
         {enabled && (
           <div className="flex items-center justify-between pt-4 mt-1">
             <div className="space-y-0.5">
-              <Label className="text-xs">复制翻译时记录条目</Label>
-              <p className="text-xs text-muted-foreground">开启后复制翻译结果时会作为新条目记录到剪贴板历史</p>
+              <Label className="text-xs">{t("settings.translate.recordOnCopy")}</Label>
+              <p className="text-xs text-muted-foreground">{t("settings.translate.recordOnCopyDesc")}</p>
             </div>
             <Switch checked={recordTranslation} onCheckedChange={setRecordTranslation} />
           </div>
@@ -164,12 +166,12 @@ export function TranslateTab() {
         <>
           {/* 翻译渠道 */}
           <div className="rounded-lg border bg-card p-4">
-            <h3 className="text-sm font-medium mb-3">翻译渠道</h3>
+            <h3 className="text-sm font-medium mb-3">{t("settings.translate.providerTitle")}</h3>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label className="text-xs">翻译服务</Label>
-                  <p className="text-xs text-muted-foreground">选择用于翻译的服务提供者</p>
+                  <Label className="text-xs">{t("settings.translate.provider")}</Label>
+                  <p className="text-xs text-muted-foreground">{t("settings.translate.providerDesc")}</p>
                 </div>
                 <Select value={provider} onValueChange={(v) => setProvider(v as TranslateProvider)}>
                   <SelectTrigger className="w-[180px] h-8 text-xs"><SelectValue /></SelectTrigger>
@@ -183,10 +185,10 @@ export function TranslateTab() {
 
               {provider === "google_api" && (
                 <div className="space-y-1.5 pt-1">
-                  <Label className="text-xs">Google API Key</Label>
+                  <Label className="text-xs">{t("settings.translate.googleApiKeyLabel")}</Label>
                   <div className="relative">
                     <Input className="h-8 text-xs pr-8" type={showGoogleKey ? "text" : "password"}
-                      placeholder="输入 Google Cloud API Key" value={googleApiKey}
+                      placeholder={t("settings.translate.googleApiKey")} value={googleApiKey}
                       onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ googleApiKey: v }); debounced("googleApiKey", setGoogleApiKey, v); }}
                     />
                     <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
@@ -195,20 +197,20 @@ export function TranslateTab() {
                     </button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    请前往{" "}
+                    {t("settings.translate.visitBefore")}{" "}
                     <a className="text-primary hover:underline cursor-pointer"
                       onClick={() => import("@tauri-apps/plugin-opener").then(({ openUrl }) => openUrl("https://console.cloud.google.com/apis/credentials"))}>
                       Google Cloud Console
                     </a>
-                    {" "}获取 API Key
+                    {" "}{t("settings.translate.linkGetGoogleKey")}
                   </p>
                 </div>
               )}
 
               {provider === "deeplx" && (
                 <div className="space-y-1.5 pt-1">
-                  <Label className="text-xs">请求地址</Label>
-                  <Input className="h-8 text-xs" placeholder="http://127.0.0.1:1188/translate" value={deeplxEndpoint}
+                  <Label className="text-xs">{t("settings.translate.requestUrl")}</Label>
+                  <Input className="h-8 text-xs" placeholder={t("settings.translate.deeplxPlaceholder")} value={deeplxEndpoint}
                     onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ deeplxEndpoint: v }); debounced("deeplxEndpoint", setDeeplxEndpoint, v); }}
                   />
                 </div>
@@ -217,16 +219,16 @@ export function TranslateTab() {
               {provider === "baidu" && (
                 <div className="space-y-2 pt-1">
                   <div className="space-y-1.5">
-                    <Label className="text-xs">百度翻译 APP ID</Label>
-                    <Input className="h-8 text-xs" placeholder="输入 APP ID" value={baiduAppId}
+                    <Label className="text-xs">{t("settings.translate.baiduAppId")}</Label>
+                    <Input className="h-8 text-xs" placeholder={t("settings.translate.baiduAppIdPlaceholder")} value={baiduAppId}
                       onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ baiduAppId: v }); debounced("baiduAppId", setBaiduAppId, v); }}
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs">百度翻译密钥</Label>
+                    <Label className="text-xs">{t("settings.translate.baiduSecret")}</Label>
                     <div className="relative">
                       <Input className="h-8 text-xs pr-8" type={showBaiduKey ? "text" : "password"}
-                        placeholder="输入密钥" value={baiduSecretKey}
+                        placeholder={t("settings.translate.baiduSecretPlaceholder")} value={baiduSecretKey}
                         onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ baiduSecretKey: v }); debounced("baiduSecretKey", setBaiduSecretKey, v); }}
                       />
                       <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
@@ -236,12 +238,12 @@ export function TranslateTab() {
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    请前往{" "}
+                    {t("settings.translate.visitBefore")}{" "}
                     <a className="text-primary hover:underline cursor-pointer"
                       onClick={() => import("@tauri-apps/plugin-opener").then(({ openUrl }) => openUrl("https://fanyi-api.baidu.com/manage/developer"))}>
-                      百度翻译开放平台
+                      {t("settings.translate.baiduPlatform")}
                     </a>
-                    {" "}获取 APP ID 和密钥
+                    {" "}{t("settings.translate.linkGetBaiduKey")}
                   </p>
                 </div>
               )}
@@ -249,17 +251,17 @@ export function TranslateTab() {
               {provider === "openai" && (
                 <div className="space-y-2 pt-1">
                   <div className="space-y-1.5">
-                    <Label className="text-xs">API 接口地址</Label>
-                    <Input className="h-8 text-xs" placeholder="https://api.openai.com/v1" value={openaiEndpoint}
+                    <Label className="text-xs">{t("settings.translate.apiUrl")}</Label>
+                    <Input className="h-8 text-xs" placeholder={t("settings.translate.openaiUrlPlaceholder")} value={openaiEndpoint}
                       onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ openaiEndpoint: v }); debounced("openaiEndpoint", setOpenaiEndpoint, v); }}
                     />
-                    <p className="text-xs text-muted-foreground">支持自定义接口，兼容 OpenAI API 格式</p>
+                    <p className="text-xs text-muted-foreground">{t("settings.translate.openaiFormat")}</p>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs">API Key</Label>
+                    <Label className="text-xs">{t("settings.translate.apiKeyLabel")}</Label>
                     <div className="relative">
                       <Input className="h-8 text-xs pr-8" type={showOpenaiKey ? "text" : "password"}
-                        placeholder="输入 API Key" value={openaiApiKey}
+                        placeholder={t("settings.translate.openaiApiKey")} value={openaiApiKey}
                         onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ openaiApiKey: v }); debounced("openaiApiKey", setOpenaiApiKey, v); }}
                       />
                       <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
@@ -269,8 +271,8 @@ export function TranslateTab() {
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs">模型 ID</Label>
-                    <Input className="h-8 text-xs" placeholder="gpt-4o-mini" value={openaiModel}
+                    <Label className="text-xs">{t("settings.translate.modelId")}</Label>
+                    <Input className="h-8 text-xs" placeholder={t("settings.translate.openaiModelPlaceholder")} value={openaiModel}
                       onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ openaiModel: v }); debounced("openaiModel", setOpenaiModel, v); }}
                     />
                   </div>
@@ -280,20 +282,20 @@ export function TranslateTab() {
               {/* 网络代理 */}
               <div className="flex items-center justify-between pt-4">
                 <div className="space-y-0.5">
-                  <Label className="text-xs">网络代理</Label>
-                  <p className="text-xs text-muted-foreground">翻译请求使用的代理设置</p>
+                  <Label className="text-xs">{t("settings.translate.proxy")}</Label>
+                  <p className="text-xs text-muted-foreground">{t("settings.translate.proxyDesc")}</p>
                 </div>
                 <Select value={proxyMode} onValueChange={(v) => setProxyMode(v as "system" | "none" | "custom")}>
                   <SelectTrigger className="w-[130px] h-8 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="system">系统代理</SelectItem>
-                    <SelectItem value="none">不使用代理</SelectItem>
-                    <SelectItem value="custom">自定义代理</SelectItem>
+                    <SelectItem value="system">{t("settings.translate.proxySystem")}</SelectItem>
+                    <SelectItem value="none">{t("settings.translate.proxyNone")}</SelectItem>
+                    <SelectItem value="custom">{t("settings.translate.proxyCustom")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               {proxyMode === "custom" && (
-                <Input className="h-8 text-xs mt-2" placeholder="http://127.0.0.1:7890 或 socks5://127.0.0.1:1080"
+                <Input className="h-8 text-xs mt-2" placeholder={t("settings.translate.proxyPlaceholder")}
                   value={proxyUrl}
                   onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ proxyUrl: v }); debounced("proxyUrl", setProxyUrl, v); }}
                 />
@@ -306,12 +308,12 @@ export function TranslateTab() {
                     setTesting(true); setTestResult(null);
                     try {
                       const result = await translateText("Hello");
-                      setTestResult({ ok: true, msg: `连接成功：${result}` });
+                      setTestResult({ ok: true, msg: t("settings.translate.testSuccess", { result }) });
                     } catch (error) {
                       setTestResult({ ok: false, msg: String(error) });
                     } finally { setTesting(false); }
                   }}>
-                  {testing ? "测试中…" : "测试连接"}
+                  {testing ? t("settings.translate.testing") : t("settings.translate.testConnection")}
                 </Button>
                 {testResult && (
                   <span className={`text-xs ${testResult.ok ? "text-green-600 dark:text-green-400" : "text-destructive"}`}>
@@ -324,38 +326,38 @@ export function TranslateTab() {
 
           {/* 语言设置 */}
           <div className="rounded-lg border bg-card p-4">
-            <h3 className="text-sm font-medium mb-3">语言设置</h3>
-            <p className="text-xs text-muted-foreground mb-4">配置翻译的源语言和目标语言</p>
+            <h3 className="text-sm font-medium mb-3">{t("settings.translate.langTitle")}</h3>
+            <p className="text-xs text-muted-foreground mb-4">{t("settings.translate.langDesc")}</p>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label className="text-xs">语言模式</Label>
+                  <Label className="text-xs">{t("settings.translate.langMode")}</Label>
                   <p className="text-xs text-muted-foreground">
-                    {languageMode === "auto" ? "自动检测：中文→英文，其他语言→中文" : "手动指定源语言和目标语言"}
+                    {languageMode === "auto" ? t("settings.translate.langModeAutoDesc") : t("settings.translate.langModeManualDesc")}
                   </p>
                 </div>
                 <Select value={languageMode} onValueChange={(v) => setLanguageMode(v as LanguageMode)}>
                   <SelectTrigger className="w-[130px] h-8 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="auto">自动检测</SelectItem>
-                    <SelectItem value="manual">手动选择</SelectItem>
+                    <SelectItem value="auto">{t("settings.translate.langModeAuto")}</SelectItem>
+                    <SelectItem value="manual">{t("settings.translate.langModeManual")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               {languageMode === "manual" && (
                 <div className="grid grid-cols-2 gap-2 pt-1">
                   <div className="space-y-1.5">
-                    <Label className="text-xs">源语言</Label>
+                    <Label className="text-xs">{t("settings.translate.sourceLanguage")}</Label>
                     <Select value={sourceLanguage || "auto"} onValueChange={setSourceLanguage}>
                       <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="auto">自动检测</SelectItem>
+                        <SelectItem value="auto">{t("settings.translate.langModeAuto")}</SelectItem>
                         {LANGUAGES.map((lang) => (<SelectItem key={lang.value} value={lang.value}>{lang.label}</SelectItem>))}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs">目标语言</Label>
+                    <Label className="text-xs">{t("settings.translate.targetLanguage")}</Label>
                     <Select value={targetLanguage || "zh"} onValueChange={setTargetLanguage}>
                       <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -370,21 +372,21 @@ export function TranslateTab() {
 
           {/* 翻译选中文字 */}
           <div className="rounded-lg border bg-card p-4">
-            <h3 className="text-sm font-medium mb-3">翻译选中文字</h3>
-            <p className="text-xs text-muted-foreground mb-4">开启后，按下快捷键可自动获取当前选中的文字并翻译</p>
+            <h3 className="text-sm font-medium mb-3">{t("settings.translate.selectionActionTitle")}</h3>
+            <p className="text-xs text-muted-foreground mb-4">{t("settings.translate.selectionActionDesc")}</p>
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label className="text-xs">启用翻译选中文字</Label>
-                <p className="text-xs text-muted-foreground">通过全局快捷键翻译任意应用中选中的文字</p>
+                <Label className="text-xs">{t("settings.translate.selectionActionEnable")}</Label>
+                <p className="text-xs text-muted-foreground">{t("settings.translate.selectionActionEnableDesc")}</p>
               </div>
               <Switch checked={translateSelectionEnabled} onCheckedChange={handleToggleTranslateSelection} />
             </div>
             {translateSelectionEnabled && (
               <div className="space-y-3 pt-4 mt-1 border-t">
-                <Label className="text-xs">快捷键</Label>
+                <Label className="text-xs">{t("settings.translate.shortcut")}</Label>
                 <div className="flex gap-2">
                   <Input
-                    value={tsRecording ? tsTempShortcut || "按下快捷键..." : translateSelectionShortcut || "未设置"}
+                    value={tsRecording ? tsTempShortcut || t("settings.shortcuts.pressShortcut") : translateSelectionShortcut || t("settings.translate.notSet")}
                     readOnly
                     className={`flex-1 h-8 text-sm bg-muted ${translateSelectionShortcut || tsRecording ? "font-mono" : ""}`}
                     onClick={() => { if (!tsRecording) { setTsRecording(true); setTsTempShortcut(""); setTsShortcutError(""); } }}
@@ -393,17 +395,17 @@ export function TranslateTab() {
                     <div className="flex gap-1">
                       <Button variant="default" size="sm" className="h-8"
                         disabled={!tsTempShortcut || tsTempShortcut.includes("...") || tsSaving}
-                        onClick={saveTsShortcut}>保存</Button>
+                        onClick={saveTsShortcut}>{t("common.save")}</Button>
                       <Button variant="outline" size="sm" className="h-8"
-                        onClick={() => { setTsRecording(false); setTsTempShortcut(""); setTsShortcutError(""); }}>取消</Button>
+                        onClick={() => { setTsRecording(false); setTsTempShortcut(""); setTsShortcutError(""); }}>{t("common.cancel")}</Button>
                     </div>
                   ) : (
                     <div className="flex gap-1">
                       <Button variant="outline" size="sm" className="h-8"
-                        onClick={() => { setTsRecording(true); setTsTempShortcut(""); setTsShortcutError(""); }}>修改</Button>
+                        onClick={() => { setTsRecording(true); setTsTempShortcut(""); setTsShortcutError(""); }}>{t("common.modify")}</Button>
                       {translateSelectionShortcut && (
                         <Button variant="ghost" size="sm" className="h-8 text-muted-foreground"
-                          onClick={clearTsShortcut} disabled={tsSaving}>清除</Button>
+                          onClick={clearTsShortcut} disabled={tsSaving}>{t("common.clear")}</Button>
                       )}
                     </div>
                   )}

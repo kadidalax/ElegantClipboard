@@ -48,6 +48,38 @@ pub(crate) fn semantic_hash_from_text(text: &str) -> Option<String> {
     Some(hash_with_prefix(b"text:", normalized.as_bytes()))
 }
 
+fn starts_with_ignore_ascii_case(text: &str, prefix: &str) -> bool {
+    text.len() >= prefix.len() && text[..prefix.len()].eq_ignore_ascii_case(prefix)
+}
+
+/// 判断纯文本是否为单行 URL（用于归类到「其它」）
+pub(crate) fn is_url(text: &str) -> bool {
+    let trimmed = text.trim();
+    if trimmed.is_empty() || trimmed.lines().count() != 1 {
+        return false;
+    }
+    if trimmed.chars().any(char::is_whitespace) {
+        return false;
+    }
+
+    let has_domain = |host: &str| !host.is_empty() && host.contains('.');
+
+    if starts_with_ignore_ascii_case(trimmed, "http://") {
+        return has_domain(&trimmed[7..]);
+    }
+    if starts_with_ignore_ascii_case(trimmed, "https://") {
+        return has_domain(&trimmed[8..]);
+    }
+    if starts_with_ignore_ascii_case(trimmed, "ftp://") {
+        return has_domain(&trimmed[6..]);
+    }
+    if starts_with_ignore_ascii_case(trimmed, "www.") {
+        return trimmed.len() > 4 && has_domain(&trimmed[4..]);
+    }
+
+    false
+}
+
 pub(crate) fn compute_semantic_hash(
     content_type: &str,
     text_content: Option<&str>,
@@ -67,7 +99,7 @@ pub(crate) fn compute_semantic_hash(
 
 #[cfg(test)]
 mod tests {
-    use super::{compute_semantic_hash, normalize_semantic_text, semantic_hash_from_text};
+    use super::{compute_semantic_hash, is_url, normalize_semantic_text, semantic_hash_from_text};
 
     #[test]
     fn normalize_text_removes_invisible_chars_and_trailing_whitespace() {
@@ -142,5 +174,26 @@ mod tests {
     fn compute_semantic_hash_text_without_content_uses_fallback() {
         let hash = compute_semantic_hash("text", None, "fallback_hash");
         assert_eq!(hash, "fallback_hash");
+    }
+
+    #[test]
+    fn is_url_accepts_http_and_https() {
+        assert!(is_url("https://example.com/path?q=1"));
+        assert!(is_url("http://example.com"));
+        assert!(is_url("  https://a.co  "));
+    }
+
+    #[test]
+    fn is_url_accepts_www_prefix() {
+        assert!(is_url("www.example.com/page"));
+    }
+
+    #[test]
+    fn is_url_rejects_multiline_and_plain_text() {
+        assert!(!is_url("hello world"));
+        assert!(!is_url("https://a.com\nline2"));
+        assert!(!is_url("visit https://example.com"));
+        assert!(!is_url("http://"));
+        assert!(!is_url("www."));
     }
 }

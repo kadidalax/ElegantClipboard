@@ -1,57 +1,68 @@
 import { describe, it, expect } from "vitest";
-import { TOOLBAR_BUTTON_REGISTRY, GROUPS } from "./constants";
+import { t } from "@/i18n";
+import { getGroups, getToolbarButtonRegistry, GROUP_VALUES } from "./constants";
 
 describe("TOOLBAR_BUTTON_REGISTRY", () => {
   it("has clear button", () => {
-    expect(TOOLBAR_BUTTON_REGISTRY.clear).toBeDefined();
-    expect(TOOLBAR_BUTTON_REGISTRY.clear.label).toBe("清空历史");
+    const registry = getToolbarButtonRegistry();
+    expect(registry.clear).toBeDefined();
+    expect(registry.clear.label).toBe(t("toolbar.clearHistory"));
   });
 
   it("has pin button", () => {
-    expect(TOOLBAR_BUTTON_REGISTRY.pin).toBeDefined();
-    expect(TOOLBAR_BUTTON_REGISTRY.pin.label).toBe("锁定窗口");
+    const registry = getToolbarButtonRegistry();
+    expect(registry.pin).toBeDefined();
+    expect(registry.pin.label).toBe(t("toolbar.pinWindow"));
   });
 
   it("has batch button", () => {
-    expect(TOOLBAR_BUTTON_REGISTRY.batch).toBeDefined();
-    expect(TOOLBAR_BUTTON_REGISTRY.batch.label).toBe("批量选择");
+    const registry = getToolbarButtonRegistry();
+    expect(registry.batch).toBeDefined();
+    expect(registry.batch.label).toBe(t("toolbar.batchSelect"));
   });
 
   it("has settings button", () => {
-    expect(TOOLBAR_BUTTON_REGISTRY.settings).toBeDefined();
-    expect(TOOLBAR_BUTTON_REGISTRY.settings.label).toBe("设置");
+    const registry = getToolbarButtonRegistry();
+    expect(registry.settings).toBeDefined();
+    expect(registry.settings.label).toBe(t("toolbar.settings"));
   });
 
   it("all buttons have descriptions", () => {
-    for (const [key, value] of Object.entries(TOOLBAR_BUTTON_REGISTRY)) {
+    for (const [key, value] of Object.entries(getToolbarButtonRegistry())) {
       expect(value.description).toBeTruthy();
       expect(value.label).toBeTruthy();
+      void key;
     }
   });
 });
 
 describe("GROUPS", () => {
   it("has 4 groups", () => {
-    expect(GROUPS).toHaveLength(4);
+    expect(GROUP_VALUES).toHaveLength(4);
   });
 
   it("first group is all", () => {
-    expect(GROUPS[0].label).toBe("全部");
-    expect(GROUPS[0].value).toBeNull();
+    const groups = getGroups();
+    expect(groups[0].label).toBe(t("groups.all"));
+    expect(groups[0].value).toBeNull();
   });
 
   it("second group is favorites", () => {
-    expect(GROUPS[1].label).toBe("收藏");
-    expect(GROUPS[1].value).toBe("__favorites__");
+    const groups = getGroups();
+    expect(groups[1].label).toBe(t("groups.favorites"));
+    expect(groups[1].value).toBe("__favorites__");
   });
 
   it("third group is text", () => {
-    expect(GROUPS[2].label).toBe("文本");
-    expect(GROUPS[2].value).toContain("text");
+    const groups = getGroups();
+    expect(groups[2].label).toBe(t("groups.text"));
+    expect(groups[2].value).toContain("text");
   });
 
   it("fourth group is other", () => {
-    expect(GROUPS[3].label).toBe("其它");
-    expect(GROUPS[3].value).toContain("image");
+    const groups = getGroups();
+    expect(groups[3].label).toBe(t("groups.other"));
+    expect(groups[3].value).toContain("image");
+    expect(groups[3].value).toContain("url");
   });
 });

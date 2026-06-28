@@ -254,6 +254,7 @@ pub fn build_type_filter(options: &SyncOptions) -> Vec<&'static str> {
         types.push("'text'");
         types.push("'html'");
         types.push("'rtf'");
+        types.push("'url'");
     }
     if options.sync_image {
         types.push("'image'");
@@ -1429,6 +1430,7 @@ mod tests {
         assert!(types.contains(&"'rtf'"));
         assert!(types.contains(&"'image'"));
         assert!(types.contains(&"'files'"));
+        assert!(types.contains(&"'url'"));
     }
 
     #[test]
@@ -1440,8 +1442,9 @@ mod tests {
             ..default_options()
         };
         let types = build_type_filter(&opts);
-        assert_eq!(types.len(), 3);
+        assert_eq!(types.len(), 4);
         assert!(types.contains(&"'text'"));
+        assert!(types.contains(&"'url'"));
         assert!(!types.contains(&"'image'"));
     }
 

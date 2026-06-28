@@ -33,6 +33,7 @@ import { UpdateDialog } from "@/components/settings/UpdateDialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { WindowTitleBar } from "@/components/WindowTitleBar";
+import { useTranslation } from "@/i18n";
 import { logError } from "@/lib/logger";
 import { initTheme } from "@/lib/theme-applier";
 import { cn } from "@/lib/utils";
@@ -50,21 +51,21 @@ type TabType = "general" | "display" | "theme" | "data" | "appfilter" | "audio" 
 
 type NavItem = {
   id: TabType;
-  label: string;
+  labelKey: string;
   icon: React.ComponentType<{ className?: string }>;
   child?: boolean;
 };
 
 const BASE_NAV_ITEMS: NavItem[] = [
-  { id: "general", label: "常规设置", icon: Options16Regular },
-  { id: "display", label: "显示设置", icon: LayoutColumnTwo16Regular },
-  { id: "theme", label: "外观主题", icon: Color16Regular },
-  { id: "data", label: "数据管理", icon: Database16Regular },
-  { id: "appfilter", label: "监听过滤", icon: Filter16Regular },
-  { id: "audio", label: "音效设置", icon: Speaker216Regular },
-  { id: "shortcuts", label: "快捷按键", icon: Keyboard16Regular },
-  { id: "plugins", label: "插件扩展", icon: PlugConnected16Regular },
-  { id: "about", label: "关于软件", icon: Info16Regular },
+  { id: "general", labelKey: "settings.nav.general", icon: Options16Regular },
+  { id: "display", labelKey: "settings.nav.display", icon: LayoutColumnTwo16Regular },
+  { id: "theme", labelKey: "settings.nav.theme", icon: Color16Regular },
+  { id: "data", labelKey: "settings.nav.data", icon: Database16Regular },
+  { id: "appfilter", labelKey: "settings.nav.appFilter", icon: Filter16Regular },
+  { id: "audio", labelKey: "settings.nav.audio", icon: Speaker216Regular },
+  { id: "shortcuts", labelKey: "settings.nav.shortcuts", icon: Keyboard16Regular },
+  { id: "plugins", labelKey: "settings.nav.plugins", icon: PlugConnected16Regular },
+  { id: "about", labelKey: "settings.nav.about", icon: Info16Regular },
 ];
 type NavIndicator = {
   visible: boolean;
@@ -75,6 +76,7 @@ type NavIndicator = {
 };
 
 export function Settings() {
+  const { t, locale } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabType>("general");
   const [pluginsEnabled, setPluginsEnabled] = useState<Record<string, boolean>>({ webdav: false, translate: false });
   const navRef = useRef<HTMLElement>(null);
@@ -113,15 +115,15 @@ export function Settings() {
         ...BASE_NAV_ITEMS.filter((item) => item.id !== "plugins" && item.id !== "about"),
         findNav("plugins"),
         ...(pluginsEnabled.webdav
-          ? [{ id: "webdav" as TabType, label: "WebDAV 同步", icon: ArrowSync16Regular, child: true }]
+          ? [{ id: "webdav" as TabType, labelKey: "settings.nav.webdav", icon: ArrowSync16Regular, child: true }]
           : []),
         ...(pluginsEnabled.translate
-          ? [{ id: "translate" as TabType, label: "文本翻译", icon: Translate16Regular, child: true }]
+          ? [{ id: "translate" as TabType, labelKey: "settings.nav.translate", icon: Translate16Regular, child: true }]
           : []),
         findNav("about"),
       ];
     },
-    [pluginsEnabled.webdav, pluginsEnabled.translate],
+    [pluginsEnabled.webdav, pluginsEnabled.translate, locale, t],
   );
 
   const activeTabRef = useRef(activeTab);
@@ -349,7 +351,7 @@ export function Settings() {
       }
     } catch (error) {
       logError("Failed to save settings:", error);
-      alert(`设置保存失败: ${error}`);
+      alert(t("common.settingsSaveFailed", { error: String(error) }));
     }
   };
 
@@ -362,7 +364,7 @@ export function Settings() {
     >
       <WindowTitleBar
         icon={<Settings16Regular className="w-5 h-5 text-muted-foreground" />}
-        title="设置"
+        title={t("settings.title")}
       />
 
       {/* Main Content */}
@@ -414,14 +416,14 @@ export function Settings() {
                           isActive && "scale-110",
                         )}
                       />
-                      <span className="truncate">{item.label}</span>
+                      <span className="truncate">{t(item.labelKey)}</span>
                     </button>
                   );
                 })}
               </nav>
               <div className="shrink-0 pt-2 mt-2 border-t px-2 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-muted-foreground">版本号</span>
+                  <span className="text-[11px] text-muted-foreground">{t("settings.version")}</span>
                   <button
                     type="button"
                     onClick={() => setUpdateDialogOpen(true)}
@@ -431,7 +433,7 @@ export function Settings() {
                   </button>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-muted-foreground">编译时间</span>
+                  <span className="text-[11px] text-muted-foreground">{t("settings.buildTime")}</span>
                   <span className="text-[11px] text-foreground">{buildTime}</span>
                 </div>
               </div>

@@ -6,6 +6,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { WindowTitleBar } from "@/components/WindowTitleBar";
+import { useTranslation } from "@/i18n";
 import { logError } from "@/lib/logger";
 import { initTheme } from "@/lib/theme-applier";
 import { translateText } from "@/lib/translate";
@@ -13,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { useTranslateSettings } from "@/stores/translate-settings";
 
 export function TranslateResult() {
+  const { t } = useTranslation();
   const [text, setText] = useState("");
   const [themeReady, setThemeReady] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -112,23 +114,23 @@ export function TranslateResult() {
     <div className={cn("h-screen flex flex-col bg-muted/40 overflow-hidden p-3 gap-3", !themeReady && "**:transition-none!")}>
       <WindowTitleBar
         icon={<Translate16Regular className="w-5 h-5 text-muted-foreground" />}
-        title="翻译选中文字"
+        title={t("translateResult.title")}
       />
 
       {/* 原文 */}
       <Card className="flex-1 overflow-hidden flex flex-col min-h-0">
         <div className="flex items-center justify-between px-4 pt-3 pb-1">
-          <span className="text-xs font-medium text-muted-foreground">原文</span>
+          <span className="text-xs font-medium text-muted-foreground">{t("translateResult.original")}</span>
           <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={handleCopy}>
             <Copy16Regular className="w-3 h-3 mr-1" />
-            {copied ? "已复制" : "复制"}
+            {copied ? t("translateResult.copied") : t("translateResult.copy")}
           </Button>
         </div>
         <textarea
           value={text}
           readOnly
           className="flex-1 w-full resize-none border-0 bg-transparent px-4 pb-3 text-sm leading-relaxed font-mono focus:outline-none placeholder:text-muted-foreground"
-          placeholder="等待选中文字..."
+          placeholder={t("translateResult.waitingText")}
           spellCheck={false}
         />
       </Card>
@@ -137,17 +139,17 @@ export function TranslateResult() {
       <Card className="flex-1 overflow-hidden flex flex-col min-h-0">
         <div className="flex items-center justify-between px-4 pt-3 pb-1">
           <span className="text-xs font-medium text-muted-foreground">
-            {translating ? "翻译中..." : "翻译结果"}
+            {translating ? t("translateResult.translating") : t("translateResult.result")}
           </span>
           {translatedText && (
             <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={handleCopyTranslation}>
               <Copy16Regular className="w-3 h-3 mr-1" />
-              {translatedCopied ? "已复制" : "复制"}
+              {translatedCopied ? t("translateResult.copied") : t("translateResult.copy")}
             </Button>
           )}
         </div>
         <div className="flex-1 overflow-auto px-4 pb-3">
-          {translating && <p className="text-sm text-muted-foreground">正在翻译...</p>}
+          {translating && <p className="text-sm text-muted-foreground">{t("translateResult.translatingProgress")}</p>}
           {translatedText && <p className="text-sm leading-relaxed whitespace-pre-wrap cursor-text select-text">{translatedText}</p>}
           {translateError && <p className="text-sm text-destructive">{translateError}</p>}
         </div>
@@ -156,12 +158,12 @@ export function TranslateResult() {
       {/* 底部操作栏 */}
       <Card className="shrink-0">
         <div className="h-11 flex items-center justify-between px-4">
-          <span className="text-xs text-muted-foreground">{text.length} 字符</span>
+          <span className="text-xs text-muted-foreground">{t("translateResult.charCount", { count: text.length })}</span>
           <Button variant="outline" size="sm"
             onClick={() => doTranslate(text)}
             disabled={translating || !text.trim()}>
             <Translate16Regular className="w-4 h-4 mr-1" />
-            {translating ? "翻译中..." : "重新翻译"}
+            {translating ? t("translateResult.translating") : t("translateResult.retranslate")}
           </Button>
         </div>
       </Card>

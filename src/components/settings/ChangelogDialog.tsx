@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useTranslation } from "@/i18n";
 
 interface VersionReleaseNotes {
   version: string;
@@ -33,6 +34,7 @@ export function ChangelogDialog({
   onOpenChange,
   version,
 }: ChangelogDialogProps) {
+  const { t, locale } = useTranslation();
   const [status, setStatus] = useState<ChangelogStatus>("loading");
   const [notes, setNotes] = useState<VersionReleaseNotes | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
@@ -63,10 +65,12 @@ export function ChangelogDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[min(96vw,1100px)] max-w-[1100px] max-h-[90vh] overflow-hidden">
         <DialogHeader>
-          <DialogTitle>v{version} 更新日志</DialogTitle>
+          <DialogTitle>{t("settings.changelog.title", { version })}</DialogTitle>
           {notes?.published_at && (
             <DialogDescription>
-              发布于 {new Date(notes.published_at).toLocaleDateString("zh-CN")}
+              {t("settings.changelog.publishedAt", {
+                date: new Date(notes.published_at).toLocaleDateString(locale),
+              })}
             </DialogDescription>
           )}
         </DialogHeader>
@@ -74,7 +78,7 @@ export function ChangelogDialog({
         {status === "loading" && (
           <div className="flex items-center justify-center gap-2 py-8">
             <ArrowSync16Regular className="w-5 h-5 text-primary animate-spin" />
-            <span className="text-sm text-muted-foreground">正在加载...</span>
+            <span className="text-sm text-muted-foreground">{t("settings.changelog.loading")}</span>
           </div>
         )}
 
@@ -84,7 +88,7 @@ export function ChangelogDialog({
               <SimpleMarkdown content={notes.release_notes} />
             ) : (
               <p className="text-sm text-muted-foreground py-4 text-center">
-                该版本暂无更新说明
+                {t("settings.changelog.noNotes")}
               </p>
             )}
           </div>
@@ -97,7 +101,7 @@ export function ChangelogDialog({
               {errorMsg}
             </span>
             <Button variant="outline" size="sm" onClick={loadNotes}>
-              重试
+              {t("common.retry")}
             </Button>
           </div>
         )}

@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { Toaster } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { initLocale } from "@/i18n";
 import { initUISettingsStore } from "@/stores/ui-settings";
 import App from "./App";
 import { Settings } from "./pages/Settings";
@@ -48,7 +49,12 @@ function Router() {
 }
 
 async function bootstrap() {
-  await initUISettingsStore();
+  try {
+    await initLocale();
+    await initUISettingsStore();
+  } catch (error) {
+    console.error("Bootstrap init failed:", error);
+  }
 
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>

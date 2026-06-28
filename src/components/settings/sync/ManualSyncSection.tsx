@@ -6,6 +6,7 @@ import {
 } from "@fluentui/react-icons";
 import { Button } from "@/components/ui/button";
 import type { SyncStatusType } from "@/hooks/useWebDAVActions";
+import { useTranslation } from "@/i18n";
 
 type ManualSyncSectionProps = {
   syncing: boolean;
@@ -28,11 +29,13 @@ export function ManualSyncSection({
   onUpload,
   onDownload,
 }: ManualSyncSectionProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="rounded-lg border bg-card p-4">
-      <h3 className="text-sm font-medium mb-3">手动同步</h3>
+      <h3 className="text-sm font-medium mb-3">{t("settings.sync.manualTitle")}</h3>
       <p className="text-xs text-muted-foreground mb-4">
-        立即执行同步操作（覆盖远端文件，避免数据膨胀）
+        {t("settings.sync.manualDesc")}
       </p>
       <div className="space-y-3">
         <div className="flex items-center gap-2">
@@ -47,7 +50,7 @@ export function ManualSyncSection({
             ) : (
               <ArrowUp16Regular className="w-3.5 h-3.5 mr-1" />
             )}
-            上传至云端
+            {t("settings.sync.upload")}
           </Button>
           <Button
             size="sm"
@@ -60,13 +63,13 @@ export function ManualSyncSection({
             ) : (
               <ArrowDown16Regular className="w-3.5 h-3.5 mr-1" />
             )}
-            下载至本地
+            {t("settings.sync.download")}
           </Button>
         </div>
 
         {lastSyncTime && (
           <p className="text-xs text-muted-foreground">
-            上次同步：{lastSyncTime}
+            {t("settings.sync.lastSync", { time: lastSyncTime })}
           </p>
         )}
 

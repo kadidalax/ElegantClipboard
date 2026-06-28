@@ -10,6 +10,7 @@ import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
 import { HighlightText } from "@/components/HighlightText";
+import { useTranslation } from "@/i18n";
 import { getFileNameFromPath, isImageFile } from "@/lib/format";
 import { createLeaseManager } from "@/lib/lease-manager";
 import { logError } from "@/lib/logger";
@@ -573,6 +574,7 @@ export const ImageCard = memo(function ImageCard({
   sourceAppName,
   sourceAppIcon,
 }: ImageCardProps) {
+  const { t } = useTranslation();
   const [error, setError] = useState(false);
 
   // 虚拟列表复用组件时，image_path 变化需重置错误状态
@@ -584,7 +586,7 @@ export const ImageCard = memo(function ImageCard({
         <div className="relative w-full h-32 rounded-sm overflow-hidden bg-muted/30 flex items-center justify-center">
           <div className="text-center">
             <Warning16Regular className="w-6 h-6 text-muted-foreground/40 mx-auto mb-1" />
-            <p className="text-xs text-muted-foreground/60">图片加载失败</p>
+            <p className="text-xs text-muted-foreground/60">{t("cardContent.imageLoadFailed")}</p>
           </div>
         </div>
       ) : (
@@ -713,6 +715,7 @@ export const FileContent = memo(function FileContent({
   sourceAppName,
   sourceAppIcon,
 }: FileContentProps) {
+  const { t } = useTranslation();
   const isMultiple = filePaths.length > 1;
   const isSingleImage =
     !isMultiple &&
@@ -762,9 +765,9 @@ export const FileContent = memo(function FileContent({
                   filesInvalid ? "text-red-500" : "text-foreground",
                 )}
               >
-                {filePaths.length} 个文件
+                {t("cardContent.fileCount", { count: filePaths.length })}
                 {filesInvalid && (
-                  <span className="ml-1.5 text-xs font-normal">(已失效)</span>
+                  <span className="ml-1.5 text-xs font-normal">{t("cardContent.invalid")}</span>
                 )}
               </p>
               <p
@@ -795,7 +798,7 @@ export const FileContent = memo(function FileContent({
                   text={getFileNameFromPath(filePaths[0] || preview || "")}
                 />
                 {filesInvalid && (
-                  <span className="ml-1.5 text-xs font-normal">(已失效)</span>
+                  <span className="ml-1.5 text-xs font-normal">{t("cardContent.invalid")}</span>
                 )}
               </p>
               <p
