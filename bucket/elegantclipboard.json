@@ -6,11 +6,11 @@
   "architecture": {
     "64bit": {
       "url": "https://github.com/Y-ASLant/ElegantClipboard/releases/download/v1.0.0/ElegantClipboard_1.0.0_x64-setup.exe#/dl.7z",
-      "hash": "0019dfc4b32d63c1392aa264aed2253c1e0c2fb09216f8e2cc269bbfb8bb49b5"
+      "hash": "89a4b26a47d431b17f5cd0ed507e285a4bb99907bde5c14e9d6b4ab5fa875244"
     },
     "arm64": {
       "url": "https://github.com/Y-ASLant/ElegantClipboard/releases/download/v1.0.0/ElegantClipboard_1.0.0_arm64-setup.exe#/dl.7z",
-      "hash": "0019dfc4b32d63c1392aa264aed2253c1e0c2fb09216f8e2cc269bbfb8bb49b5"
+      "hash": "5e29556f1ca9e592b71c8d36dd5cd795cf4ff6ff7f156c1f1ed88198f2eca1a6"
     }
   },
   "pre_install": "Remove-Item \"$dir\\`$*\", \"$dir\\uninst*\" -Force -Recurse",
