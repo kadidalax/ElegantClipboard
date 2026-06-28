@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useTranslation } from "@/i18n";
 import { formatSize } from "@/lib/format";
 import { logError } from "@/lib/logger";
 
@@ -53,7 +54,7 @@ interface ReleaseNotesSection {
   content: string;
 }
 
-function splitReleaseNotesByVersion(content: string): ReleaseNotesSection[] {
+function splitReleaseNotesByVersion(content: string, defaultVersionLabel: string): ReleaseNotesSection[] {
   const normalized = content.replace(/\r\n/g, "\n");
   const lines = normalized.split("\n");
   const sections: ReleaseNotesSection[] = [];
@@ -63,7 +64,7 @@ function splitReleaseNotesByVersion(content: string): ReleaseNotesSection[] {
   const pushSection = () => {
     const body = buffer.join("\n").trim();
     if (!currentVersion && !body) return;
-    const version = currentVersion || "更新内容";
+    const version = currentVersion || defaultVersionLabel;
     sections.push({
       id: `${version}-${sections.length}`,
       version,
@@ -95,6 +96,7 @@ interface UpdateDialogProps {
 }
 
 export function UpdateDialog({ open, onOpenChange }: UpdateDialogProps) {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<UpdateStatus>("checking");
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [progress, setProgress] = useState<DownloadProgress>({
@@ -106,8 +108,8 @@ export function UpdateDialog({ open, onOpenChange }: UpdateDialogProps) {
   const [expandedSectionId, setExpandedSectionId] = useState("");
 
   const releaseSections = useMemo(
-    () => splitReleaseNotesByVersion(updateInfo?.release_notes ?? ""),
-    [updateInfo?.release_notes],
+    () => splitReleaseNotesByVersion(updateInfo?.release_notes ?? "", t("settings.update.updateContent")),
+    [updateInfo?.release_notes, t],
   );
   const outdatedVersionCount = releaseSections.length;
 
@@ -222,7 +224,7 @@ export function UpdateDialog({ open, onOpenChange }: UpdateDialogProps) {
         showCloseButton={status !== "downloading" && status !== "installing"}
       >
         <DialogHeader>
-          <DialogTitle>检查更新</DialogTitle>
+          <DialogTitle>{t("settings.update.title")}</DialogTitle>
           {status === "update-available" && updateInfo && (
             <DialogDescription className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
               <span>
@@ -230,7 +232,7 @@ export function UpdateDialog({ open, onOpenChange }: UpdateDialogProps) {
               </span>
               {outdatedVersionCount > 0 && (
                 <span className="text-amber-600 dark:text-amber-400">
-                  已落后 {outdatedVersionCount} 个版本
+                  {t("settings.update.outdated", { count: outdatedVersionCount })}
                 </span>
               )}
             </DialogDescription>
@@ -242,7 +244,7 @@ export function UpdateDialog({ open, onOpenChange }: UpdateDialogProps) {
           <div className="flex items-center justify-center gap-2 py-8">
             <ArrowSync16Regular className="w-5 h-5 text-primary animate-spin" />
             <span className="text-sm text-muted-foreground">
-              正在检查更新...
+              {t("settings.update.checking")}
             </span>
           </div>
         )}
@@ -251,7 +253,7 @@ export function UpdateDialog({ open, onOpenChange }: UpdateDialogProps) {
         {status === "no-update" && (
           <div className="flex flex-col items-center gap-2 py-8">
             <CheckmarkCircle16Regular className="w-8 h-8 text-primary" />
-            <span className="text-sm font-medium">已是最新版本</span>
+            <span className="text-sm font-medium">{t("settings.update.upToDate")}</span>
             <span className="text-xs text-muted-foreground">
               v{updateInfo?.current_version}
             </span>
@@ -290,7 +292,7 @@ export function UpdateDialog({ open, onOpenChange }: UpdateDialogProps) {
                         </button>
                         {expanded && (
                           <div className="border-t px-3 py-2.5">
-                            <SimpleMarkdown content={section.content || "暂无更新说明"} />
+                            <SimpleMarkdown content={section.content || t("settings.update.noNotes")} />
                           </div>
                         )}
                       </section>
@@ -305,7 +307,7 @@ export function UpdateDialog({ open, onOpenChange }: UpdateDialogProps) {
               </span>
               <Button size="sm" onClick={startDownload}>
                 <ArrowDownload16Regular className="w-4 h-4" />
-                下载更新
+                {t("settings.update.download")}
               </Button>
             </div>
           </>
@@ -329,7 +331,7 @@ export function UpdateDialog({ open, onOpenChange }: UpdateDialogProps) {
             </div>
             <div className="flex justify-center pt-1">
               <Button variant="outline" size="sm" onClick={cancelDownload}>
-                取消更新
+                {t("settings.update.cancelDownload")}
               </Button>
             </div>
           </div>
@@ -339,8 +341,8 @@ export function UpdateDialog({ open, onOpenChange }: UpdateDialogProps) {
         {status === "downloaded" && (
           <div className="flex flex-col items-center gap-3 py-4">
             <CheckmarkCircle16Regular className="w-8 h-8 text-primary" />
-            <span className="text-sm font-medium">下载完成</span>
-            <Button onClick={installUpdate}>安装并重启</Button>
+            <span className="text-sm font-medium">{t("settings.update.downloadComplete")}</span>
+            <Button onClick={installUpdate}>{t("settings.update.installRestart")}</Button>
           </div>
         )}
 
@@ -349,7 +351,7 @@ export function UpdateDialog({ open, onOpenChange }: UpdateDialogProps) {
           <div className="flex items-center justify-center gap-2 py-8">
             <ArrowSync16Regular className="w-5 h-5 text-primary animate-spin" />
             <span className="text-sm text-muted-foreground">
-              正在启动安装程序...
+              {t("settings.update.installing")}
             </span>
           </div>
         )}
@@ -366,7 +368,7 @@ export function UpdateDialog({ open, onOpenChange }: UpdateDialogProps) {
               size="sm"
               onClick={updateInfo ? startDownload : checkUpdate}
             >
-              重试
+              {t("common.retry")}
             </Button>
           </div>
         )}
@@ -409,7 +411,7 @@ function isImageUrl(url: string): boolean {
   return USER_ATTACHMENTS_RE.test(url) || IMAGE_EXT_RE.test(url);
 }
 
-function formatLinkLabel(url: string, explicitLabel?: string): string {
+function formatLinkLabel(url: string, explicitLabel?: string, attachmentLabel = "attachment"): string {
   const issue = parseIssueOrPr(url);
   if (issue) {
     const owner = issue.owner.toLowerCase();
@@ -425,7 +427,7 @@ function formatLinkLabel(url: string, explicitLabel?: string): string {
   try {
     const u = new URL(url);
     if (u.hostname === "github.com" && isImageUrl(url)) {
-      return "附件图片";
+      return attachmentLabel;
     }
     const compactPath = u.pathname.replace(/\/+$/, "");
     if (!compactPath) return u.hostname;
@@ -457,7 +459,7 @@ function renderLink(url: string, label: string, key: string): ReactNode {
   );
 }
 
-function parseInlineNoBold(text: string, keyPrefix: string): ReactNode[] {
+function parseInlineNoBold(text: string, keyPrefix: string, attachmentLabel: string): ReactNode[] {
   const nodes: ReactNode[] = [];
   let lastIndex = 0;
   let idx = 0;
@@ -476,11 +478,11 @@ function parseInlineNoBold(text: string, keyPrefix: string): ReactNode[] {
       const explicit = match[1].trim();
       const url = match[2];
       const prefersCompactLabel = explicit === url || /^https?:\/\//i.test(explicit);
-      const label = prefersCompactLabel ? formatLinkLabel(url) : formatLinkLabel(url, explicit);
+      const label = prefersCompactLabel ? formatLinkLabel(url, undefined, attachmentLabel) : formatLinkLabel(url, explicit, attachmentLabel);
       nodes.push(renderLink(url, label, `${keyPrefix}-lnk-${idx++}`));
     } else if (match[3]) {
       const url = match[3];
-      nodes.push(renderLink(url, formatLinkLabel(url), `${keyPrefix}-url-${idx++}`));
+      nodes.push(renderLink(url, formatLinkLabel(url, undefined, attachmentLabel), `${keyPrefix}-url-${idx++}`));
     } else if (match[4]) {
       const user = match[4];
       const url = `https://github.com/${user}`;
@@ -497,7 +499,7 @@ function parseInlineNoBold(text: string, keyPrefix: string): ReactNode[] {
   return nodes;
 }
 
-function parseInline(text: string, keyPrefix: string): ReactNode[] {
+function parseInline(text: string, keyPrefix: string, attachmentLabel: string): ReactNode[] {
   const nodes: ReactNode[] = [];
   let lastIndex = 0;
   let idx = 0;
@@ -507,12 +509,12 @@ function parseInline(text: string, keyPrefix: string): ReactNode[] {
   while ((match = BOLD_RE.exec(text)) !== null) {
     const start = match.index;
     if (start > lastIndex) {
-      nodes.push(...parseInlineNoBold(text.slice(lastIndex, start), `${keyPrefix}-p-${idx++}`));
+      nodes.push(...parseInlineNoBold(text.slice(lastIndex, start), `${keyPrefix}-p-${idx++}`, attachmentLabel));
     }
 
     nodes.push(
       <strong key={`${keyPrefix}-b-${idx++}`}>
-        {parseInlineNoBold(match[1], `${keyPrefix}-btxt-${idx++}`)}
+        {parseInlineNoBold(match[1], `${keyPrefix}-btxt-${idx++}`, attachmentLabel)}
       </strong>,
     );
 
@@ -520,7 +522,7 @@ function parseInline(text: string, keyPrefix: string): ReactNode[] {
   }
 
   if (lastIndex < text.length) {
-    nodes.push(...parseInlineNoBold(text.slice(lastIndex), `${keyPrefix}-tail-${idx++}`));
+    nodes.push(...parseInlineNoBold(text.slice(lastIndex), `${keyPrefix}-tail-${idx++}`, attachmentLabel));
   }
 
   return nodes;
@@ -587,6 +589,8 @@ function parseCommitPrefix(text: string): {
 }
 
 export function SimpleMarkdown({ content }: { content: string }) {
+  const { t } = useTranslation();
+  const attachmentLabel = t("settings.update.attachmentImage");
   if (!content) return null;
 
   const lines = content.split(/\r?\n/);
@@ -630,7 +634,7 @@ export function SimpleMarkdown({ content }: { content: string }) {
       flushList();
       nodes.push(
         <h3 key={`h2-${lineIndex}`} className="font-semibold text-sm mt-2 text-foreground">
-          {parseInline(line.replace(/^##\s+/, ""), `h2-${lineIndex}`)}
+          {parseInline(line.replace(/^##\s+/, ""), `h2-${lineIndex}`, attachmentLabel)}
         </h3>,
       );
       return;
@@ -640,7 +644,7 @@ export function SimpleMarkdown({ content }: { content: string }) {
       flushList();
       nodes.push(
         <h4 key={`h3-${lineIndex}`} className="font-medium text-xs mt-1 text-foreground">
-          {parseInline(line.replace(/^###\s+/, ""), `h3-${lineIndex}`)}
+          {parseInline(line.replace(/^###\s+/, ""), `h3-${lineIndex}`, attachmentLabel)}
         </h4>,
       );
       return;
@@ -659,11 +663,11 @@ export function SimpleMarkdown({ content }: { content: string }) {
                 {commit.label}
               </span>
               <span className="min-w-0 break-words leading-5">
-                {parseInline(commit.detail, `li-${lineIndex}`)}
+                {parseInline(commit.detail, `li-${lineIndex}`, attachmentLabel)}
               </span>
             </div>
           ) : (
-            parseInline(bullet[1], `li-${lineIndex}`)
+            parseInline(bullet[1], `li-${lineIndex}`, attachmentLabel)
           )}
         </li>,
       );
@@ -679,7 +683,7 @@ export function SimpleMarkdown({ content }: { content: string }) {
 
     nodes.push(
       <p key={`p-${lineIndex}`} className="text-xs text-muted-foreground leading-relaxed break-words">
-        {parseInline(line, `p-${lineIndex}`)}
+        {parseInline(line, `p-${lineIndex}`, attachmentLabel)}
       </p>,
     );
   });

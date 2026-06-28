@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import type { ProxyMode } from "@/hooks/useWebDAVSettings";
+import { useTranslation } from "@/i18n";
 
 type ConnectionSectionProps = {
   enabled: boolean;
@@ -53,20 +54,21 @@ export function ConnectionSection({
   testing,
   onTestConnection,
 }: ConnectionSectionProps) {
+  const { t } = useTranslation();
   const [showPassword, setShowPassword] = useState(false);
 
   return (
     <div className="rounded-lg border bg-card p-4">
-      <h3 className="text-sm font-medium mb-3">WebDAV 同步</h3>
+      <h3 className="text-sm font-medium mb-3">{t("settings.sync.connectionTitle")}</h3>
       <p className="text-xs text-muted-foreground mb-4">
-        通过 WebDAV 在多台设备间同步剪贴板数据
+        {t("settings.sync.connectionDesc")}
       </p>
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
-            <Label className="text-xs">启用同步</Label>
+            <Label className="text-xs">{t("settings.sync.enable")}</Label>
             <p className="text-xs text-muted-foreground">
-              开启后将允许与 WebDAV 服务器同步数据
+              {t("settings.sync.enableDesc")}
             </p>
           </div>
           <Switch checked={enabled} onCheckedChange={setEnabled} />
@@ -76,7 +78,7 @@ export function ConnectionSection({
           <>
             <div className="space-y-2 pt-1">
               <div className="space-y-1.5">
-                <Label className="text-xs">WebDAV 地址</Label>
+                <Label className="text-xs">{t("settings.sync.url")}</Label>
                 <Input
                   className="h-8 text-xs"
                   placeholder="https://dav.example.com"
@@ -86,7 +88,7 @@ export function ConnectionSection({
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1.5">
-                  <Label className="text-xs">用户名</Label>
+                  <Label className="text-xs">{t("settings.sync.username")}</Label>
                   <Input
                     className="h-8 text-xs"
                     placeholder="username"
@@ -95,7 +97,7 @@ export function ConnectionSection({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">密码</Label>
+                  <Label className="text-xs">{t("settings.sync.password")}</Label>
                   <div className="relative">
                     <Input
                       className="h-8 text-xs pr-8"
@@ -115,7 +117,7 @@ export function ConnectionSection({
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">远端目录</Label>
+                <Label className="text-xs">{t("settings.sync.remoteDir")}</Label>
                 <Input
                   className="h-8 text-xs"
                   placeholder="/elegant-clipboard"
@@ -124,20 +126,20 @@ export function ConnectionSection({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">网络代理</Label>
+                <Label className="text-xs">{t("settings.sync.proxy")}</Label>
                 <div className="flex items-center gap-2">
                   <Select value={proxyMode} onValueChange={(value) => setProxyMode(value as ProxyMode)}>
                     <SelectTrigger className="w-[130px] h-8 text-xs shrink-0"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="system">系统代理</SelectItem>
-                      <SelectItem value="none">不使用代理</SelectItem>
-                      <SelectItem value="custom">自定义代理</SelectItem>
+                      <SelectItem value="system">{t("settings.sync.proxySystem")}</SelectItem>
+                      <SelectItem value="none">{t("settings.sync.proxyNone")}</SelectItem>
+                      <SelectItem value="custom">{t("settings.sync.proxyCustom")}</SelectItem>
                     </SelectContent>
                   </Select>
                   {proxyMode === "custom" && (
                     <Input
                       className="h-8 text-xs flex-1"
-                      placeholder="http://127.0.0.1:7890 或 socks5://127.0.0.1:1080"
+                      placeholder={t("settings.sync.proxyPlaceholder")}
                       value={proxyUrl}
                       onChange={(e) => setProxyUrl(e.target.value)}
                     />
@@ -146,9 +148,9 @@ export function ConnectionSection({
               </div>
               <div className="flex items-center justify-between rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
                 <div className="space-y-0.5 pr-4">
-                  <Label className="text-xs">接受无效证书</Label>
+                  <Label className="text-xs">{t("settings.sync.acceptInvalidCert")}</Label>
                   <p className="text-xs text-muted-foreground">
-                    仅在连接自签名或内网 WebDAV 服务时启用；开启后会跳过 TLS 证书校验。
+                    {t("settings.sync.acceptInvalidCertDesc")}
                   </p>
                 </div>
                 <Switch checked={acceptInvalidCerts} onCheckedChange={setAcceptInvalidCerts} />
@@ -168,7 +170,7 @@ export function ConnectionSection({
                 ) : (
                   <Checkmark16Regular className="w-3.5 h-3.5 mr-1" />
                 )}
-                测试连接
+                {t("settings.sync.testConnection")}
               </Button>
             </div>
           </>

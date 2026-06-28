@@ -1,6 +1,8 @@
 import type { Dispatch, SetStateAction } from "react";
+import { useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useTranslation } from "@/i18n";
 
 type SyncTypesSectionProps = {
   syncTypes: Set<string>;
@@ -14,7 +16,6 @@ type SyncTypesSectionProps = {
 };
 
 const SYNC_TYPES = ["text", "image", "files"] as const;
-const SYNC_TYPE_LABELS = { text: "文本", image: "图片", files: "文件" } as const;
 
 const COMMON_SIZE_OPTIONS = [
   ["1024", "1 MB"],
@@ -23,7 +24,7 @@ const COMMON_SIZE_OPTIONS = [
   ["10240", "10 MB"],
   ["20480", "20 MB"],
   ["51200", "50 MB"],
-  ["0", "不限"],
+  ["0", "noLimit"],
 ] as const;
 
 const LARGE_SIZE_OPTIONS = [
@@ -32,39 +33,42 @@ const LARGE_SIZE_OPTIONS = [
   COMMON_SIZE_OPTIONS[COMMON_SIZE_OPTIONS.length - 1],
 ] as const;
 
-function sizeMbLabel(sizeKb: string) {
-  const sizeMb = Math.round(parseInt(sizeKb || "0") / 1024);
-  return sizeMb > 0 ? `${sizeMb} MB` : "不限";
-}
-
 function SizeLimitRow({
   label,
-  description,
+  typeLabel,
   value,
   onChange,
   includeLargeOption = false,
+  noLimitLabel,
+  syncOnlyTemplate,
 }: {
   label: string;
-  description: string;
+  typeLabel: string;
   value: string;
   onChange: (value: string) => void;
   includeLargeOption?: boolean;
+  noLimitLabel: string;
+  syncOnlyTemplate: (size: string, type: string) => string;
 }) {
   const options = includeLargeOption ? LARGE_SIZE_OPTIONS : COMMON_SIZE_OPTIONS;
+  const sizeMb = Math.round(parseInt(value || "0") / 1024);
+  const sizeLabel = sizeMb > 0 ? `${sizeMb} MB` : noLimitLabel;
 
   return (
     <div className="flex items-center justify-between">
       <div className="space-y-0.5">
         <Label className="text-xs">{label}</Label>
         <p className="text-xs text-muted-foreground">
-          仅同步 {sizeMbLabel(value)} 以内的{description}
+          {syncOnlyTemplate(sizeLabel, typeLabel)}
         </p>
       </div>
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger className="w-[120px] h-8 text-xs"><SelectValue /></SelectTrigger>
         <SelectContent>
           {options.map(([optionValue, optionLabel]) => (
-            <SelectItem key={optionValue} value={optionValue}>{optionLabel}</SelectItem>
+            <SelectItem key={optionValue} value={optionValue}>
+              {optionLabel === "noLimit" ? noLimitLabel : optionLabel}
+            </SelectItem>
           ))}
         </SelectContent>
       </Select>
@@ -82,11 +86,23 @@ export function SyncTypesSection({
   maxVideoSizeKb,
   setMaxVideoSizeKb,
 }: SyncTypesSectionProps) {
+  const { t } = useTranslation();
+
+  const typeLabels = useMemo(() => ({
+    text: t("settings.sync.typeText"),
+    image: t("settings.sync.typeImage"),
+    files: t("settings.sync.typeFiles"),
+    video: t("settings.sync.typeVideo"),
+  }), [t]);
+
+  const syncOnly = (size: string, type: string) =>
+    t("settings.sync.syncOnly", { size, type });
+
   return (
     <div className="rounded-lg border bg-card p-4">
-      <h3 className="text-sm font-medium mb-3">同步内容类型</h3>
+      <h3 className="text-sm font-medium mb-3">{t("settings.sync.typesTitle")}</h3>
       <p className="text-xs text-muted-foreground mb-4">
-        选择要同步的剪贴板记录类型，软件设置始终同步
+        {t("settings.sync.typesDesc")}
       </p>
       <div className="space-y-3">
         <div className="flex flex-wrap gap-2">
@@ -114,35 +130,41 @@ export function SyncTypesSection({
                     : "bg-muted/40 text-muted-foreground border-transparent hover:bg-muted"
                 }`}
               >
-                {SYNC_TYPE_LABELS[type]}
+                {typeLabels[type]}
               </button>
             );
           })}
         </div>
         {syncTypes.has("image") && (
           <SizeLimitRow
-            label="图片大小限制"
-            description="图片"
+            label={t("settings.sync.imageSizeLimit")}
+            typeLabel={typeLabels.image}
             value={maxImageSizeKb}
             onChange={setMaxImageSizeKb}
+            noLimitLabel={t("settings.sync.noLimit")}
+            syncOnlyTemplate={syncOnly}
           />
         )}
         {syncTypes.has("files") && (
           <SizeLimitRow
-            label="文件大小限制"
-            description="文件"
+            label={t("settings.sync.fileSizeLimit")}
+            typeLabel={typeLabels.files}
             value={maxFileSizeKb}
             onChange={setMaxFileSizeKb}
             includeLargeOption
+            noLimitLabel={t("settings.sync.noLimit")}
+            syncOnlyTemplate={syncOnly}
           />
         )}
         {syncTypes.has("video") && (
           <SizeLimitRow
-            label="视频大小限制"
-            description="视频"
+            label={t("settings.sync.videoSizeLimit")}
+            typeLabel={typeLabels.video}
             value={maxVideoSizeKb}
             onChange={setMaxVideoSizeKb}
             includeLargeOption
+            noLimitLabel={t("settings.sync.noLimit")}
+            syncOnlyTemplate={syncOnly}
           />
         )}
       </div>
