@@ -610,7 +610,6 @@ fn trigger_translate_selection(app: &tauri::AppHandle) {
     match get_selected_text_from_system(&state) {
         Ok(text) if !text.trim().is_empty() => {
             let app = app.clone();
-            let text = text;
             if let Err(err) = crate::main_thread::run_on_ui_thread(&app.clone(), move || {
                 tauri::async_runtime::spawn(async move {
                     if let Err(e) = open_translate_result_window(app, text).await {
