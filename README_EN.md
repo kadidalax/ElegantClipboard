@@ -195,13 +195,18 @@ git push origin v0.5.0
 
 ## Data Storage
 
-Default storage location (configurable in settings):
+Data is stored in the **application installation directory**:
 
 | Type | Path |
-|------|------|
-| Config | `%LOCALAPPDATA%\ElegantClipboard\config.json` |
-| Database | `<data dir>\clipboard.db` |
-| Image Cache | `<data dir>\images\` |
+|---|---|
+| Config | `<install dir>\config.json` |
+| Database | `<install dir>\clipboard.db` |
+| Image Cache | `<install dir>\images\` |
+| Log | `<install dir>\app.log` |
+
+You can change the default data path in Settings → General → Data storage location. Data migration is supported.
+
+The installer version writes to the install directory and requires admin privileges. The portable version (no `uninstall.exe` beside the exe) can read and write in the exe directory normally.
 
 ## License
 

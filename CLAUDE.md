@@ -297,13 +297,18 @@ Windows 的注册表 `Run` 键会静默跳过需要 UAC 提权的程序，因此
 
 ## 数据存储
 
-- **配置文件**：`%LOCALAPPDATA%\ElegantClipboard\config.json`
-- **数据库**：`<数据目录>\clipboard.db`
-- **图片缓存**：`<数据目录>\images\`
+数据存储在**可执行文件所在目录**：
 
-配置文件支持自定义数据路径（`data_path` 字段），并支持数据迁移功能（`config.rs::migrate_data`）。
+| 类型 | 路径 |
+|---|---|
+| 配置文件 | `<安装目录>\config.json` |
+| 数据库 | `<安装目录>\clipboard.db` |
+| 图片缓存 | `<安装目录>\images\` |
+| 日志 | `<安装目录>\app.log` |
 
-## 数据库架构
+可在设置 → 常规 → 数据存储位置修改默认路径，支持数据迁移。
+
+安装版默认使用安装目录，需管理员权限写入；便携版（无 `uninstall.exe`）在 exe 同级目录可正常读写。
 
 位置：`src-tauri/src/database/schema.rs`
 
