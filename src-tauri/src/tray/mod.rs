@@ -210,13 +210,7 @@ fn handle_menu_event(app: &AppHandle, id: &str) {
             let _ = open_settings_window(app);
         }
         "restart" => {
-            // 管理员模式下 restart_app() 已拉起新进程，直接退出；否则走标准重启
-            crate::commands::window::save_main_window_placement(app);
-            if crate::admin_launch::restart_app() {
-                app.exit(0);
-            } else {
-                app.restart();
-            }
+            crate::admin_launch::perform_restart(app);
         }
         "quit" => {
             crate::commands::window::save_main_window_placement(app);
