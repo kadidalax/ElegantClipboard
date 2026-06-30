@@ -96,18 +96,6 @@ impl ClipboardMonitor {
         *self.thread_handle.lock() = Some(handle);
     }
 
-    /// 停止监控并等待线程退出
-    #[allow(dead_code)]
-    pub fn stop(&self) {
-        self.running.store(false, Ordering::SeqCst);
-        info!("Clipboard monitor stopping");
-
-        // 等待线程退出
-        if let Some(handle) = self.thread_handle.lock().take() {
-            let _ = handle.join();
-        }
-    }
-
     /// 暂停监控（递增暂停计数，支持多个并发暂停）
     pub fn pause(&self) {
         let count = self.pause_count.fetch_add(1, Ordering::SeqCst);
