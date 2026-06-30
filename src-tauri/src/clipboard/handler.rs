@@ -86,8 +86,15 @@ fn truncate_content(content: String, max_size: usize, content_type: &str) -> Str
 #[derive(Debug, Clone)]
 pub enum ClipboardContent {
     Text(String),
-    Html { html: String, text: Option<String> },
-    Rtf { rtf: String, text: Option<String> },
+    Html {
+        html: String,
+        text: Option<String>,
+        rtf: Option<String>,
+    },
+    Rtf {
+        rtf: String,
+        text: Option<String>,
+    },
     Image(Vec<u8>),
     Files(Vec<String>),
 }
@@ -363,8 +370,8 @@ impl ClipboardHandler {
 
         let mut item = match content {
             ClipboardContent::Text(text) => self.process_text(text, &hashes, max_content_size)?,
-            ClipboardContent::Html { html, text } => {
-                self.process_html(html, text, &hashes, max_content_size)?
+            ClipboardContent::Html { html, text, rtf } => {
+                self.process_html(html, text, rtf, &hashes, max_content_size)?
             }
             ClipboardContent::Rtf { rtf, text } => {
                 self.process_rtf(rtf, text, &hashes, max_content_size)?
@@ -548,6 +555,7 @@ impl ClipboardHandler {
         &self,
         html: String,
         text: Option<String>,
+        rtf: Option<String>,
         hashes: &ContentHashes,
         max_size: usize,
     ) -> Result<NewClipboardItem, String> {
@@ -556,6 +564,7 @@ impl ClipboardHandler {
             .as_ref()
             .map_or_else(|| Self::create_preview(&html), |t| Self::create_preview(t));
         let html_content = truncate_content(html, max_size, "HTML");
+        let rtf_content = rtf.map(|r| truncate_content(r, max_size, "RTF"));
 
         let char_count = text.as_ref().map(|t| t.chars().count() as i64);
 
@@ -563,6 +572,7 @@ impl ClipboardHandler {
             content_type: ContentType::Html,
             text_content: text,
             html_content: Some(html_content),
+            rtf_content,
             content_hash: hashes.content_hash.clone(),
             semantic_hash: hashes.semantic_hash.clone(),
             preview: Some(preview),

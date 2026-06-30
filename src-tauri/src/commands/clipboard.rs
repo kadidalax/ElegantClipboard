@@ -5,73 +5,12 @@ use tracing::{debug, info};
 
 use super::{AppState, hide_main_window_if_not_pinned, with_paused_monitor};
 
-/// 将 ClipboardItem 内容写入系统剪贴板
+/// 将 ClipboardItem 内容写入系统剪贴板（保留 HTML/RTF 等格式）
 pub(super) fn set_clipboard_content(
     item: &ClipboardItem,
     clipboard: &mut arboard::Clipboard,
 ) -> Result<(), String> {
-    match item.content_type.as_str() {
-        "text" | "html" | "rtf" | "url" => {
-            if let Some(ref text) = item.text_content {
-                clipboard
-                    .set_text(text.clone())
-                    .map_err(|e| format!("Failed to set clipboard text: {e}"))?;
-            }
-        }
-        "image" => {
-            if let Some(ref path) = item.image_path {
-                set_clipboard_image(path, clipboard)?;
-            }
-        }
-        "files" => {
-            if let Some(ref paths_json) = item.file_paths {
-                let paths: Vec<String> = serde_json::from_str(paths_json)
-                    .map_err(|e| format!("Failed to parse file paths: {e}"))?;
-                set_clipboard_files(&paths, clipboard)?;
-            }
-        }
-        _ => {
-            return Err("Unsupported content type".to_string());
-        }
-    }
-    Ok(())
-}
-
-/// 使用 arboard 将图片写入剪贴板（Windows 上写 CF_DIB，PS 兼容）
-fn set_clipboard_image(path: &str, clipboard: &mut arboard::Clipboard) -> Result<(), String> {
-    use arboard::ImageData;
-    use std::borrow::Cow;
-
-    let img = image::open(path)
-        .map_err(|e| format!("Failed to load image from path: {e}"))?
-        .to_rgba8();
-
-    let (width, height) = img.dimensions();
-    let image_data = ImageData {
-        width: width as usize,
-        height: height as usize,
-        bytes: Cow::Owned(img.into_raw()),
-    };
-
-    clipboard
-        .set_image(image_data)
-        .map_err(|e| format!("Failed to set clipboard image: {e}"))?;
-
-    Ok(())
-}
-
-/// 使用 arboard 将文件列表写入剪贴板（Windows 上写 CF_HDROP）
-fn set_clipboard_files(paths: &[String], clipboard: &mut arboard::Clipboard) -> Result<(), String> {
-    use std::path::Path;
-
-    let path_refs: Vec<&Path> = paths.iter().map(Path::new).collect();
-
-    clipboard
-        .set()
-        .file_list(&path_refs)
-        .map_err(|e| format!("Failed to set clipboard files: {e}"))?;
-
-    Ok(())
+    crate::clipboard::format_write::write_item_to_clipboard(item, clipboard)
 }
 
 /// 提取以 keyword 首次出现为中心的上下文片段（`...前缀 关键词 后缀...`）。
@@ -607,12 +546,9 @@ pub async fn paste_content_as_plain(
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "Item not found".to_string())?;
 
-    let text = item
-        .text_content
-        .as_deref()
-        .ok_or_else(|| "Item has no text content".to_string())?;
+    let text = crate::clipboard::format_write::item_plain_text(&item)?;
 
-    paste_plain_text_to_active_window(&state, &app, text, close_window.unwrap_or(true))?;
+    paste_plain_text_to_active_window(&state, &app, &text, close_window.unwrap_or(true))?;
     debug!("Pasted item {} as plain text", id);
     Ok(())
 }
