@@ -240,12 +240,16 @@ fn write_windows_rich_formats(
             *ptr.add(data.len()) = 0;
             GlobalUnlock(hmem).map_err(|e| format!("GlobalUnlock failed: {e}"))?;
         }
-        prepared.push(PreparedFormat { format: cf_html, hmem });
+        prepared.push(PreparedFormat {
+            format: cf_html,
+            hmem,
+        });
     }
 
     // 3. 准备 CF_RTF
     if let Some(rtf) = rtf.filter(|r| !r.is_empty()) {
-        let cf_rtf = unsafe { RegisterClipboardFormatA(PCSTR(c"Rich Text Format".as_ptr().cast())) };
+        let cf_rtf =
+            unsafe { RegisterClipboardFormatA(PCSTR(c"Rich Text Format".as_ptr().cast())) };
         if cf_rtf == 0 {
             return Err("Failed to register RTF clipboard format".to_string());
         }
@@ -264,7 +268,10 @@ fn write_windows_rich_formats(
             *ptr.add(data.len()) = 0;
             GlobalUnlock(hmem).map_err(|e| format!("GlobalUnlock failed: {e}"))?;
         }
-        prepared.push(PreparedFormat { format: cf_rtf, hmem });
+        prepared.push(PreparedFormat {
+            format: cf_rtf,
+            hmem,
+        });
     }
 
     if prepared.is_empty() {
@@ -290,7 +297,6 @@ fn write_windows_rich_formats(
 
     Ok(())
 }
-
 
 /// 构建 Windows HTML Format 剪贴板 payload（含 StartHTML/Fragment 偏移头）
 fn pack_html_for_clipboard(html: &str) -> String {

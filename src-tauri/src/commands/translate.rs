@@ -415,12 +415,20 @@ fn backup_clipboard() -> ClipboardBackup {
 }
 
 fn restore_clipboard(backup: &ClipboardBackup) {
-    let Ok(mut cb) = arboard::Clipboard::new() else { return };
+    let Ok(mut cb) = arboard::Clipboard::new() else {
+        return;
+    };
     match backup {
         ClipboardBackup::Empty => {}
-        ClipboardBackup::Text(text) => { let _ = cb.set_text(text); }
-        ClipboardBackup::Html { html, text } => { let _ = cb.set_html(html.as_str(), text.as_deref()); }
-        ClipboardBackup::Image(img) => { let _ = cb.set_image(img.clone()); }
+        ClipboardBackup::Text(text) => {
+            let _ = cb.set_text(text);
+        }
+        ClipboardBackup::Html { html, text } => {
+            let _ = cb.set_html(html.as_str(), text.as_deref());
+        }
+        ClipboardBackup::Image(img) => {
+            let _ = cb.set_image(img.clone());
+        }
     }
 }
 

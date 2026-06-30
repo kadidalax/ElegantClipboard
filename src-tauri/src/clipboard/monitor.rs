@@ -257,22 +257,21 @@ fn read_clipboard_content(max_image_bytes: usize) -> Option<ClipboardContent> {
 
     for attempt in 0..=MAX_RETRIES {
         #[cfg(target_os = "windows")]
-        let seq_before = unsafe {
-            windows::Win32::System::DataExchange::GetClipboardSequenceNumber()
-        };
+        let seq_before =
+            unsafe { windows::Win32::System::DataExchange::GetClipboardSequenceNumber() };
 
         let result = read_clipboard_content_inner(max_image_bytes);
 
         // 检测剪贴板是否在读取过程中被修改（TOCTOU）
         #[cfg(target_os = "windows")]
         {
-            let seq_after = unsafe {
-                windows::Win32::System::DataExchange::GetClipboardSequenceNumber()
-            };
+            let seq_after =
+                unsafe { windows::Win32::System::DataExchange::GetClipboardSequenceNumber() };
             if seq_before != seq_after && attempt < MAX_RETRIES {
                 debug!(
                     "Clipboard changed during read (attempt {}/{}), retrying",
-                    attempt + 1, MAX_RETRIES + 1
+                    attempt + 1,
+                    MAX_RETRIES + 1
                 );
                 continue;
             }
