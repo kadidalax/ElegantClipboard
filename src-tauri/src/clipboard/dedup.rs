@@ -49,7 +49,8 @@ pub(crate) fn semantic_hash_from_text(text: &str) -> Option<String> {
 }
 
 fn starts_with_ignore_ascii_case(text: &str, prefix: &str) -> bool {
-    text.len() >= prefix.len() && text[..prefix.len()].eq_ignore_ascii_case(prefix)
+    text.get(..prefix.len())
+        .is_some_and(|head| head.eq_ignore_ascii_case(prefix))
 }
 
 /// 判断纯文本是否为单行 URL（用于归类到「其它」）
@@ -195,5 +196,12 @@ mod tests {
         assert!(!is_url("visit https://example.com"));
         assert!(!is_url("http://"));
         assert!(!is_url("www."));
+    }
+
+    #[test]
+    fn is_url_does_not_panic_on_cjk_text() {
+        assert!(!is_url("不等于程序空闲时自己崩"));
+        assert!(!is_url("我们"));
+        assert!(!is_url("你好世界"));
     }
 }
