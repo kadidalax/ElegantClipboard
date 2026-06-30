@@ -199,7 +199,6 @@ pub fn simulate_copy() -> Result<(), String> {
     simulate_ctrl_combo(VK_C.0, "simulate_copy")
 }
 
-
 /// 获取剪贴板条目（支持可选过滤）
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]

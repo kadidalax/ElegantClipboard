@@ -44,7 +44,6 @@ pub fn get_cursor_position() -> (i32, i32) {
     (x as i32, y as i32)
 }
 
-
 /// 根据指定模式定位窗口
 pub fn position_window(window: &WebviewWindow, mode: PositionMode) -> Result<(), String> {
     if mode == PositionMode::FixedPosition {
@@ -93,7 +92,6 @@ pub fn force_topmost(window: &WebviewWindow) {
         }
     }
 }
-
 
 struct MonitorInfo {
     x: i32,

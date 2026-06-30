@@ -76,7 +76,6 @@ pub fn is_running_as_admin() -> bool {
     }
 }
 
-
 // ─── 自提权 ───────────────────────────────────────────────────────────────────
 
 /// 等待新的提权实例启动（轮询进程列表，最多等待 `secs` 秒）
@@ -203,7 +202,6 @@ pub fn self_elevate() -> bool {
     false
 }
 
-
 /// 通过 ShellExecute "runas" 启动新实例（会弹出 UAC 提示）
 #[cfg(target_os = "windows")]
 fn elevate_with_uac() -> bool {
@@ -254,7 +252,6 @@ pub fn restart_app() -> bool {
 
     false
 }
-
 
 /// 通过 explorer.exe 启动，确保新进程不继承管理员权限
 #[cfg(target_os = "windows")]
@@ -311,4 +308,3 @@ pub fn cleanup_compat_flags() {
         let _ = key.delete_value(&exe_path);
     }
 }
-

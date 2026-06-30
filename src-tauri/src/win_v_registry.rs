@@ -115,4 +115,3 @@ pub fn is_win_v_hotkey_disabled() -> bool {
 
     current_value.contains('V')
 }
-

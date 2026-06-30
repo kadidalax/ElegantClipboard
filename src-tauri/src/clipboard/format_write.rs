@@ -3,9 +3,6 @@
 use crate::database::ClipboardItem;
 use arboard::Clipboard;
 
-#[cfg(target_os = "windows")]
-use super::rtf::write_rtf_to_clipboard;
-
 /// 将 ClipboardItem 写入系统剪贴板
 pub fn write_item_to_clipboard(
     item: &ClipboardItem,
@@ -72,22 +69,15 @@ fn write_rtf_item(item: &ClipboardItem, clipboard: &mut Clipboard) -> Result<(),
 
     #[cfg(target_os = "windows")]
     if let Some(rtf) = item.rtf_content.as_deref().filter(|r| !r.is_empty()) {
-        if item.html_content.as_deref().is_some_and(|h| !h.is_empty()) {
-            return write_windows_rich_formats(
-                item.html_content.as_deref(),
-                Some(rtf),
-                alt.as_deref(),
-            );
-        }
-        return write_rtf_to_clipboard(rtf, alt.as_deref());
+        // 统一使用 write_windows_rich_formats，html=None 时仅写 RTF + Unicode 文本
+        return write_windows_rich_formats(item.html_content.as_deref(), Some(rtf), alt.as_deref());
     }
-
 
     write_plain_text(item, clipboard)
 }
 
 /// 提取条目可用的纯文本 fallback（HTML/RTF 写剪贴板时的 Unicode 伴生格式）
-pub fn item_alt_text(item: &ClipboardItem) -> Option<String> {
+fn item_alt_text(item: &ClipboardItem) -> Option<String> {
     item.text_content
         .clone()
         .filter(|t| !t.is_empty())
@@ -126,7 +116,7 @@ pub fn item_plain_text(item: &ClipboardItem) -> Result<String, String> {
 }
 
 /// 使用 arboard 将图片写入剪贴板（Windows 上写 CF_DIB，PS 兼容）
-pub fn set_clipboard_image(path: &str, clipboard: &mut Clipboard) -> Result<(), String> {
+fn set_clipboard_image(path: &str, clipboard: &mut Clipboard) -> Result<(), String> {
     use arboard::ImageData;
     use std::borrow::Cow;
 
@@ -143,13 +133,11 @@ pub fn set_clipboard_image(path: &str, clipboard: &mut Clipboard) -> Result<(), 
 
     clipboard
         .set_image(image_data)
-        .map_err(|e| format!("Failed to set clipboard image: {e}"))?;
-
-    Ok(())
+        .map_err(|e| format!("Failed to set clipboard image: {e}"))
 }
 
 /// 使用 arboard 将文件列表写入剪贴板（Windows 上写 CF_HDROP）
-pub fn set_clipboard_files(paths: &[String], clipboard: &mut Clipboard) -> Result<(), String> {
+fn set_clipboard_files(paths: &[String], clipboard: &mut Clipboard) -> Result<(), String> {
     use std::path::Path;
 
     let path_refs: Vec<&Path> = paths.iter().map(Path::new).collect();
@@ -157,12 +145,10 @@ pub fn set_clipboard_files(paths: &[String], clipboard: &mut Clipboard) -> Resul
     clipboard
         .set()
         .file_list(&path_refs)
-        .map_err(|e| format!("Failed to set clipboard files: {e}"))?;
-
-    Ok(())
+        .map_err(|e| format!("Failed to set clipboard files: {e}"))
 }
 
-pub fn strip_html_tags(html: &str) -> String {
+fn strip_html_tags(html: &str) -> String {
     let mut out = String::with_capacity(html.len());
     let mut in_tag = false;
     for ch in html.chars() {
@@ -176,6 +162,38 @@ pub fn strip_html_tags(html: &str) -> String {
     out.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+// ── Windows 剪贴板写入 ────────────────────────────────────────────
+
+/// RAII guard: 确保 GlobalAlloc 分配的内存在错误路径被释放
+///
+/// Windows API 契约：`SetClipboardData` 成功时接管内存所有权（不可再 free），
+/// 失败时调用方必须自行释放。成功路径需调用 `std::mem::forget` 阻止 drop。
+#[cfg(target_os = "windows")]
+struct HGlobalGuard(windows::Win32::Foundation::HGLOBAL);
+
+#[cfg(target_os = "windows")]
+impl Drop for HGlobalGuard {
+    fn drop(&mut self) {
+        unsafe {
+            windows::Win32::Foundation::GlobalFree(Some(self.0)).ok();
+        }
+    }
+}
+
+/// RAII guard: 确保 CloseClipboard 在任何退出路径（含 panic）都执行
+#[cfg(target_os = "windows")]
+struct ClipboardGuard;
+
+#[cfg(target_os = "windows")]
+impl Drop for ClipboardGuard {
+    fn drop(&mut self) {
+        unsafe {
+            windows::Win32::System::DataExchange::CloseClipboard().ok();
+        }
+    }
+}
+
+/// 写入多种富文本格式到剪贴板（RTF + CF_UNICODETEXT + CF_HTML）
 #[cfg(target_os = "windows")]
 fn write_windows_rich_formats(
     html: Option<&str>,
@@ -184,58 +202,60 @@ fn write_windows_rich_formats(
 ) -> Result<(), String> {
     use windows::Win32::Foundation::HANDLE;
     use windows::Win32::System::DataExchange::{
-        CloseClipboard, EmptyClipboard, OpenClipboard, RegisterClipboardFormatA, SetClipboardData,
+        EmptyClipboard, OpenClipboard, RegisterClipboardFormatA, SetClipboardData,
     };
     use windows::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock};
     use windows::core::PCSTR;
 
     unsafe {
         OpenClipboard(None).map_err(|e| format!("OpenClipboard failed: {e}"))?;
+        let _clip_guard = ClipboardGuard;
 
-        let result = (|| -> Result<(), String> {
-            EmptyClipboard().map_err(|e| format!("EmptyClipboard failed: {e}"))?;
+        EmptyClipboard().map_err(|e| format!("EmptyClipboard failed: {e}"))?;
 
-            if let Some(text) = plain_text.filter(|t| !t.is_empty()) {
-                let wide: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
-                let byte_len = wide.len() * 2;
-                let hmem = GlobalAlloc(GMEM_MOVEABLE, byte_len)
-                    .map_err(|e| format!("GlobalAlloc failed: {e}"))?;
-                let ptr = GlobalLock(hmem) as *mut u8;
-                if ptr.is_null() {
-                    return Err("GlobalLock failed".to_string());
-                }
-                std::ptr::copy_nonoverlapping(wide.as_ptr() as *const u8, ptr, byte_len);
-                GlobalUnlock(hmem).map_err(|e| format!("GlobalUnlock failed: {e}"))?;
-                // CF_UNICODETEXT = 13
-                SetClipboardData(13, Some(HANDLE(hmem.0)))
-                    .map_err(|e| format!("SetClipboardData Unicode failed: {e}"))?;
+        // 1. CF_UNICODETEXT
+        if let Some(text) = plain_text.filter(|t| !t.is_empty()) {
+            let wide: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
+            let byte_len = wide.len() * 2;
+            let hmem = GlobalAlloc(GMEM_MOVEABLE, byte_len)
+                .map_err(|e| format!("GlobalAlloc failed: {e}"))?;
+            let _guard = HGlobalGuard(hmem);
+            let ptr = GlobalLock(hmem) as *mut u8;
+            if ptr.is_null() {
+                return Err("GlobalLock failed".to_string());
             }
+            std::ptr::copy_nonoverlapping(wide.as_ptr() as *const u8, ptr, byte_len);
+            GlobalUnlock(hmem).map_err(|e| format!("GlobalUnlock failed: {e}"))?;
+            // CF_UNICODETEXT = 13; 成功后系统接管内存，forget guard 阻止 GlobalFree
+            SetClipboardData(13, Some(HANDLE(hmem.0)))
+                .map_err(|e| format!("SetClipboardData Unicode failed: {e}"))?;
+            std::mem::forget(_guard);
+        }
 
-            if let Some(html) = html.filter(|h| !h.is_empty()) {
-                let cf_html = RegisterClipboardFormatA(PCSTR(c"HTML Format".as_ptr().cast()));
-                if cf_html == 0 {
-                    return Err("Failed to register HTML clipboard format".to_string());
-                }
-                let packed = pack_html_for_clipboard(html);
-                write_null_terminated(cf_html, packed.as_bytes())?;
+        // 2. CF_HTML
+        if let Some(html) = html.filter(|h| !h.is_empty()) {
+            let cf_html = RegisterClipboardFormatA(PCSTR(c"HTML Format".as_ptr().cast()));
+            if cf_html == 0 {
+                return Err("Failed to register HTML clipboard format".to_string());
             }
+            let packed = pack_html_for_clipboard(html);
+            write_null_terminated(cf_html, packed.as_bytes())?;
+        }
 
-            if let Some(rtf) = rtf.filter(|r| !r.is_empty()) {
-                let cf_rtf = RegisterClipboardFormatA(PCSTR(c"Rich Text Format".as_ptr().cast()));
-                if cf_rtf == 0 {
-                    return Err("Failed to register RTF clipboard format".to_string());
-                }
-                write_null_terminated(cf_rtf, rtf.as_bytes())?;
+        // 3. CF_RTF
+        if let Some(rtf) = rtf.filter(|r| !r.is_empty()) {
+            let cf_rtf = RegisterClipboardFormatA(PCSTR(c"Rich Text Format".as_ptr().cast()));
+            if cf_rtf == 0 {
+                return Err("Failed to register RTF clipboard format".to_string());
             }
+            write_null_terminated(cf_rtf, rtf.as_bytes())?;
+        }
 
-            Ok(())
-        })();
-
-        CloseClipboard().ok();
-        result
+        Ok(())
     }
 }
 
+/// 写入 null 结尾数据到剪贴板（用于 RTF 和 CF_HTML）
 #[cfg(target_os = "windows")]
 fn write_null_terminated(format: u32, data: &[u8]) -> Result<(), String> {
     use windows::Win32::Foundation::HANDLE;
@@ -246,6 +266,7 @@ fn write_null_terminated(format: u32, data: &[u8]) -> Result<(), String> {
     unsafe {
         let hmem =
             GlobalAlloc(GMEM_MOVEABLE, size).map_err(|e| format!("GlobalAlloc failed: {e}"))?;
+        let _guard = HGlobalGuard(hmem);
         let ptr = GlobalLock(hmem) as *mut u8;
         if ptr.is_null() {
             return Err("GlobalLock failed".to_string());
@@ -255,8 +276,10 @@ fn write_null_terminated(format: u32, data: &[u8]) -> Result<(), String> {
         }
         *ptr.add(data.len()) = 0;
         GlobalUnlock(hmem).map_err(|e| format!("GlobalUnlock failed: {e}"))?;
+        // 成功后系统接管内存，forget guard 阻止 GlobalFree
         SetClipboardData(format, Some(HANDLE(hmem.0)))
             .map_err(|e| format!("SetClipboardData failed: {e}"))?;
+        std::mem::forget(_guard);
     }
     Ok(())
 }

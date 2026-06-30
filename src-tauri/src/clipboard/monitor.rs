@@ -315,10 +315,12 @@ fn read_clipboard_content(max_image_bytes: usize) -> Option<ClipboardContent> {
     }
 
     // 尝试获取 HTML（同时尝试读取伴生 RTF，便于完整回写）
+    // 注意：arboard 每次调用独立 Open/Close 剪贴板，HTML/文本/RTF 可能来自不同的
+    // 剪贴板状态（TOCTOU）。实际风险极低（毫秒级窗口），但架构上并非原子读取。
     match clipboard.get().html() {
         Ok(html) if !html.is_empty() => {
             let text = clipboard.get_text().ok().filter(|t| !t.is_empty());
-            let rtf = super::rtf::read_rtf_from_clipboard().filter(|r| !r.is_empty());
+            let rtf = read_rtf_as_string().filter(|r| !r.is_empty());
             debug!(
                 "Got HTML from clipboard: {} bytes, rtf={}",
                 html.len(),
@@ -331,7 +333,7 @@ fn read_clipboard_content(max_image_bytes: usize) -> Option<ClipboardContent> {
     }
 
     // 尝试获取 RTF 富文本（arboard 不支持，用 Windows API）
-    if let Some(rtf) = super::rtf::read_rtf_from_clipboard()
+    if let Some(rtf) = read_rtf_as_string()
         && !rtf.is_empty()
     {
         let text = clipboard.get_text().ok().filter(|t| !t.is_empty());
@@ -364,4 +366,16 @@ fn encode_rgba_to_png(rgba: Vec<u8>, width: u32, height: u32) -> Result<Vec<u8>,
         .map_err(|e| format!("PNG encoding failed: {e}"))?;
 
     Ok(buf.into_inner())
+}
+
+/// 从剪贴板读取 RTF 并转为 String（在边界处做一次 lossy 转换）
+///
+/// RTF 通常为纯文本（ASCII），但 `\binN` 段可能含非 UTF-8 二进制数据。
+/// 此处使用 `from_utf8_lossy` 做单次转换，避免在底层读取时截断或损坏数据。
+fn read_rtf_as_string() -> Option<String> {
+    let bytes = super::rtf::read_rtf_from_clipboard()?;
+    if bytes.is_empty() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&bytes).into_owned())
 }

@@ -1,13 +1,36 @@
 //! Windows RTF 剪贴板读写
 
-/// 从剪贴板读取 RTF（Windows 专用）
+/// 从剪贴板读取 RTF 原始字节（Windows 专用）
+///
+/// 返回 `Vec<u8>` 而非 `String`，因为 RTF 的 `\binN` 段可能包含非 UTF-8 二进制数据。
+/// 调用方在需要 String 时自行决定如何转换（lossy 或 strict）。
 #[cfg(target_os = "windows")]
-pub fn read_rtf_from_clipboard() -> Option<String> {
+pub fn read_rtf_from_clipboard() -> Option<Vec<u8>> {
     use windows::Win32::System::DataExchange::{
         CloseClipboard, GetClipboardData, OpenClipboard, RegisterClipboardFormatA,
     };
-    use windows::Win32::System::Memory::{GlobalLock, GlobalUnlock};
+    use windows::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
     use windows::core::PCSTR;
+
+    // RAII guard: 确保 CloseClipboard 在任何退出路径都执行
+    struct ClipboardGuard;
+    impl Drop for ClipboardGuard {
+        fn drop(&mut self) {
+            unsafe {
+                CloseClipboard().ok();
+            }
+        }
+    }
+
+    // RAII guard: 确保 GlobalUnlock 在任何退出路径（含 panic）都执行
+    struct GlobalUnlockGuard(windows::Win32::Foundation::HGLOBAL);
+    impl Drop for GlobalUnlockGuard {
+        fn drop(&mut self) {
+            unsafe {
+                GlobalUnlock(self.0).ok();
+            }
+        }
+    }
 
     unsafe {
         let cf_rtf = RegisterClipboardFormatA(PCSTR(c"Rich Text Format".as_ptr().cast()));
@@ -18,117 +41,39 @@ pub fn read_rtf_from_clipboard() -> Option<String> {
         if OpenClipboard(None).is_err() {
             return None;
         }
+        let _clip_guard = ClipboardGuard;
 
-        let result = (|| -> Option<String> {
-            let handle = GetClipboardData(cf_rtf).ok()?;
-            let hglobal = windows::Win32::Foundation::HGLOBAL(handle.0);
-            if hglobal.is_invalid() {
-                return None;
-            }
+        let handle = GetClipboardData(cf_rtf).ok()?;
+        let hglobal = windows::Win32::Foundation::HGLOBAL(handle.0);
+        if hglobal.is_invalid() {
+            return None;
+        }
 
-            let ptr = GlobalLock(hglobal) as *const u8;
-            if ptr.is_null() {
-                return None;
-            }
-
-            // drop guard: 确保 GlobalUnlock 在任何退出路径（含 panic）都执行
-            struct GlobalUnlockGuard(windows::Win32::Foundation::HGLOBAL);
-            impl Drop for GlobalUnlockGuard {
-                fn drop(&mut self) {
-                    unsafe {
-                        GlobalUnlock(self.0).ok();
-                    }
-                }
-            }
-            let _guard = GlobalUnlockGuard(hglobal);
-
-            use windows::Win32::System::Memory::GlobalSize;
-
-            let size = GlobalSize(hglobal) as usize;
-            if size == 0 {
-                return None;
-            }
-            let buf = std::slice::from_raw_parts(ptr, size);
-            let len = buf.iter().position(|&b| b == 0).unwrap_or(size);
-            Some(String::from_utf8_lossy(&buf[..len]).to_string())
-        })();
-
-        CloseClipboard().ok();
-
-        result
-    }
-}
-
-
-/// 将 RTF（及可选纯文本 fallback）写入剪贴板（Windows 专用）
-#[cfg(target_os = "windows")]
-pub fn write_rtf_to_clipboard(rtf: &str, plain_text: Option<&str>) -> Result<(), String> {
-    use windows::Win32::Foundation::HANDLE;
-    use windows::Win32::System::DataExchange::{
-        CloseClipboard, EmptyClipboard, OpenClipboard, RegisterClipboardFormatA, SetClipboardData,
-    };
-    use windows::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock};
-    use windows::core::PCSTR;
-
-    unsafe {
-        OpenClipboard(None).map_err(|e| format!("OpenClipboard failed: {e}"))?;
-
-        let result = (|| -> Result<(), String> {
-            EmptyClipboard().map_err(|e| format!("EmptyClipboard failed: {e}"))?;
-
-            let cf_rtf = RegisterClipboardFormatA(PCSTR(c"Rich Text Format".as_ptr().cast()));
-            if cf_rtf == 0 {
-                return Err("Failed to register RTF clipboard format".to_string());
-            }
-
-            set_null_terminated_clipboard_data(cf_rtf, rtf.as_bytes())?;
-
-            if let Some(text) = plain_text.filter(|t| !t.is_empty()) {
-                let wide: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
-                let byte_len = wide.len() * 2;
-                let hmem = GlobalAlloc(GMEM_MOVEABLE, byte_len)
-                    .map_err(|e| format!("GlobalAlloc failed: {e}"))?;
-                let ptr = GlobalLock(hmem) as *mut u8;
-                if ptr.is_null() {
-                    return Err("GlobalLock failed".to_string());
-                }
-                std::ptr::copy_nonoverlapping(wide.as_ptr() as *const u8, ptr, byte_len);
-                GlobalUnlock(hmem).map_err(|e| format!("GlobalUnlock failed: {e}"))?;
-                // CF_UNICODETEXT = 13
-                SetClipboardData(13, Some(HANDLE(hmem.0)))
-                    .map_err(|e| format!("SetClipboardData Unicode failed: {e}"))?;
-            }
-
-            Ok(())
-        })();
-
-        CloseClipboard().ok();
-        result
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn set_null_terminated_clipboard_data(format: u32, data: &[u8]) -> Result<(), String> {
-    use windows::Win32::Foundation::HANDLE;
-    use windows::Win32::System::DataExchange::SetClipboardData;
-    use windows::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock};
-
-    let size = data.len().saturating_add(1);
-    unsafe {
-        let hmem =
-            GlobalAlloc(GMEM_MOVEABLE, size).map_err(|e| format!("GlobalAlloc failed: {e}"))?;
-        let ptr = GlobalLock(hmem) as *mut u8;
+        let ptr = GlobalLock(hglobal) as *const u8;
         if ptr.is_null() {
-            return Err("GlobalLock failed".to_string());
+            return None;
         }
-        if !data.is_empty() {
-            std::ptr::copy_nonoverlapping(data.as_ptr(), ptr, data.len());
+        let _unlock_guard = GlobalUnlockGuard(hglobal);
+
+        // 使用 GlobalSize 确定分配大小，避免扫描 null 字节（\binN 段可含嵌入 null）
+        let size = GlobalSize(hglobal) as usize;
+        if size == 0 {
+            return None;
         }
-        *ptr.add(data.len()) = 0;
-        GlobalUnlock(hmem).map_err(|e| format!("GlobalUnlock failed: {e}"))?;
-        SetClipboardData(format, Some(HANDLE(hmem.0)))
-            .map_err(|e| format!("SetClipboardData failed: {e}"))?;
+        let buf = std::slice::from_raw_parts(ptr, size);
+
+        // 去掉尾部的 null 终止符（如有）
+        let data = if buf.last() == Some(&0) {
+            &buf[..size - 1]
+        } else {
+            buf
+        };
+
+        Some(data.to_vec())
     }
-    Ok(())
 }
 
+#[cfg(not(target_os = "windows"))]
+pub fn read_rtf_from_clipboard() -> Option<Vec<u8>> {
+    None
+}

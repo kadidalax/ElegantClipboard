@@ -65,7 +65,6 @@ pub fn get_clipboard_source_app() -> Option<SourceAppInfo> {
     }
 }
 
-
 /// 通过 PID 获取进程 exe 路径
 #[cfg(target_os = "windows")]
 unsafe fn get_exe_path_from_pid(pid: u32) -> Option<String> {
@@ -246,7 +245,6 @@ pub fn get_app_display_name_pub(exe_path: &str) -> String {
     get_app_display_name(exe_path)
 }
 
-
 fn compute_icon_cache_key(exe_path: &str) -> String {
     let mut hasher = blake3::Hasher::new();
     hasher.update(exe_path.to_lowercase().as_bytes());
@@ -269,7 +267,6 @@ pub fn extract_and_cache_icon(exe_path: &str, icons_dir: &Path, cache_key: &str)
     }
     Some(icon_path.to_string_lossy().to_string())
 }
-
 
 /// 通过 SHGetFileInfoW + GDI 提取 exe 图标为 PNG
 #[cfg(target_os = "windows")]

@@ -529,7 +529,6 @@ impl ClipboardHandler {
         } else {
             text
         };
-        let byte_size = text.len() as i64;
         let char_count = Some(text.chars().count() as i64);
         let preview = Self::create_preview(&text);
         let content_type = if is_url {
@@ -538,6 +537,7 @@ impl ClipboardHandler {
             ContentType::Text
         };
         let text_content = truncate_content(text, max_size, "Text");
+        let byte_size = text_content.len() as i64;
 
         Ok(NewClipboardItem {
             content_type,
@@ -559,11 +559,11 @@ impl ClipboardHandler {
         hashes: &ContentHashes,
         max_size: usize,
     ) -> Result<NewClipboardItem, String> {
-        let byte_size = html.len() as i64;
         let preview = text
             .as_ref()
             .map_or_else(|| Self::create_preview(&html), |t| Self::create_preview(t));
         let html_content = truncate_content(html, max_size, "HTML");
+        let byte_size = html_content.len() as i64;
         let rtf_content = rtf.map(|r| truncate_content(r, max_size, "RTF"));
 
         let char_count = text.as_ref().map(|t| t.chars().count() as i64);
@@ -589,11 +589,11 @@ impl ClipboardHandler {
         hashes: &ContentHashes,
         max_size: usize,
     ) -> Result<NewClipboardItem, String> {
-        let byte_size = rtf.len() as i64;
         let preview = text
             .as_ref()
             .map_or_else(|| "[RTF Content]".to_string(), |t| Self::create_preview(t));
         let rtf_content = truncate_content(rtf, max_size, "RTF");
+        let byte_size = rtf_content.len() as i64;
 
         let char_count = text.as_ref().map(|t| t.chars().count() as i64);
 

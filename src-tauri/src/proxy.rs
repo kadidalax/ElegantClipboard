@@ -69,7 +69,6 @@ fn format_proxy_url(addr: &str) -> String {
     }
 }
 
-
 /// 根据代理模式配置 reqwest 客户端 builder
 pub fn apply_proxy(
     mut builder: reqwest::blocking::ClientBuilder,
