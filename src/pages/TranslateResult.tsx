@@ -22,6 +22,7 @@ export function TranslateResult() {
   const [translatedText, setTranslatedText] = useState("");
   const [translateError, setTranslateError] = useState("");
   const [translatedCopied, setTranslatedCopied] = useState(false);
+  const [isPinned, setIsPinned] = useState(false);
 
   const recordTranslation = useTranslateSettings((s) => s.recordTranslation);
   const translateLoaded = useTranslateSettings((s) => s.loaded);
@@ -63,15 +64,25 @@ export function TranslateResult() {
   }, []);
 
   useEffect(() => {
+    invoke<boolean>("is_translate_window_pinned")
+      .then(setIsPinned)
+      .catch((error) => logError("Failed to load translate pin state:", error));
+  }, []);
+
+  useEffect(() => {
     const load = async () => {
-      // 确保设置加载完成后再翻译
       if (!useTranslateSettings.getState().loaded) {
         await useTranslateSettings.getState().loadSettings();
       }
       try {
-        const t = await invoke<string>("get_pending_translate_text");
-        if (t) { setText(t); doTranslate(t); }
-      } catch (e) { console.error("获取待翻译文本失败:", e); }
+        const pending = await invoke<string>("get_pending_translate_text");
+        if (pending) {
+          setText(pending);
+          doTranslate(pending);
+        }
+      } catch (e) {
+        console.error("获取待翻译文本失败:", e);
+      }
     };
     load();
   }, [doTranslate]);
@@ -81,6 +92,10 @@ export function TranslateResult() {
       setText(event.payload);
       setTranslatedText("");
       setTranslateError("");
+      setIsPinned(false);
+      invoke("set_translate_window_pinned", { pinned: false }).catch((error) => {
+        logError("Failed to reset translate pin state:", error);
+      });
       doTranslate(event.payload);
     });
     return () => { unlisten.then((fn) => fn()); };
@@ -88,11 +103,23 @@ export function TranslateResult() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") getCurrentWindow().close();
+      if (e.key === "Escape" && !isPinned) {
+        getCurrentWindow().close();
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [isPinned]);
+
+  const togglePinned = useCallback(async () => {
+    const next = !isPinned;
+    try {
+      await invoke("set_translate_window_pinned", { pinned: next });
+      setIsPinned(next);
+    } catch (error) {
+      logError("Failed to toggle translate pin state:", error);
+    }
+  }, [isPinned]);
 
   const handleCopy = useCallback(async () => {
     try {
@@ -115,6 +142,12 @@ export function TranslateResult() {
       <WindowTitleBar
         icon={<Translate16Regular className="w-5 h-5 text-muted-foreground" />}
         title={t("translateResult.title")}
+        pinControl={{
+          pinned: isPinned,
+          onToggle: togglePinned,
+          pinLabel: t("toolbar.pinWindow"),
+          unpinLabel: t("toolbar.unpinWindow"),
+        }}
       />
 
       {/* 原文 */}
@@ -129,7 +162,7 @@ export function TranslateResult() {
         <textarea
           value={text}
           readOnly
-          className="flex-1 w-full resize-none border-0 bg-transparent px-4 pb-3 text-sm leading-relaxed font-mono focus:outline-none placeholder:text-muted-foreground"
+          className="flex-1 w-full resize-none border-0 bg-transparent px-4 pb-3 text-sm leading-relaxed ui-font focus:outline-none placeholder:text-muted-foreground"
           placeholder={t("translateResult.waitingText")}
           spellCheck={false}
         />
@@ -150,7 +183,9 @@ export function TranslateResult() {
         </div>
         <div className="flex-1 overflow-auto px-4 pb-3">
           {translating && <p className="text-sm text-muted-foreground">{t("translateResult.translatingProgress")}</p>}
-          {translatedText && <p className="text-sm leading-relaxed whitespace-pre-wrap cursor-text select-text">{translatedText}</p>}
+          {translatedText && (
+            <p className="text-sm leading-relaxed whitespace-pre-wrap cursor-text select-text ui-font">{translatedText}</p>
+          )}
           {translateError && <p className="text-sm text-destructive">{translateError}</p>}
         </div>
       </Card>

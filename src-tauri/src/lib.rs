@@ -1087,6 +1087,8 @@ pub fn run() {
             commands::translate::write_text_to_clipboard,
             commands::translate::get_pending_translate_text,
             commands::translate::open_translate_result_window,
+            commands::translate::set_translate_window_pinned,
+            commands::translate::is_translate_window_pinned,
             commands::translate::update_translate_selection_shortcut,
             commands::settings::get_settings_batch,
         ])

@@ -388,7 +388,7 @@ export function TranslateTab() {
                   <Input
                     value={tsRecording ? tsTempShortcut || t("settings.shortcuts.pressShortcut") : translateSelectionShortcut || t("settings.translate.notSet")}
                     readOnly
-                    className={`flex-1 h-8 text-sm bg-muted ${translateSelectionShortcut || tsRecording ? "font-mono" : ""}`}
+                    className="flex-1 h-8 text-sm ui-font bg-muted"
                     onClick={() => { if (!tsRecording) { setTsRecording(true); setTsTempShortcut(""); setTsShortcutError(""); } }}
                   />
                   {tsRecording ? (

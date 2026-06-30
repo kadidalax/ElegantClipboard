@@ -40,9 +40,15 @@ static MAIN_WINDOW: Mutex<Option<WebviewWindow>> = Mutex::new(None);
 
 static MAIN_HWND: AtomicIsize = AtomicIsize::new(0);
 
+static TRANSLATE_WINDOW: Mutex<Option<WebviewWindow>> = Mutex::new(None);
+
+static TRANSLATE_HWND: AtomicIsize = AtomicIsize::new(0);
+
 static MOUSE_MONITORING_ENABLED: AtomicBool = AtomicBool::new(false);
 
 static WINDOW_PINNED: AtomicBool = AtomicBool::new(false);
+
+static TRANSLATE_WINDOW_PINNED: AtomicBool = AtomicBool::new(false);
 
 static PREV_FOREGROUND_HWND: AtomicIsize = AtomicIsize::new(0);
 
@@ -162,6 +168,9 @@ pub fn enable_mouse_monitoring() {
 }
 
 pub fn disable_mouse_monitoring() {
+    if is_translate_window_visible() {
+        return;
+    }
     MOUSE_MONITORING_ENABLED.store(false, Ordering::Relaxed);
     #[cfg(windows)]
     {
@@ -183,6 +192,61 @@ pub fn set_window_pinned(pinned: bool) {
 
 pub fn is_window_pinned() -> bool {
     WINDOW_PINNED.load(Ordering::Relaxed)
+}
+
+pub fn setup_translate_window(window: &WebviewWindow) {
+    #[cfg(windows)]
+    if let Ok(hwnd) = window.hwnd() {
+        TRANSLATE_HWND.store(hwnd.0 as isize, Ordering::Relaxed);
+    }
+    *TRANSLATE_WINDOW.lock() = Some(window.clone());
+    TRANSLATE_WINDOW_PINNED.store(false, Ordering::Relaxed);
+
+    let window = window.clone();
+    window.on_window_event(move |event| {
+        if matches!(
+            event,
+            tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed
+        ) {
+            cleanup_translate_window();
+        }
+    });
+}
+
+pub fn translate_window_shown() {
+    TRANSLATE_WINDOW_PINNED.store(false, Ordering::Relaxed);
+    enable_mouse_monitoring();
+}
+
+pub fn cleanup_translate_window() {
+    TRANSLATE_HWND.store(0, Ordering::Relaxed);
+    *TRANSLATE_WINDOW.lock() = None;
+    TRANSLATE_WINDOW_PINNED.store(false, Ordering::Relaxed);
+    if !is_main_window_visible() {
+        disable_mouse_monitoring();
+    }
+}
+
+pub fn set_translate_window_pinned(pinned: bool) {
+    TRANSLATE_WINDOW_PINNED.store(pinned, Ordering::Relaxed);
+}
+
+pub fn is_translate_window_pinned() -> bool {
+    TRANSLATE_WINDOW_PINNED.load(Ordering::Relaxed)
+}
+
+fn is_main_window_visible() -> bool {
+    MAIN_WINDOW
+        .lock()
+        .as_ref()
+        .is_some_and(|window| window.is_visible().unwrap_or(false))
+}
+
+fn is_translate_window_visible() -> bool {
+    TRANSLATE_WINDOW
+        .lock()
+        .as_ref()
+        .is_some_and(|window| window.is_visible().unwrap_or(false))
 }
 
 pub fn set_keyboard_nav_enabled(enabled: bool) {
@@ -435,14 +499,26 @@ fn handle_nav_key(key: &'static str, shift: bool) {
 }
 
 #[cfg(windows)]
-fn is_mouse_outside_window(_window: &WebviewWindow) -> bool {
-    let cx = CURSOR_X.load(Ordering::Relaxed) as i32;
-    let cy = CURSOR_Y.load(Ordering::Relaxed) as i32;
+fn is_mouse_outside_translate_window() -> bool {
+    is_mouse_outside_hwnd(TRANSLATE_HWND.load(Ordering::Relaxed))
+}
 
-    let raw = MAIN_HWND.load(Ordering::Relaxed);
+#[cfg(not(windows))]
+fn is_mouse_outside_translate_window() -> bool {
+    let Some(window) = TRANSLATE_WINDOW.lock().clone() else {
+        return false;
+    };
+    is_mouse_outside_window(&window)
+}
+
+#[cfg(windows)]
+fn is_mouse_outside_hwnd(raw: isize) -> bool {
     if raw == 0 {
         return false;
     }
+
+    let cx = CURSOR_X.load(Ordering::Relaxed) as i32;
+    let cy = CURSOR_Y.load(Ordering::Relaxed) as i32;
 
     let hwnd = HWND(raw as *mut _);
     let mut rect = RECT::default();
@@ -450,17 +526,15 @@ fn is_mouse_outside_window(_window: &WebviewWindow) -> bool {
         return false;
     }
 
-    let outside = cx < rect.left || cx > rect.right || cy < rect.top || cy > rect.bottom;
-    debug!(
-        "点击检测: cursor=({},{}) rect=({},{},{},{}) → {}",
-        cx,
-        cy,
-        rect.left,
-        rect.top,
-        rect.right,
-        rect.bottom,
-        if outside { "outside" } else { "inside" }
-    );
+    cx < rect.left || cx > rect.right || cy < rect.top || cy > rect.bottom
+}
+
+#[cfg(windows)]
+fn is_mouse_outside_window(_window: &WebviewWindow) -> bool {
+    let outside = is_mouse_outside_hwnd(MAIN_HWND.load(Ordering::Relaxed));
+    if outside {
+        debug!("点击检测: cursor outside main window");
+    }
     outside
 }
 
@@ -496,6 +570,12 @@ fn dispatch_on_main_thread(f: impl FnOnce(&tauri::AppHandle, &WebviewWindow) + S
         .lock()
         .as_ref()
         .map(|window| window.app_handle().clone())
+        .or_else(|| {
+            TRANSLATE_WINDOW
+                .lock()
+                .as_ref()
+                .map(|window| window.app_handle().clone())
+        })
     else {
         return;
     };
@@ -511,6 +591,32 @@ fn dispatch_on_main_thread(f: impl FnOnce(&tauri::AppHandle, &WebviewWindow) + S
     }
 }
 
+fn dispatch_translate_action(f: impl FnOnce(&tauri::AppHandle, &WebviewWindow) + Send + 'static) {
+    let Some(app) = TRANSLATE_WINDOW
+        .lock()
+        .as_ref()
+        .map(|window| window.app_handle().clone())
+        .or_else(|| {
+            MAIN_WINDOW
+                .lock()
+                .as_ref()
+                .map(|window| window.app_handle().clone())
+        })
+    else {
+        return;
+    };
+    if let Err(err) = crate::main_thread::run_on_ui_thread(&app, {
+        let app = app.clone();
+        move || {
+            if let Some(window) = app.get_webview_window("translate-result") {
+                f(&app, &window);
+            }
+        }
+    }) {
+        warn!("Failed to dispatch translate window action to main thread: {err}");
+    }
+}
+
 fn handle_escape_key() {
     if !is_monitoring_active() {
         return;
@@ -523,10 +629,24 @@ fn handle_escape_key() {
 }
 
 fn handle_click_outside() {
-    if !is_monitoring_active() {
+    if !MOUSE_MONITORING_ENABLED.load(Ordering::Relaxed) {
         trace!("handle_click_outside: skipped (monitoring inactive)");
         return;
     }
+
+    if !TRANSLATE_WINDOW_PINNED.load(Ordering::Relaxed) {
+        dispatch_translate_action(|_app, window| {
+            if window.is_visible().unwrap_or(false) && is_mouse_outside_translate_window() {
+                info!("handle_click_outside: translate window visible and click outside, closing");
+                let _ = window.close();
+            }
+        });
+    }
+
+    if WINDOW_PINNED.load(Ordering::Relaxed) {
+        return;
+    }
+
     dispatch_on_main_thread(|app, window| {
         if window.is_visible().unwrap_or(false) && is_mouse_outside_window(window) {
             info!("handle_click_outside: window visible and click outside, hiding");

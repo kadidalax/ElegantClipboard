@@ -511,12 +511,13 @@ pub async fn open_translate_result_window(
         let _ = window.show();
         let _ = window.set_always_on_top(true);
         let _ = window.set_focus();
+        crate::input_monitor::translate_window_shown();
         return Ok(());
     }
 
     *PENDING_TRANSLATE_TEXT.lock() = text;
 
-    let _window = tauri::WebviewWindowBuilder::new(
+    let window = tauri::WebviewWindowBuilder::new(
         &app,
         label,
         tauri::WebviewUrl::App("/translate-result".into()),
@@ -534,7 +535,20 @@ pub async fn open_translate_result_window(
     .build()
     .map_err(|e| format!("创建翻译结果窗口失败: {e}"))?;
 
+    crate::input_monitor::setup_translate_window(&window);
+    crate::input_monitor::translate_window_shown();
+
     Ok(())
+}
+
+#[tauri::command]
+pub fn set_translate_window_pinned(pinned: bool) {
+    crate::input_monitor::set_translate_window_pinned(pinned);
+}
+
+#[tauri::command]
+pub fn is_translate_window_pinned() -> bool {
+    crate::input_monitor::is_translate_window_pinned()
 }
 
 /// 热键防抖标记，防止快速连按导致多个线程同时操作剪贴板

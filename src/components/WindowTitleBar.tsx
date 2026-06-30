@@ -1,5 +1,7 @@
+import { Pin16Filled, Pin16Regular } from "@fluentui/react-icons";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Card } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface WindowTitleBarProps {
   icon: React.ReactNode;
@@ -8,8 +10,16 @@ interface WindowTitleBarProps {
   extra?: React.ReactNode;
   /** 居中区域内容 */
   center?: React.ReactNode;
+  /** 固定按钮（替代最小化/关闭，用于翻译窗口等） */
+  pinControl?: {
+    pinned: boolean;
+    onToggle: () => void;
+    pinLabel: string;
+    unpinLabel: string;
+  };
 }
-export function WindowTitleBar({ icon, title, extra, center }: WindowTitleBarProps) {
+
+export function WindowTitleBar({ icon, title, extra, center, pinControl }: WindowTitleBarProps) {
   return (
     <Card className="shrink-0">
       <div
@@ -30,34 +40,60 @@ export function WindowTitleBar({ icon, title, extra, center }: WindowTitleBarPro
           className="flex gap-1"
           style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
         >
-          <button
-            onClick={() => getCurrentWindow().minimize()}
-            className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:bg-accent rounded-md transition-colors"
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <rect
-                x="2"
-                y="5.5"
-                width="8"
-                height="1"
-                rx="0.5"
-                fill="currentColor"
-              />
-            </svg>
-          </button>
-          <button
-            onClick={() => getCurrentWindow().close()}
-            className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:bg-destructive hover:text-destructive-foreground rounded-md transition-colors"
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path
-                d="M2.5 2.5L9.5 9.5M9.5 2.5L2.5 9.5"
-                stroke="currentColor"
-                strokeWidth="1.2"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
+          {pinControl ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={pinControl.onToggle}
+                  className={`w-8 h-8 flex items-center justify-center rounded-md transition-colors ${
+                    pinControl.pinned
+                      ? "text-primary bg-primary/10"
+                      : "text-muted-foreground hover:bg-accent"
+                  }`}
+                >
+                  {pinControl.pinned ? (
+                    <Pin16Filled className="w-4 h-4" />
+                  ) : (
+                    <Pin16Regular className="w-4 h-4" />
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {pinControl.pinned ? pinControl.unpinLabel : pinControl.pinLabel}
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <>
+              <button
+                onClick={() => getCurrentWindow().minimize()}
+                className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:bg-accent rounded-md transition-colors"
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <rect
+                    x="2"
+                    y="5.5"
+                    width="8"
+                    height="1"
+                    rx="0.5"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
+              <button
+                onClick={() => getCurrentWindow().close()}
+                className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:bg-destructive hover:text-destructive-foreground rounded-md transition-colors"
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path
+                    d="M2.5 2.5L9.5 9.5M9.5 2.5L2.5 9.5"
+                    stroke="currentColor"
+                    strokeWidth="1.2"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+            </>
+          )}
         </div>
       </div>
     </Card>

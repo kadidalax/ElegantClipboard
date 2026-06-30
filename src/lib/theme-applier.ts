@@ -74,10 +74,14 @@ const DEFAULT_CONTENT_FONT_STACK = '-apple-system, BlinkMacSystemFont, "Segoe UI
 function applyFontSettings() {
   const { customFont, uiFontSize, cardFont, cardFontSize } = useUISettings.getState();
   const root = document.documentElement;
+  const uiFontFamily = customFont
+    ? `"${customFont}", ${DEFAULT_FONT_STACK}`
+    : DEFAULT_FONT_STACK;
 
   // --- UI 字体 ---
+  root.style.setProperty("--ui-font-family", uiFontFamily);
   if (customFont) {
-    document.body.style.fontFamily = `"${customFont}", ${DEFAULT_FONT_STACK}`;
+    document.body.style.fontFamily = uiFontFamily;
   } else {
     document.body.style.removeProperty("font-family");
   }
@@ -124,6 +128,19 @@ function apply() {
   }
 }
 
+function isMainThemeWindow(): boolean {
+  const path = window.location.pathname;
+  return path === "/" || path === "/index.html" || path.endsWith("/index.html");
+}
+
+function syncTextPreviewTheme(theme: "dark" | "light") {
+  if (!useUISettings.getState().textPreviewEnabled || !isMainThemeWindow()) {
+    return;
+  }
+  // 文本预览窗口未打开时 emitTo 会失败，属正常情况
+  void emitTo("text-preview", "text-preview-theme", { theme }).catch(() => {});
+}
+
 /** 初始化主题系统，可安全多次调用，每个窗口仅执行一次 */
 export function initTheme(): Promise<void> {
   if (_initialized) return _readyPromise;
@@ -140,13 +157,7 @@ export function initTheme(): Promise<void> {
     const nextTextPreviewTheme = isDark ? "dark" : "light";
     if (nextTextPreviewTheme !== _lastTextPreviewTheme) {
       _lastTextPreviewTheme = nextTextPreviewTheme;
-      if (useUISettings.getState().textPreviewEnabled) {
-        emitTo("text-preview", "text-preview-theme", {
-          theme: nextTextPreviewTheme,
-        }).catch((error) => {
-          logError("Failed to sync text preview theme:", error);
-        });
-      }
+      syncTextPreviewTheme(nextTextPreviewTheme);
     }
   }
 
