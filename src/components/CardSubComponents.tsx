@@ -200,17 +200,12 @@ export const ActionToolbar = ({
   const { t } = useTranslation();
   return (
   <div
-    className="absolute right-1 top-1 z-20 flex items-center gap-0.5 bg-background/95 rounded-md px-0.5 shadow-sm border opacity-0 group-hover:opacity-100 transition-opacity"
+    className="absolute right-1 top-1 z-20 flex items-center gap-0.5 bg-background/95 rounded-md p-0.5 shadow border opacity-0 group-hover:opacity-100 transition-opacity"
     data-drag-ignore="true"
   >
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onTogglePin}
-          className="h-6 w-6"
-        >
+        <Button variant="ghost" size="icon" onClick={onTogglePin} className="h-7 w-7">
           {item.is_pinned ? (
             <Pin16Filled className="w-3.5 h-3.5 text-primary" />
           ) : (
@@ -222,12 +217,7 @@ export const ActionToolbar = ({
     </Tooltip>
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onToggleFavorite}
-          className="h-6 w-6"
-        >
+        <Button variant="ghost" size="icon" onClick={onToggleFavorite} className="h-7 w-7">
           {item.is_favorite ? (
             <Star16Filled className="w-3.5 h-3.5 text-yellow-500" />
           ) : (
@@ -239,12 +229,7 @@ export const ActionToolbar = ({
     </Tooltip>
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onCopy}
-          className="h-6 w-6"
-        >
+        <Button variant="ghost" size="icon" onClick={onCopy} className="h-7 w-7">
           <Copy16Regular className="w-3.5 h-3.5" />
         </Button>
       </TooltipTrigger>
@@ -253,12 +238,7 @@ export const ActionToolbar = ({
     {onTranslate && (
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onTranslate}
-            className="h-6 w-6"
-          >
+          <Button variant="ghost" size="icon" onClick={onTranslate} className="h-7 w-7">
             <Translate16Regular className={`w-3.5 h-3.5 ${translateActive ? "text-primary" : ""}`} />
           </Button>
         </TooltipTrigger>
@@ -267,12 +247,7 @@ export const ActionToolbar = ({
     )}
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onDelete}
-          className="h-6 w-6 hover:text-destructive"
-        >
+        <Button variant="ghost" size="icon" onClick={onDelete} className="h-7 w-7 hover:text-destructive">
           <Delete16Regular className="w-3.5 h-3.5" />
         </Button>
       </TooltipTrigger>

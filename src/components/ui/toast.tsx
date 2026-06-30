@@ -60,7 +60,7 @@ export function Toaster() {
             "max-w-[320px] break-words",
             toast.type === "error" && "bg-destructive text-destructive-foreground",
             toast.type === "success" && "bg-primary text-primary-foreground",
-            toast.type === "info" && "bg-secondary text-secondary-foreground",
+            toast.type === "info" && "bg-primary text-primary-foreground",
           )}
         >
           {toast.message}
