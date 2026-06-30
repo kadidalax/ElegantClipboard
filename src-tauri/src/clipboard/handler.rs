@@ -211,6 +211,10 @@ impl ClipboardHandler {
             ClipboardContent::Files(_) => "files",
         };
 
+        if content_type == "url" && !allowed.split(',').any(|t| t.trim() == "url") {
+            return allowed.split(',').any(|t| t.trim() == "text");
+        }
+
         allowed.split(',').any(|t| t.trim() == content_type)
     }
 

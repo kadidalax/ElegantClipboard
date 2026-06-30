@@ -100,7 +100,8 @@ fn is_valid_domain_host(host: &str) -> bool {
     }
 
     let tld = labels.last().unwrap();
-    tld.len() >= 2 && tld.bytes().all(|b| b.is_ascii_alphabetic())
+    // TLD 至少 2 字符且包含至少一个字母（兼容 punycode 如 xn--g6q252g）
+    tld.len() >= 2 && tld.bytes().any(|b| b.is_ascii_alphabetic())
 }
 
 fn is_valid_url_host(host: &str) -> bool {
