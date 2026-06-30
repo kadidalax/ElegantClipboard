@@ -95,11 +95,30 @@ jobs:
           $src = "src-tauri/target/${{ matrix.rust-target }}/release/elegant-clipboard.exe"
           Copy-Item $src "ElegantClipboard_${v}_${arch}_portable.exe"
 
+      - name: Upload portable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: portable-${{ matrix.arch }}
+          path: ElegantClipboard_*_portable.exe
+
+  upload-portable:
+    needs: build-and-release
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download portable artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "ElegantClipboard_*_portable.exe"
+          path: ./portables
+          merge-multiple: true
+
       - name: Upload portable to release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           draft: true
-          files: ElegantClipboard_*_portable.exe
+          files: portables/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
