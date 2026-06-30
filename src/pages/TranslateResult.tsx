@@ -188,16 +188,16 @@ export function TranslateResult() {
           )}
           {translateError && <p className="text-sm text-destructive">{translateError}</p>}
         </div>
-      </Card>
-
-      {/* 底部操作栏 */}
-      <Card className="shrink-0">
-        <div className="h-11 flex items-center justify-between px-4">
+        <div className="shrink-0 flex items-center justify-between px-4 py-2 border-t">
           <span className="text-xs text-muted-foreground">{t("translateResult.charCount", { count: text.length })}</span>
-          <Button variant="outline" size="sm"
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs text-primary hover:text-primary hover:bg-primary/10"
             onClick={() => doTranslate(text)}
-            disabled={translating || !text.trim()}>
-            <Translate16Regular className="w-4 h-4 mr-1" />
+            disabled={translating || !text.trim()}
+          >
+            <Translate16Regular className="w-3.5 h-3.5" />
             {translating ? t("translateResult.translating") : t("translateResult.retranslate")}
           </Button>
         </div>
