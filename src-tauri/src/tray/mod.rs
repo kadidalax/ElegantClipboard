@@ -210,10 +210,13 @@ fn handle_menu_event(app: &AppHandle, id: &str) {
             let _ = open_settings_window(app);
         }
         "restart" => {
-            // 先尝试 UAC 提权重启，再由 app.restart() 执行清理并重启
+            // 管理员模式下 restart_app() 已拉起新进程，直接退出；否则走标准重启
             crate::commands::window::save_main_window_placement(app);
-            crate::admin_launch::restart_app();
-            app.restart();
+            if crate::admin_launch::restart_app() {
+                app.exit(0);
+            } else {
+                app.restart();
+            }
         }
         "quit" => {
             crate::commands::window::save_main_window_placement(app);
