@@ -247,8 +247,13 @@ export function Settings() {
   }, []);
 
   // 设置变更时自动保存（跳过初始加载）
+  // 首次触发来自 loadSettings，标记完成并跳过；后续触发来自用户修改，执行保存
+  const settingsInitRef = useRef(false);
   useEffect(() => {
-    if (!settingsLoadedRef.current) return;
+    if (!settingsInitRef.current) {
+      settingsInitRef.current = true;
+      return;
+    }
     const timer = setTimeout(() => {
       saveSettings();
     }, 500);
