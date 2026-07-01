@@ -31,6 +31,7 @@ export function useWebDAVSettings() {
   const [lastSyncTime, setLastSyncTime] = useState("");
   const [loaded, setLoaded] = useState(false);
   const saveTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const snapshotRef = useRef<Record<string, string>>({});
 
   const loadSettings = useCallback(async () => {
     try {
@@ -83,26 +84,56 @@ export function useWebDAVSettings() {
     saveTimersRef.current.set(key, setTimeout(() => saveSetting(key, value), 300));
   }, [saveSetting]);
 
-  useEffect(() => { if (!loaded) return; saveSetting("webdav_enabled", enabled ? "true" : "false"); }, [enabled, loaded, saveSetting]);
-  useEffect(() => { if (!loaded) return; saveSetting("webdav_auto_sync", autoSync ? "true" : "false"); }, [autoSync, loaded, saveSetting]);
-  useEffect(() => { if (!loaded) return; saveSetting("webdav_sync_interval", syncInterval); }, [syncInterval, loaded, saveSetting]);
-  useEffect(() => { if (!loaded) return; debouncedSave("webdav_url", url); }, [url, loaded, debouncedSave]);
-  useEffect(() => { if (!loaded) return; debouncedSave("webdav_username", username); }, [username, loaded, debouncedSave]);
-  useEffect(() => { if (!loaded) return; debouncedSave("webdav_password", password); }, [password, loaded, debouncedSave]);
-  useEffect(() => { if (!loaded) return; debouncedSave("webdav_remote_dir", remoteDir); }, [remoteDir, loaded, debouncedSave]);
-  useEffect(() => { if (!loaded) return; saveSetting("webdav_proxy_mode", proxyMode); }, [proxyMode, loaded, saveSetting]);
-  useEffect(() => { if (!loaded) return; debouncedSave("webdav_proxy_url", proxyUrl); }, [proxyUrl, loaded, debouncedSave]);
-  useEffect(() => { if (!loaded) return; saveSetting("webdav_accept_invalid_certs", acceptInvalidCerts ? "true" : "false"); }, [acceptInvalidCerts, loaded, saveSetting]);
   useEffect(() => {
     if (!loaded) return;
-    saveSetting("webdav_sync_text", syncTypes.has("text") ? "true" : "false");
-    saveSetting("webdav_sync_image", syncTypes.has("image") ? "true" : "false");
-    saveSetting("webdav_sync_files", syncTypes.has("files") ? "true" : "false");
-    saveSetting("webdav_sync_video", syncTypes.has("video") ? "true" : "false");
-  }, [syncTypes, loaded, saveSetting]);
-  useEffect(() => { if (!loaded) return; debouncedSave("webdav_max_image_size_kb", maxImageSizeKb); }, [maxImageSizeKb, loaded, debouncedSave]);
-  useEffect(() => { if (!loaded) return; debouncedSave("webdav_max_file_size_kb", maxFileSizeKb); }, [maxFileSizeKb, loaded, debouncedSave]);
-  useEffect(() => { if (!loaded) return; debouncedSave("webdav_max_video_size_kb", maxVideoSizeKb); }, [maxVideoSizeKb, loaded, debouncedSave]);
+
+    const syncTypesValue = JSON.stringify([...syncTypes].sort());
+    const current: Record<string, string> = {
+      webdav_enabled: enabled ? "true" : "false",
+      webdav_auto_sync: autoSync ? "true" : "false",
+      webdav_sync_interval: syncInterval,
+      webdav_url: url,
+      webdav_username: username,
+      webdav_password: password,
+      webdav_remote_dir: remoteDir,
+      webdav_proxy_mode: proxyMode,
+      webdav_proxy_url: proxyUrl,
+      webdav_accept_invalid_certs: acceptInvalidCerts ? "true" : "false",
+      webdav_sync_types: syncTypesValue,
+      webdav_max_image_size_kb: maxImageSizeKb,
+      webdav_max_file_size_kb: maxFileSizeKb,
+      webdav_max_video_size_kb: maxVideoSizeKb,
+    };
+
+    const prev = snapshotRef.current;
+    const debounceKeys: Record<string, true> = {
+      webdav_url: true, webdav_username: true, webdav_password: true,
+      webdav_remote_dir: true, webdav_proxy_url: true,
+      webdav_max_image_size_kb: true, webdav_max_file_size_kb: true, webdav_max_video_size_kb: true,
+    };
+
+    for (const [key, value] of Object.entries(current)) {
+      if (prev[key] !== value) {
+        if (key === "webdav_sync_types") {
+          saveSetting("webdav_sync_text", syncTypes.has("text") ? "true" : "false");
+          saveSetting("webdav_sync_image", syncTypes.has("image") ? "true" : "false");
+          saveSetting("webdav_sync_files", syncTypes.has("files") ? "true" : "false");
+          saveSetting("webdav_sync_video", syncTypes.has("video") ? "true" : "false");
+        } else if (debounceKeys[key]) {
+          debouncedSave(key, value);
+        } else {
+          saveSetting(key, value);
+        }
+      }
+    }
+
+    snapshotRef.current = current;
+  }, [
+    loaded, enabled, autoSync, syncInterval, url, username, password,
+    remoteDir, proxyMode, proxyUrl, acceptInvalidCerts, syncTypes,
+    maxImageSizeKb, maxFileSizeKb, maxVideoSizeKb,
+    saveSetting, debouncedSave,
+  ]);
 
   return {
     enabled, setEnabled,
