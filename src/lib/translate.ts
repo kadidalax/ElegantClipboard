@@ -1,22 +1,28 @@
 import { invoke } from "@tauri-apps/api/core";
+import { t } from "@/i18n";
 import { logError } from "@/lib/logger";
 import { useTranslateSettings, type TranslateProvider } from "@/stores/translate-settings";
 
-export const LANGUAGES = [
-  { value: "zh", label: "中文" },
-  { value: "en", label: "英语" },
-  { value: "ja", label: "日语" },
-  { value: "ko", label: "韩语" },
-  { value: "th", label: "泰语" },
-  { value: "fr", label: "法语" },
-  { value: "de", label: "德语" },
-  { value: "ru", label: "俄语" },
-  { value: "vi", label: "越南语" },
-  { value: "es", label: "西班牙语" },
-  { value: "pt", label: "葡萄牙语" },
-  { value: "ar", label: "阿拉伯语" },
-  { value: "it", label: "意大利语" },
-];
+export function getLanguages() {
+  return [
+    { value: "zh", label: t("translate.lang.zh") },
+    { value: "en", label: t("translate.lang.en") },
+    { value: "ja", label: t("translate.lang.ja") },
+    { value: "ko", label: t("translate.lang.ko") },
+    { value: "th", label: t("translate.lang.th") },
+    { value: "fr", label: t("translate.lang.fr") },
+    { value: "de", label: t("translate.lang.de") },
+    { value: "ru", label: t("translate.lang.ru") },
+    { value: "vi", label: t("translate.lang.vi") },
+    { value: "es", label: t("translate.lang.es") },
+    { value: "pt", label: t("translate.lang.pt") },
+    { value: "ar", label: t("translate.lang.ar") },
+    { value: "it", label: t("translate.lang.it") },
+  ];
+}
+
+/** @deprecated use getLanguages() */
+export const LANGUAGES = getLanguages();
 
 function isChinese(text: string): boolean {
   const sample = text.slice(0, 200);
@@ -57,9 +63,22 @@ function resolveLanguages(text: string): { from: string; to: string } {
   return { from: "auto", to: "zh" };
 }
 
+/** 解析后端结构化错误码，返回本地化错误消息 */
+function localizeTranslateError(error: unknown): string {
+  if (typeof error !== "string") return String(error);
+  // 格式: "TRANSLATE:CODE" 或 "TRANSLATE:CODE:detail"
+  if (!error.startsWith("TRANSLATE:")) return error;
+  const parts = error.split(":");
+  const code = parts[1];
+  const detail = parts.slice(2).join(":");
+  const i18nKey = `translate.errors.${code}`;
+  const localized = detail ? t(i18nKey, { detail }) : t(i18nKey);
+  return localized !== i18nKey ? localized : error;
+}
+
 export async function translateText(text: string): Promise<string> {
   const settings = useTranslateSettings.getState();
-  if (!settings.enabled) throw new Error("翻译功能未启用");
+  if (!settings.enabled) throw new Error(t("translate.errors.FEATURE_DISABLED"));
 
   const { from, to } = resolveLanguages(text);
 
@@ -81,15 +100,20 @@ export async function translateText(text: string): Promise<string> {
     });
   } catch (error) {
     logError("翻译失败:", error);
-    throw error;
+    throw new Error(localizeTranslateError(error));
   }
 }
 
-export const PROVIDER_OPTIONS: { value: TranslateProvider; label: string; needsConfig: boolean }[] = [
-  { value: "microsoft", label: "微软翻译（免费）", needsConfig: false },
-  { value: "google_free", label: "谷歌翻译（免费）", needsConfig: false },
-  { value: "google_api", label: "谷歌翻译（API）", needsConfig: true },
-  { value: "baidu", label: "百度翻译（API）", needsConfig: true },
-  { value: "deeplx", label: "DeepLX", needsConfig: true },
-  { value: "openai", label: "OpenAI / AI", needsConfig: true },
-];
+export function getProviderOptions(): { value: TranslateProvider; label: string; needsConfig: boolean }[] {
+  return [
+    { value: "microsoft", label: t("translate.provider.microsoft"), needsConfig: false },
+    { value: "google_free", label: t("translate.provider.googleFree"), needsConfig: false },
+    { value: "google_api", label: t("translate.provider.googleApi"), needsConfig: true },
+    { value: "baidu", label: t("translate.provider.baidu"), needsConfig: true },
+    { value: "deeplx", label: "DeepLX", needsConfig: true },
+    { value: "openai", label: "OpenAI / AI", needsConfig: true },
+  ];
+}
+
+/** @deprecated use getProviderOptions() */
+export const PROVIDER_OPTIONS = getProviderOptions();

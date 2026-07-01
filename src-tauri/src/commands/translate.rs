@@ -11,11 +11,15 @@ fn parse_response(
     provider: &str,
 ) -> Result<serde_json::Value, String> {
     let status = resp.status();
-    let text = resp.text().map_err(|e| format!("读取响应失败: {e}"))?;
+    let text = resp
+        .text()
+        .map_err(|e| format!("TRANSLATE:READ_RESPONSE_FAILED:{e}"))?;
     if !status.is_success() {
-        return Err(format!("{provider}错误 ({status}): {text}"));
+        return Err(format!(
+            "TRANSLATE:PROVIDER_ERROR:{provider}:{status}:{text}"
+        ));
     }
-    serde_json::from_str(&text).map_err(|e| format!("解析响应失败: {e}"))
+    serde_json::from_str(&text).map_err(|e| format!("TRANSLATE:PARSE_RESPONSE_FAILED:{e}"))
 }
 
 /// 构建 HTTP 客户端（根据代理配置）
@@ -28,7 +32,7 @@ fn build_client(proxy_mode: &str, proxy_url: &str) -> Result<reqwest::blocking::
 
     builder
         .build()
-        .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))
+        .map_err(|e| format!("TRANSLATE:CREATE_CLIENT_FAILED:{e}"))
 }
 
 /// 微软翻译（通过 Edge 免费接口，无需 API Key）
@@ -42,12 +46,12 @@ fn translate_microsoft(
         .get("https://edge.microsoft.com/translate/auth")
         .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0")
         .send()
-        .map_err(|e| format!("获取微软翻译 token 失败: {e}"))?
+        .map_err(|e| format!("TRANSLATE:TOKEN_FAILED:{e}"))?
         .text()
-        .map_err(|e| format!("读取 token 失败: {e}"))?;
+        .map_err(|e| format!("TRANSLATE:TOKEN_READ_FAILED:{e}"))?;
 
     if token.is_empty() || token.len() < 20 {
-        return Err(format!("获取微软翻译 token 异常: {token}"));
+        return Err(format!("TRANSLATE:TOKEN_INVALID:{token}"));
     }
 
     let from_param = if from == "auto" { "" } else { from };
@@ -68,12 +72,12 @@ fn translate_microsoft(
         .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0")
         .json(&body)
         .send()
-        .map_err(|e| format!("微软翻译请求失败: {e}"))?;
-    let arr = parse_response(resp, "微软翻译")?;
+        .map_err(|e| format!("TRANSLATE:REQUEST_FAILED:{e}"))?;
+    let arr = parse_response(resp, "microsoft")?;
     arr[0]["translations"][0]["text"]
         .as_str()
         .map(std::string::ToString::to_string)
-        .ok_or_else(|| "翻译结果格式异常".to_string())
+        .ok_or_else(|| "TRANSLATE:INVALID_FORMAT".to_string())
 }
 
 /// DeepLX 翻译（自定义接口地址）
@@ -86,7 +90,7 @@ fn translate_deeplx(
 ) -> Result<String, String> {
     let endpoint = endpoint.trim();
     if endpoint.is_empty() {
-        return Err("请在设置中填写 DeepLX 请求地址".to_string());
+        return Err("TRANSLATE:INVALID_CONFIG:DEEPLX_ENDPOINT".to_string());
     }
     let source_lang = if from == "auto" { "" } else { from };
     let body = serde_json::json!({
@@ -99,7 +103,7 @@ fn translate_deeplx(
         .header("Content-Type", "application/json")
         .json(&body)
         .send()
-        .map_err(|e| format!("DeepLX 请求失败: {e}"))?;
+        .map_err(|e| format!("TRANSLATE:REQUEST_FAILED:{e}"))?;
     let val = parse_response(resp, "DeepLX")?;
     if let Some(data) = val["data"].as_str()
         && !data.is_empty()
@@ -111,7 +115,7 @@ fn translate_deeplx(
     {
         return Ok(first.to_string());
     }
-    Err(format!("DeepLX 翻译结果异常: {val}"))
+    Err(format!("TRANSLATE:INVALID_FORMAT:{val}"))
 }
 
 /// 谷歌翻译（免费接口）
@@ -131,8 +135,8 @@ fn translate_google_free(
     let resp = client
         .get(&url)
         .send()
-        .map_err(|e| format!("谷歌翻译请求失败: {e}"))?;
-    let val = parse_response(resp, "谷歌翻译")?;
+        .map_err(|e| format!("TRANSLATE:REQUEST_FAILED:{e}"))?;
+    let val = parse_response(resp, "google")?;
     let mut result = String::new();
     if let Some(sentences) = val[0].as_array() {
         for sentence in sentences {
@@ -142,7 +146,7 @@ fn translate_google_free(
         }
     }
     if result.is_empty() {
-        Err("翻译结果为空".to_string())
+        Err("TRANSLATE:EMPTY_RESULT".to_string())
     } else {
         Ok(result)
     }
@@ -157,7 +161,7 @@ fn translate_google_api(
     api_key: &str,
 ) -> Result<String, String> {
     if api_key.is_empty() {
-        return Err("请在设置中填写 Google API Key".to_string());
+        return Err("TRANSLATE:INVALID_CONFIG:GOOGLE_API_KEY".to_string());
     }
     let source = if from == "auto" { "" } else { from };
     let url = format!("https://translation.googleapis.com/language/translate/v2?key={api_key}");
@@ -169,12 +173,12 @@ fn translate_google_api(
         .post(&url)
         .json(&body)
         .send()
-        .map_err(|e| format!("Google API 请求失败: {e}"))?;
-    let val = parse_response(resp, "Google API")?;
+        .map_err(|e| format!("TRANSLATE:REQUEST_FAILED:{e}"))?;
+    let val = parse_response(resp, "google_api")?;
     val["data"]["translations"][0]["translatedText"]
         .as_str()
         .map(std::string::ToString::to_string)
-        .ok_or_else(|| "翻译结果格式异常".to_string())
+        .ok_or_else(|| "TRANSLATE:INVALID_FORMAT".to_string())
 }
 
 /// 百度翻译
@@ -187,7 +191,7 @@ fn translate_baidu(
     secret_key: &str,
 ) -> Result<String, String> {
     if app_id.is_empty() || secret_key.is_empty() {
-        return Err("请在设置中填写百度翻译 APP ID 和密钥".to_string());
+        return Err("TRANSLATE:INVALID_CONFIG:BAIDU_CREDENTIALS".to_string());
     }
     fn map_lang(lang: &str) -> &str {
         match lang {
@@ -225,18 +229,18 @@ fn translate_baidu(
         .post("https://fanyi-api.baidu.com/api/trans/vip/translate")
         .form(&params)
         .send()
-        .map_err(|e| format!("百度翻译请求失败: {e}"))?;
-    let val = parse_response(resp, "百度翻译")?;
+        .map_err(|e| format!("TRANSLATE:REQUEST_FAILED:{e}"))?;
+    let val = parse_response(resp, "baidu")?;
     if let Some(err_code) = val["error_code"].as_str() {
-        let err_msg = val["error_msg"].as_str().unwrap_or("未知错误");
-        return Err(format!("百度翻译错误 ({err_code}): {err_msg}"));
+        let err_msg = val["error_msg"].as_str().unwrap_or("UNKNOWN");
+        return Err(format!("TRANSLATE:PROVIDER_ERROR:{err_code}:{err_msg}"));
     }
     let results = val["trans_result"]
         .as_array()
-        .ok_or_else(|| "翻译结果格式异常".to_string())?;
+        .ok_or_else(|| "TRANSLATE:INVALID_FORMAT".to_string())?;
     let translated: Vec<&str> = results.iter().filter_map(|r| r["dst"].as_str()).collect();
     if translated.is_empty() {
-        Err("翻译结果为空".to_string())
+        Err("TRANSLATE:EMPTY_RESULT".to_string())
     } else {
         Ok(translated.join("\n"))
     }
@@ -253,7 +257,7 @@ fn translate_openai(
     model: &str,
 ) -> Result<String, String> {
     if api_key.is_empty() {
-        return Err("请在设置中填写 API Key".to_string());
+        return Err("TRANSLATE:INVALID_CONFIG:API_KEY".to_string());
     }
     let base = if endpoint.is_empty() {
         "https://api.openai.com/v1"
@@ -287,12 +291,12 @@ fn translate_openai(
         .header("Authorization", format!("Bearer {api_key}"))
         .json(&body)
         .send()
-        .map_err(|e| format!("AI 翻译请求失败: {e}"))?;
-    let val = parse_response(resp, "AI 翻译")?;
+        .map_err(|e| format!("TRANSLATE:REQUEST_FAILED:{e}"))?;
+    let val = parse_response(resp, "openai")?;
     val["choices"][0]["message"]["content"]
         .as_str()
         .map(|s| s.trim().to_string())
-        .ok_or_else(|| "翻译结果格式异常".to_string())
+        .ok_or_else(|| "TRANSLATE:INVALID_FORMAT".to_string())
 }
 
 /// 翻译文本（Tauri 命令）
@@ -349,11 +353,11 @@ pub async fn translate_text(
                 &openai_api_key.unwrap_or_default(),
                 &openai_model.unwrap_or_default(),
             ),
-            other => Err(format!("不支持的翻译提供者: {other}")),
+            other => Err(format!("TRANSLATE:UNSUPPORTED_PROVIDER:{other}")),
         }
     })
     .await
-    .map_err(|e| format!("翻译任务失败: {e}"))?
+    .map_err(|e| format!("TRANSLATE:TASK_FAILED:{e}"))?
 }
 
 /// 将文本写入系统剪贴板
@@ -364,11 +368,11 @@ pub async fn write_text_to_clipboard(
     record: Option<bool>,
 ) -> Result<(), String> {
     let write_fn = || {
-        let clipboard =
-            clipboard_rs::ClipboardContext::new().map_err(|e| format!("无法访问剪贴板: {e}"))?;
+        let clipboard = clipboard_rs::ClipboardContext::new()
+            .map_err(|e| format!("CLIPBOARD:ACCESS_FAILED:{e}"))?;
         clipboard
             .set_text(text.clone())
-            .map_err(|e| format!("写入剪贴板失败: {e}"))?;
+            .map_err(|e| format!("CLIPBOARD:WRITE_FAILED:{e}"))?;
         Ok(())
     };
     if record.unwrap_or(false) {
@@ -540,7 +544,7 @@ pub async fn open_translate_result_window(
     .always_on_top(true)
     .center()
     .build()
-    .map_err(|e| format!("创建翻译结果窗口失败: {e}"))?;
+    .map_err(|e| format!("TRANSLATE:CREATE_WINDOW_FAILED:{e}"))?;
 
     crate::input_monitor::setup_translate_window(&window);
     crate::input_monitor::translate_window_shown();
@@ -601,7 +605,10 @@ pub fn register_translate_selection_shortcut(app: &tauri::AppHandle) {
     );
 
     if !registered {
-        tracing::warn!("翻译选中文字快捷键格式无效: {}", shortcut_str);
+        tracing::warn!(
+            "Invalid translate selection shortcut format: {}",
+            shortcut_str
+        );
     }
 }
 
@@ -631,11 +638,14 @@ fn trigger_translate_selection(app: &tauri::AppHandle) {
             if let Err(err) = crate::main_thread::run_on_ui_thread(&app.clone(), move || {
                 tauri::async_runtime::spawn(async move {
                     if let Err(e) = open_translate_result_window(app, text).await {
-                        tracing::error!("打开翻译结果窗口失败: {}", e);
+                        tracing::error!("Failed to open translate result window: {}", e);
                     }
                 });
             }) {
-                tracing::error!("翻译窗口调度到主线程失败: {}", err);
+                tracing::error!(
+                    "Failed to dispatch translate window to main thread: {}",
+                    err
+                );
             }
         }
         Ok(_) => {
@@ -643,11 +653,11 @@ fn trigger_translate_selection(app: &tauri::AppHandle) {
             let _ = app
                 .notification()
                 .builder()
-                .title("翻译选中文字")
-                .body("未检测到选中的文字")
+                .title("Translate Selection")
+                .body("No text detected")
                 .show();
         }
-        Err(e) => tracing::error!("获取选中文字失败: {}", e),
+        Err(e) => tracing::error!("Failed to get selected text: {}", e),
     }
 }
 
@@ -664,14 +674,14 @@ pub async fn update_translate_selection_shortcut(
     }
 
     if !crate::shortcut_has_modifier(&new_shortcut) {
-        return Err("快捷键至少包含一个修饰键 (Ctrl/Alt/Win)".to_string());
+        return Err("SHORTCUT:MODIFIER_REQUIRED".to_string());
     }
 
     let state = app.state::<Arc<AppState>>();
     let settings_repo = database::SettingsRepository::new(&state.db);
     settings_repo
         .set("translate_selection_shortcut", &new_shortcut)
-        .map_err(|e| format!("保存快捷键失败: {e}"))?;
+        .map_err(|e| format!("SHORTCUT:SAVE_FAILED:{e}"))?;
 
     let enabled = settings_repo
         .get("translate_selection_enabled")

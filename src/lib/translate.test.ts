@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { translateText, LANGUAGES, PROVIDER_OPTIONS } from "./translate";
+import { translateText, getLanguages, getProviderOptions } from "./translate";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn((command: string, args?: Record<string, unknown>) => {
@@ -8,6 +8,15 @@ vi.mock("@tauri-apps/api/core", () => ({
     }
     return Promise.resolve();
   }),
+}));
+
+vi.mock("@/i18n", () => ({
+  t: (key: string, params?: Record<string, string>) => {
+    if (params) {
+      return Object.entries(params).reduce((acc, [k, v]) => acc.replace(`{{${k}}}`, v), key);
+    }
+    return key;
+  },
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -38,31 +47,31 @@ vi.mock("@/stores/translate-settings", () => ({
 }));
 
 describe("translate", () => {
-  describe("LANGUAGES", () => {
+  describe("getLanguages", () => {
     it("has 13 languages", () => {
-      expect(LANGUAGES).toHaveLength(13);
+      expect(getLanguages()).toHaveLength(13);
     });
 
     it("has Chinese", () => {
-      expect(LANGUAGES.find((l) => l.value === "zh")).toBeDefined();
+      expect(getLanguages().find((l) => l.value === "zh")).toBeDefined();
     });
 
     it("has English", () => {
-      expect(LANGUAGES.find((l) => l.value === "en")).toBeDefined();
+      expect(getLanguages().find((l) => l.value === "en")).toBeDefined();
     });
   });
 
-  describe("PROVIDER_OPTIONS", () => {
+  describe("getProviderOptions", () => {
     it("has 6 providers", () => {
-      expect(PROVIDER_OPTIONS).toHaveLength(6);
+      expect(getProviderOptions()).toHaveLength(6);
     });
 
     it("has Microsoft provider", () => {
-      expect(PROVIDER_OPTIONS.find((p) => p.value === "microsoft")).toBeDefined();
+      expect(getProviderOptions().find((p) => p.value === "microsoft")).toBeDefined();
     });
 
     it("has OpenAI provider", () => {
-      expect(PROVIDER_OPTIONS.find((p) => p.value === "openai")).toBeDefined();
+      expect(getProviderOptions().find((p) => p.value === "openai")).toBeDefined();
     });
   });
 
@@ -96,7 +105,7 @@ describe("translate", () => {
         ...mockGetState(),
         enabled: false,
       });
-      await expect(translateText("Hello")).rejects.toThrow("翻译功能未启用");
+      await expect(translateText("Hello")).rejects.toThrow("translate.errors.FEATURE_DISABLED");
     });
 
     it("uses manual language mode", async () => {

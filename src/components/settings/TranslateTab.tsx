@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { useTranslation } from "@/i18n";
 import { logError } from "@/lib/logger";
 import { KEY_CODE_MAP } from "@/lib/shortcut-helpers";
-import { PROVIDER_OPTIONS, LANGUAGES, translateText } from "@/lib/translate";
+import { getProviderOptions, getLanguages, translateText } from "@/lib/translate";
 import { useTranslateSettings, type TranslateProvider, type LanguageMode } from "@/stores/translate-settings";
 
 export function TranslateTab() {
@@ -176,7 +176,7 @@ export function TranslateTab() {
                 <Select value={provider} onValueChange={(v) => setProvider(v as TranslateProvider)}>
                   <SelectTrigger className="w-[180px] h-8 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {PROVIDER_OPTIONS.map((opt) => (
+                    {getProviderOptions().map((opt) => (
                       <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                     ))}
                   </SelectContent>
@@ -352,7 +352,7 @@ export function TranslateTab() {
                       <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="auto">{t("settings.translate.langModeAuto")}</SelectItem>
-                        {LANGUAGES.map((lang) => (<SelectItem key={lang.value} value={lang.value}>{lang.label}</SelectItem>))}
+                        {getLanguages().map((lang) => (<SelectItem key={lang.value} value={lang.value}>{lang.label}</SelectItem>))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -361,7 +361,7 @@ export function TranslateTab() {
                     <Select value={targetLanguage || "zh"} onValueChange={setTargetLanguage}>
                       <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {LANGUAGES.map((lang) => (<SelectItem key={lang.value} value={lang.value}>{lang.label}</SelectItem>))}
+                        {getLanguages().map((lang) => (<SelectItem key={lang.value} value={lang.value}>{lang.label}</SelectItem>))}
                       </SelectContent>
                     </Select>
                   </div>
