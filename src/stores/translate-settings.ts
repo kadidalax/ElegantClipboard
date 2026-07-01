@@ -112,6 +112,9 @@ function pickTranslateData(state: TranslateSettingsStore): TranslateSettings {
   return next;
 }
 
+/** DB 中的实际值，用于脏检查。loadSettings 完成后初始化，SYNC_EVENT 时同步更新。 */
+let savedSnapshot: TranslateSettings = { ...DEFAULT_TRANSLATE_SETTINGS };
+
 function updateAndPersist(
   set: (partial: Partial<TranslateSettingsStore>) => void,
   get: () => TranslateSettingsStore,
@@ -122,17 +125,24 @@ function updateAndPersist(
     logError("Failed to broadcast translate settings change:", error);
   });
   const snapshot = { ...pickTranslateData(get()), ...patch };
-  saveTranslateSettings(snapshot).catch((error) => {
+  const changed = (Object.entries(FIELD_TO_DB_KEY) as [keyof TranslateSettings, string][])
+    .filter(([field]) => snapshot[field] !== savedSnapshot[field]);
+  if (changed.length === 0) return;
+  saveChangedFields(snapshot, changed).catch((error) => {
     logError("Failed to save translate settings:", error);
   });
 }
 
-async function saveTranslateSettings(state: TranslateSettings) {
-  const entries = Object.entries(FIELD_TO_DB_KEY) as [keyof TranslateSettings, string][];
-  const promises = entries.map(([field, dbKey]) =>
-    invoke("set_setting", { key: dbKey, value: serializeValue(state[field]) }),
+async function saveChangedFields(
+  snapshot: TranslateSettings,
+  changed: [keyof TranslateSettings, string][],
+) {
+  await Promise.all(
+    changed.map(([field, dbKey]) =>
+      invoke("set_setting", { key: dbKey, value: serializeValue(snapshot[field]) }),
+    ),
   );
-  await Promise.all(promises);
+  savedSnapshot = { ...snapshot };
 }
 
 export const useTranslateSettings = create<TranslateSettingsStore>((set, get) => {
@@ -163,7 +173,9 @@ export const useTranslateSettings = create<TranslateSettingsStore>((set, get) =>
             (parsed[field] as string) = value || (def as string);
           }
         }
-        set({ ...DEFAULT_TRANSLATE_SETTINGS, ...parsed, loaded: true });
+        const loaded = { ...DEFAULT_TRANSLATE_SETTINGS, ...parsed };
+        savedSnapshot = { ...loaded };
+        set({ ...loaded, loaded: true });
       } catch (error) {
         logError("Failed to load translate settings:", error);
       }
@@ -196,6 +208,7 @@ export async function initTranslateSettingsListener() {
   try {
     unlistenFn = await listen<Partial<TranslateSettings>>(SYNC_EVENT, (event) => {
       useTranslateSettings.setState(event.payload);
+      savedSnapshot = { ...savedSnapshot, ...event.payload };
     });
   } catch {
     // non-Tauri environments
