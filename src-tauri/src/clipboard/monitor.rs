@@ -106,12 +106,15 @@ impl ClipboardMonitor {
         let worker_handler = handler.clone();
         let worker_running = running.clone();
         let worker_app = app_handle.clone();
-        std::thread::Builder::new()
+        if let Err(e) = std::thread::Builder::new()
             .name("clipboard-worker".into())
             .spawn(move || {
                 Self::run_capture_worker(rx, worker_handler, worker_running, worker_app);
             })
-            .expect("failed to spawn clipboard-worker thread");
+        {
+            tracing::error!("Failed to spawn clipboard-worker thread: {e}");
+            return;
+        }
 
         // ── watcher 线程：OS 事件监听 + 快速校验 → 发送到 channel ──
         let handle = std::thread::spawn(move || {

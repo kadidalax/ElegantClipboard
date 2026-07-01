@@ -72,15 +72,52 @@ pub(crate) fn apply_pending_import(db_path: &std::path::Path) {
         return;
     };
 
-    for attempt in 1..=10 {
-        let deleted = ["", "-wal", "-shm"].iter().all(|ext| {
-            let f = db_dir.join(format!("clipboard.db{ext}"));
-            !f.exists() || fs::remove_file(&f).is_ok()
-        });
+    // 原子替换：先备份原库 → rename staging → 失败则回滚
+    let backup = db_dir.join("clipboard.db.bak");
+    let backup_wal = db_dir.join("clipboard.db.bak-wal");
+    let backup_shm = db_dir.join("clipboard.db.bak-shm");
 
-        if deleted && fs::rename(&staging, db_path).is_ok() {
+    for attempt in 1..=10 {
+        // 1. 将原库 rename 到 backup（原子操作，不会丢数据）
+        let mut backed_up = true;
+        for (src_ext, dst_ext) in &[("", ".bak"), ("-wal", ".bak-wal"), ("-shm", ".bak-shm")] {
+            let src = db_dir.join(format!("clipboard.db{src_ext}"));
+            let dst = db_dir.join(format!("clipboard.db{dst_ext}"));
+            if src.exists() && fs::rename(&src, &dst).is_err() {
+                backed_up = false;
+                break;
+            }
+        }
+
+        if !backed_up {
+            // 备份失败，回滚已备份的文件
+            for (src_ext, dst_ext) in &[("", ".bak"), ("-wal", ".bak-wal"), ("-shm", ".bak-shm")] {
+                let src = db_dir.join(format!("clipboard.db{dst_ext}"));
+                let dst = db_dir.join(format!("clipboard.db{src_ext}"));
+                let _ = fs::rename(&src, &dst);
+            }
+            if attempt < 10 {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            }
+            continue;
+        }
+
+        // 2. rename staging 到 db_path
+        if fs::rename(&staging, db_path).is_ok() {
             tracing::info!("Import staging applied (attempt {attempt})");
+            // 成功，删除 backup
+            let _ = fs::remove_file(&backup);
+            let _ = fs::remove_file(&backup_wal);
+            let _ = fs::remove_file(&backup_shm);
             return;
+        }
+
+        // 3. rename 失败，回滚原库
+        tracing::warn!("Rename staging failed (attempt {attempt}), rolling back");
+        for (src_ext, dst_ext) in &[("", ".bak"), ("-wal", ".bak-wal"), ("-shm", ".bak-shm")] {
+            let src = db_dir.join(format!("clipboard.db{dst_ext}"));
+            let dst = db_dir.join(format!("clipboard.db{src_ext}"));
+            let _ = fs::rename(&src, &dst);
         }
 
         if attempt < 10 {
@@ -88,12 +125,13 @@ pub(crate) fn apply_pending_import(db_path: &std::path::Path) {
         }
     }
 
+    // 所有尝试都失败，尝试 copy fallback（原库已回滚，不会丢失）
     tracing::error!("Rename failed after 10 attempts, trying copy fallback");
     if fs::copy(&staging, db_path).is_ok() {
         let _ = fs::remove_file(&staging);
         tracing::info!("Import applied via copy fallback");
     } else {
-        tracing::error!("Import staging completely failed");
+        tracing::error!("Import staging completely failed, original database preserved");
     }
 }
 

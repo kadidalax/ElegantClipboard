@@ -1043,7 +1043,7 @@ pub fn start_auto_sync_task(db: crate::database::Database, data_dir: std::path::
     if AUTO_SYNC_STARTED.swap(true, std::sync::atomic::Ordering::SeqCst) {
         return;
     }
-    std::thread::Builder::new()
+    if let Err(e) = std::thread::Builder::new()
         .name("webdav-auto-sync".into())
         .spawn(move || {
             std::thread::sleep(std::time::Duration::from_secs(30));
@@ -1354,7 +1354,9 @@ pub fn start_auto_sync_task(db: crate::database::Database, data_dir: std::path::
                 }
             }
         })
-        .expect("failed to spawn webdav-auto-sync thread");
+    {
+        tracing::error!("Failed to spawn webdav-auto-sync thread: {e}");
+    }
 }
 
 /// 从 WebDAV 下载 ZIP

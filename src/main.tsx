@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { Toaster } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { initLocale } from "@/i18n";
+import { initTranslateSettingsListener, useTranslateSettings } from "@/stores/translate-settings";
 import { initUISettingsStore } from "@/stores/ui-settings";
 import App from "./App";
 import { Settings } from "./pages/Settings";
@@ -52,6 +53,8 @@ async function bootstrap() {
   try {
     await initLocale();
     await initUISettingsStore();
+    await initTranslateSettingsListener();
+    await useTranslateSettings.getState().loadSettings();
   } catch (error) {
     console.error("Bootstrap init failed:", error);
   }

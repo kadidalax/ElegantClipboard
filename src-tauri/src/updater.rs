@@ -44,9 +44,18 @@ fn build_client() -> reqwest::blocking::Client {
         debug!("Update proxy: direct connection");
     }
 
-    builder
-        .build()
-        .expect("Failed to build reqwest client for updater")
+    match builder.build() {
+        Ok(client) => client,
+        Err(e) => {
+            tracing::error!("Failed to build reqwest client for updater: {e}");
+            // 降级：用默认配置重试
+            reqwest::blocking::Client::builder()
+                .connect_timeout(Duration::from_secs(15))
+                .timeout(Duration::from_secs(30))
+                .build()
+                .expect("Failed to build fallback reqwest client")
+        }
+    }
 }
 
 // ── GitHub API 响应类型 ──
@@ -288,6 +297,27 @@ pub fn download(app: &tauri::AppHandle, url: &str, file_name: &str) -> Result<St
 ///
 /// 完全静默可改用 `/S`；此处选 `/P` 是为了让用户能看到更新进度反馈。
 pub fn install(installer_path: &str) -> Result<(), String> {
+    let path = std::path::Path::new(installer_path);
+
+    // 安全校验：只允许从 %TEMP%/ElegantClipboard/ 下的 setup.exe
+    let temp_dir = std::env::temp_dir().join("ElegantClipboard");
+    let canonical_temp = temp_dir.canonicalize().unwrap_or(temp_dir);
+    let canonical_path = path
+        .canonicalize()
+        .map_err(|e| format!("安装包路径无效: {e}"))?;
+
+    if !canonical_path.starts_with(&canonical_temp) {
+        return Err("安装包路径不在允许的目录中".to_string());
+    }
+
+    let file_name = canonical_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("");
+    if !file_name.ends_with("-setup.exe") && !file_name.ends_with("-update.exe") {
+        return Err("安装包文件名不符合预期格式".to_string());
+    }
+
     info!(
         "Launching installer (passive + restart): {}",
         installer_path

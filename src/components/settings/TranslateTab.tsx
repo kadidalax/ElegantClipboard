@@ -46,13 +46,20 @@ export function TranslateTab() {
   const [tsSaving, setTsSaving] = useState(false);
 
   const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const pendingRef = useRef<Record<string, { fn: (v: string) => void; value: string }>>({});
   const debounced = useCallback((key: string, fn: (v: string) => void, value: string) => {
     if (timersRef.current[key]) clearTimeout(timersRef.current[key]);
-    timersRef.current[key] = setTimeout(() => fn(value), 300);
+    pendingRef.current[key] = { fn, value };
+    timersRef.current[key] = setTimeout(() => {
+      delete pendingRef.current[key];
+      fn(value);
+    }, 300);
   }, []);
 
   useEffect(() => {
     return () => {
+      // flush 待写值，避免 unmount 时丢失未持久化的设置
+      Object.values(pendingRef.current).forEach(({ fn, value }) => fn(value));
       Object.values(timersRef.current).forEach(clearTimeout);
     };
   }, []);

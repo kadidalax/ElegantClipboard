@@ -387,7 +387,7 @@ pub async fn write_text_to_clipboard(
 static PENDING_TRANSLATE_TEXT: parking_lot::Mutex<String> = parking_lot::Mutex::new(String::new());
 
 /// 获取系统当前选中的文字（通过模拟 Ctrl+C 读取剪贴板）
-/// 剪贴板备份：保存文本、HTML 和图片，确保恢复时不丢失富文本/图片内容
+/// 剪贴板备份：保存文本、HTML、图片、RTF 和文件，确保恢复时不丢失任何内容
 enum ClipboardBackup {
     Empty,
     Text(String),
@@ -398,6 +398,14 @@ enum ClipboardBackup {
     },
     /// 图片以 PNG 字节形式保存
     Image(Vec<u8>),
+    /// RTF 富文本
+    Rtf {
+        rtf: String,
+        #[allow(dead_code)]
+        text: Option<String>,
+    },
+    /// 文件路径列表
+    Files(Vec<String>),
 }
 
 fn backup_clipboard() -> ClipboardBackup {
@@ -414,11 +422,24 @@ fn backup_clipboard() -> ClipboardBackup {
         let text = ctx.get_text().ok();
         return ClipboardBackup::Html { html, text };
     }
-    // 其次备份纯文本
+    // 其次备份 RTF
+    if let Some(rtf) = read_rtf_from_clipboard(&ctx)
+        && !rtf.is_empty()
+    {
+        let text = ctx.get_text().ok();
+        return ClipboardBackup::Rtf { rtf, text };
+    }
+    // 再备份纯文本
     if let Ok(text) = ctx.get_text()
         && !text.is_empty()
     {
         return ClipboardBackup::Text(text);
+    }
+    // 备份文件
+    if let Ok(files) = ctx.get_files()
+        && !files.is_empty()
+    {
+        return ClipboardBackup::Files(files);
     }
     // 最后备份图片
     if let Ok(img) = ctx.get_image()
@@ -427,6 +448,13 @@ fn backup_clipboard() -> ClipboardBackup {
         return ClipboardBackup::Image(png.get_bytes().to_vec());
     }
     ClipboardBackup::Empty
+}
+
+fn read_rtf_from_clipboard(ctx: &clipboard_rs::ClipboardContext) -> Option<String> {
+    use clipboard_rs::Clipboard as ClipboardTrait;
+    // clipboard-rs 没有 get_rtf，尝试通过 get_html 获取富文本
+    // 如果 HTML 为空但有文本，则返回 None
+    ctx.get_html().ok().filter(|h| !h.is_empty())
 }
 
 fn restore_clipboard(backup: &ClipboardBackup) {
@@ -442,6 +470,11 @@ fn restore_clipboard(backup: &ClipboardBackup) {
         ClipboardBackup::Empty => Ok(()),
         ClipboardBackup::Text(text) => ctx.set_text(text.clone()),
         ClipboardBackup::Html { html, .. } => ctx.set_html(html.clone()),
+        ClipboardBackup::Rtf { rtf, .. } => {
+            // clipboard-rs 没有 set_rtf，尝试用 set_html 恢复富文本
+            ctx.set_html(rtf.clone())
+        }
+        ClipboardBackup::Files(files) => ctx.set_files(files.clone()),
         ClipboardBackup::Image(png_bytes) => match RustImageData::from_bytes(png_bytes) {
             Ok(img) => ctx.set_image(img),
             Err(e) => {

@@ -332,36 +332,52 @@ fn apply_paste_shortcuts(
                     let state = app.state::<Arc<AppState>>().inner().clone();
                     let app_handle = app.clone();
                     std::thread::spawn(move || {
-                        let _guard = QUICK_PASTE_LOCK.lock();
-                        if is_first {
-                            let result = match kind {
-                                PasteKind::Quick => commands::clipboard::quick_paste_by_slot(
-                                    &state,
-                                    &app_handle,
-                                    slot,
-                                ),
-                                PasteKind::Favorite => {
-                                    commands::clipboard::quick_paste_favorite_by_slot(
+                        // catch_unwind 确保 panic 时也能重置标志，避免快捷键永久失效
+                        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            let _guard = QUICK_PASTE_LOCK.lock();
+                            if is_first {
+                                let result = match kind {
+                                    PasteKind::Quick => commands::clipboard::quick_paste_by_slot(
                                         &state,
                                         &app_handle,
                                         slot,
-                                    )
+                                    ),
+                                    PasteKind::Favorite => {
+                                        commands::clipboard::quick_paste_favorite_by_slot(
+                                            &state,
+                                            &app_handle,
+                                            slot,
+                                        )
+                                    }
+                                };
+                                if let Err(err) = result {
+                                    tracing::warn!(
+                                        "{} {} paste failed: {}",
+                                        kind.label(),
+                                        slot,
+                                        err
+                                    );
+                                    active_slots.lock().remove(&slot);
                                 }
-                            };
-                            if let Err(err) = result {
-                                tracing::warn!("{} {} paste failed: {}", kind.label(), slot, err);
-                                active_slots.lock().remove(&slot);
+                            } else {
+                                std::thread::sleep(std::time::Duration::from_millis(50));
+                                if let Err(err) = commands::clipboard::simulate_paste() {
+                                    tracing::warn!(
+                                        "{} {} repeat paste failed: {}",
+                                        kind.label(),
+                                        slot,
+                                        err
+                                    );
+                                }
                             }
-                        } else {
-                            std::thread::sleep(std::time::Duration::from_millis(50));
-                            if let Err(err) = commands::clipboard::simulate_paste() {
-                                tracing::warn!(
-                                    "{} {} repeat paste failed: {}",
-                                    kind.label(),
-                                    slot,
-                                    err
-                                );
-                            }
+                        }));
+                        if let Err(panic) = result {
+                            tracing::error!(
+                                "{} {} paste thread panicked: {:?}",
+                                kind.label(),
+                                slot,
+                                panic
+                            );
                         }
                         PASTE_IN_PROGRESS.store(false, std::sync::atomic::Ordering::Release);
                     });

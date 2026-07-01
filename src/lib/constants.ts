@@ -24,8 +24,6 @@ export const GROUP_VALUES = [
 
 export type GroupValue = (typeof GROUP_VALUES)[number]["value"];
 
-/** 列表默认拉取条数，避免万级历史全量 IPC */
-export const LIST_FETCH_LIMIT = 2000;
 
 export function getGroups() {
   return GROUP_VALUES.map((group) => ({

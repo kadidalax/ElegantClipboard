@@ -1,4 +1,3 @@
-import { LIST_FETCH_LIMIT } from "@/lib/constants";
 import type { ClipboardItem } from "@/stores/clipboard";
 
 function compareItems(a: ClipboardItem, b: ClipboardItem): number {
@@ -14,13 +13,9 @@ function compareItems(a: ClipboardItem, b: ClipboardItem): number {
 export function mergeCaptureItem(
   items: ClipboardItem[],
   incoming: ClipboardItem,
-  maxItems = LIST_FETCH_LIMIT,
 ): ClipboardItem[] {
   const merged = [incoming, ...items.filter((item) => item.id !== incoming.id)];
   merged.sort(compareItems);
-  if (merged.length > maxItems) {
-    merged.length = maxItems;
-  }
   return merged;
 }
 

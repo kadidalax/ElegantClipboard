@@ -124,7 +124,7 @@ pub(crate) fn hide_text_preview_window<R: tauri::Runtime>(app: &tauri::AppHandle
 static RESUME_TX: std::sync::LazyLock<std::sync::mpsc::Sender<crate::clipboard::ClipboardMonitor>> =
     std::sync::LazyLock::new(|| {
         let (tx, rx) = std::sync::mpsc::channel::<crate::clipboard::ClipboardMonitor>();
-        std::thread::Builder::new()
+        if let Err(e) = std::thread::Builder::new()
             .name("monitor-resume".into())
             .spawn(move || {
                 loop {
@@ -153,7 +153,9 @@ static RESUME_TX: std::sync::LazyLock<std::sync::mpsc::Sender<crate::clipboard::
                     }
                 }
             })
-            .expect("failed to spawn monitor-resume thread");
+        {
+            tracing::error!("Failed to spawn monitor-resume thread: {e}");
+        }
         tx
     });
 

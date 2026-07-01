@@ -3,7 +3,6 @@ import { listen } from "@tauri-apps/api/event";
 import debounce from "lodash.debounce";
 import { create } from "zustand";
 import { cancelPendingFocusRestore } from "@/hooks/useInputFocus";
-import { LIST_FETCH_LIMIT } from "@/lib/constants";
 import { logError } from "@/lib/logger";
 import { playCopySound, playPasteSound } from "@/lib/sounds";
 import { mergeCaptureItem, matchesListFilter } from "@/stores/clipboard-merge";
@@ -131,7 +130,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
         pinnedOnly: false,
         favoriteOnly: isFavoritesView,
         groupId: state.selectedGroupId,
-        limit: options.limit ?? LIST_FETCH_LIMIT,
+        limit: options.limit,
         offset: options.offset ?? 0,
       });
       if (get()._fetchId === fetchId) {
@@ -254,13 +253,13 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
   },
 
   refresh: async () => {
-    await get().fetchItems({ limit: LIST_FETCH_LIMIT });
+    await get().fetchItems();
   },
 
   applyCaptureUpdate: async (id: number) => {
     const state = get();
     if (state.searchQuery) {
-      await get().fetchItems({ limit: LIST_FETCH_LIMIT });
+      await get().fetchItems();
       return;
     }
 
@@ -278,7 +277,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
       }));
     } catch (error) {
       logError("Failed to apply capture update:", error);
-      await get().fetchItems({ limit: LIST_FETCH_LIMIT });
+      await get().fetchItems();
     }
   },
 
@@ -292,7 +291,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
       lastSelectedIndex: -1,
       _resetToken: state._resetToken + 1,
     }));
-    await get().fetchItems({ search: "", limit: LIST_FETCH_LIMIT });
+    await get().fetchItems({ search: "" });
   },
 
   setupListener: async () => {
