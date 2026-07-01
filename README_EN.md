@@ -8,7 +8,7 @@ English | [中文](README.md)
   <img src="src-tauri/icons/icon.png" alt="ElegantClipboard" width="128" height="128">
 </p>
 <p align="center">
-  Low footprint · High performance · Modern · Fully local offline clipboard.
+  Low footprint · High performance · Modern · Privacy first clipboard.
 </p>
 
 
@@ -56,12 +56,12 @@ Hover text preview shares the same preview position and hover preview delay sett
 
 ## Design Philosophy
 
-**Low footprint · High performance · Modern · Fully local offline**
+**Low footprint · High performance · Modern · Privacy first**
 
 - **Low footprint** - Tray resident, non-intrusive to core workflow, window doesn't steal focus, monitoring only when visible
 - **High performance** - Optimized LIKE search (CJK text support), virtual list for 10k+ records, async image processing, content hash deduplication
 - **Modern** - Tauri 2.0 + React 19 + Tailwind CSS 4, type-safe, elegant architecture
-- **Fully local offline** - Data stored locally, no network requests, no cloud sync, privacy first
+- **Privacy first** - Data stored locally by default, optional WebDAV self-hosted sync, privacy in user's hands
 - **Multilingual UI** - Simplified Chinese / English / Traditional Chinese, switch in settings, synced across windows
 
 ## Features
@@ -211,7 +211,3 @@ The installer version writes to the install directory and requires admin privile
 ## License
 
 [MIT License](LICENSE)
-
-## Author
-
-**ASLant** - [@Y-ASLant](https://github.com/Y-ASLant)

@@ -24,12 +24,29 @@ For UI screenshots, see [README_EN.md](README_EN.md) (captured on v0.5.0 and may
 - **Deduplication strategy** - Three modes: pin/ignore/always create new
 - **Import/Export** - ZIP backup and restore (Settings → Data)
 
+## WebDAV Sync
+
+- **Self-hosted sync** - Sync data via WebDAV protocol to self-hosted server (Settings → Sync)
+- **Auto sync** - Configurable sync interval (default 60s), background upload
+- **Manual sync** - Manually trigger sync operations
+- **Selective sync** - Independent toggles for text, image, file, video sync
+- **Media sync** - Images and files synced via independent media mapping, supports incremental upload
+- **Proxy support** - System proxy / custom proxy / no proxy modes
+- **Self-signed certificates** - Option to accept invalid SSL certificates (NAS scenarios)
+
 ## Internationalization
 
 - **Three languages** - Simplified Chinese (default), English, Traditional Chinese
 - **Settings** - General → Interface language
 - **Multi-window sync** - `locale-changed` event syncs main and settings windows
 - **Developer guide** - All UI strings via `t()` in `src/i18n/`; see `src/i18n/README.md`
+
+
+## Translation
+
+- **Clipboard translation** - Translate clipboard content between multiple languages
+- **Dedicated translation window** - Translation results in an independent window, no interference with main window
+- **Translation settings** - Configure source language, target language, and translation service
 
 ## Search Optimization
 
@@ -86,7 +103,9 @@ For UI screenshots, see [README_EN.md](README_EN.md) (captured on v0.5.0 and may
 - **Toolbar customization** - Configure toolbar button visibility and order
 - **Custom storage path** - Support data migration and custom path
 - **History limit** - Set max records (0 for unlimited)
+- **Auto cleanup** - Configurable cleanup age (default 30 days, 0 to disable), expired records auto-deleted
 - **Content size limit** - Configurable max size per item
+- **App source filtering** - Blacklist/whitelist mode, wildcard matching for app name, process name, process path
 - **Display settings** - Preview lines (1-10), time format, char count/size/source app toggle
 - **Card density** - Compact/Standard/Loose spacing
 - **Sound feedback** - Optional copy/paste operation sounds
@@ -119,6 +138,7 @@ For UI screenshots, see [README_EN.md](README_EN.md) (captured on v0.5.0 and may
 - **Non-focus window** - Window doesn't steal focus, no interruption
 - **Keyboard simulation** - Windows SendInput, others use enigo for Ctrl+V
 - **Quick paste** - Alt+number keys to quick paste items at position (customizable)
+- **Favorite paste** - Favorite items to dedicated slots, Alt+number keys to quick paste favorites (independent from quick paste)
 - **Startup notification** - Show system notification on launch with shortcut hints
 - **Admin elevation** - UAC-free elevation via task scheduler (optional in settings)
 - **Portable mode** - Standalone portable exe available, auto-detects portable mode
