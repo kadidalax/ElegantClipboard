@@ -5,6 +5,7 @@ use clipboard_rs::common::RustImage;
 use clipboard_rs::{
     Clipboard as ClipboardTrait, ClipboardContent as RsClipboardContent, ClipboardContext,
 };
+use tracing::{debug, warn};
 
 /// 将 ClipboardItem 写入系统剪贴板
 pub fn write_item_to_clipboard(
@@ -88,48 +89,142 @@ fn build_rich_contents(item: &ClipboardItem, include_rtf: bool) -> Vec<RsClipboa
     contents
 }
 
-fn rich_clipboard_verified(item: &ClipboardItem, ctx: &ClipboardContext) -> bool {
-    if item.text_content.as_deref().is_some_and(|t| !t.is_empty())
-        && ctx.get_text().ok().is_some_and(|t| !t.trim().is_empty())
-    {
-        return true;
+fn rich_clipboard_verify_detail(item: &ClipboardItem, ctx: &ClipboardContext) -> (bool, String) {
+    let mut parts = Vec::new();
+
+    if item.text_content.as_deref().is_some_and(|t| !t.is_empty()) {
+        let ok = ctx.get_text().ok().is_some_and(|t| !t.trim().is_empty());
+        parts.push(format!("text={}", if ok { "ok" } else { "fail" }));
+        if ok {
+            return (true, parts.join(", "));
+        }
     }
 
-    if item.html_content.as_deref().is_some_and(|h| !h.is_empty())
-        && ctx.get_html().ok().is_some_and(|h| !h.trim().is_empty())
-    {
-        return true;
+    if item.html_content.as_deref().is_some_and(|h| !h.is_empty()) {
+        let ok = ctx.get_html().ok().is_some_and(|h| !h.trim().is_empty());
+        parts.push(format!("html={}", if ok { "ok" } else { "fail" }));
+        if ok {
+            return (true, parts.join(", "));
+        }
     }
 
-    super::rtf_storage::should_write_rtf(item.rtf_content.as_deref())
-        && ctx
+    if super::rtf_storage::should_write_rtf(item.rtf_content.as_deref()) {
+        let ok = ctx
             .get_buffer("Rich Text Format")
             .ok()
-            .is_some_and(|b| b.len() > 1)
+            .is_some_and(|b| b.len() > 1);
+        parts.push(format!("rtf={}", if ok { "ok" } else { "fail" }));
+        if ok {
+            return (true, parts.join(", "));
+        }
+    }
+
+    (false, parts.join(", "))
+}
+
+fn rich_write_meta(item: &ClipboardItem) -> (bool, usize, usize, usize) {
+    (
+        super::rtf_storage::should_write_rtf(item.rtf_content.as_deref()),
+        item.html_content.as_deref().map_or(0, str::len),
+        item.rtf_content.as_deref().map_or(0, str::len),
+        item.text_content.as_deref().map_or(0, str::len),
+    )
+}
+
+fn rich_contents_summary(contents: &[RsClipboardContent]) -> String {
+    contents
+        .iter()
+        .map(|c| match c {
+            RsClipboardContent::Text(_) => "text",
+            RsClipboardContent::Html(_) => "html",
+            RsClipboardContent::Rtf(_) => "rtf",
+            RsClipboardContent::Other(name, _) => name.as_str(),
+            RsClipboardContent::Files(_) => "files",
+            _ => "other",
+        })
+        .collect::<Vec<_>>()
+        .join("+")
 }
 
 /// 通过 clipboard-rs 一次性写入 Text + HTML + RTF（v0.3.4 内置 CF-HTML 包装 + OpenClipboard 重试）
 fn write_rich_item(item: &ClipboardItem, ctx: &mut ClipboardContext) -> Result<(), String> {
+    let (has_b64_rtf, html_len, rtf_stored_len, text_len) = rich_write_meta(item);
+    debug!(
+        id = item.id,
+        content_type = %item.content_type,
+        has_b64_rtf,
+        html_len,
+        rtf_stored_len,
+        text_len,
+        "write_rich_item: start"
+    );
+
     for include_rtf in [true, false] {
+        let stage = if include_rtf { "with_rtf" } else { "no_rtf" };
         let contents = build_rich_contents(item, include_rtf);
         if contents.is_empty() {
+            debug!(id = item.id, stage, "write_rich_item: skip empty contents");
             continue;
         }
 
-        ctx.set(contents)
-            .map_err(|e| format!("Failed to set clipboard rich content: {e}"))?;
-
-        if rich_clipboard_verified(item, ctx) {
-            return Ok(());
+        let formats = rich_contents_summary(&contents);
+        match ctx.set(contents) {
+            Ok(()) => {
+                let (verified, verify_detail) = rich_clipboard_verify_detail(item, ctx);
+                debug!(
+                    id = item.id,
+                    stage,
+                    formats = %formats,
+                    set = "ok",
+                    verified,
+                    verify_detail = %verify_detail,
+                    "write_rich_item: set done"
+                );
+                if verified {
+                    return Ok(());
+                }
+            }
+            Err(e) => {
+                debug!(
+                    id = item.id,
+                    stage,
+                    formats = %formats,
+                    set = "err",
+                    error = %e,
+                    "write_rich_item: set failed"
+                );
+            }
         }
     }
 
     if let Some(text) = item_alt_text(item) {
-        ctx.set_text(text)
-            .map_err(|e| format!("Failed to set clipboard text: {e}"))?;
-        return Ok(());
+        let alt_len = text.len();
+        match ctx.set_text(text) {
+            Ok(()) => {
+                debug!(id = item.id, alt_len, "write_rich_item: text fallback ok");
+                return Ok(());
+            }
+            Err(e) => {
+                warn!(
+                    id = item.id,
+                    alt_len,
+                    error = %e,
+                    "write_rich_item: text fallback failed"
+                );
+                return Err(format!("Failed to set clipboard text: {e}"));
+            }
+        }
     }
 
+    warn!(
+        id = item.id,
+        content_type = %item.content_type,
+        has_b64_rtf,
+        html_len,
+        rtf_stored_len,
+        text_len,
+        "write_rich_item: verification failed"
+    );
     Err("Failed to set clipboard rich content: verification failed".to_string())
 }
 
