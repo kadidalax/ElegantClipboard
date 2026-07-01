@@ -4,8 +4,8 @@ use crate::database::{
     ClipboardRepository, ContentType, Database, NewClipboardItem, SettingsRepository,
 };
 use blake3::Hasher;
-use image::ImageReader;
-use std::path::PathBuf;
+use std::io::Read;
+use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};
 
 const DEFAULT_MAX_CONTENT_SIZE: usize = 1_048_576;
@@ -83,6 +83,14 @@ fn truncate_content(content: String, max_size: usize, content_type: &str) -> Str
     }
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct ImageCapture {
+    pub temp_path: PathBuf,
+    pub width: u32,
+    pub height: u32,
+    pub byte_size: usize,
+}
+
 #[derive(Debug, Clone)]
 pub enum ClipboardContent {
     Text(String),
@@ -95,8 +103,26 @@ pub enum ClipboardContent {
         rtf: String,
         text: Option<String>,
     },
-    Image(Vec<u8>),
+    ImageFile(ImageCapture),
     Files(Vec<String>),
+}
+
+/// 丢弃未处理的图片临时文件（channel 合并或处理失败时）
+pub(crate) fn cleanup_capture_content(content: &ClipboardContent) {
+    if let ClipboardContent::ImageFile(capture) = content
+        && let Err(e) = std::fs::remove_file(&capture.temp_path)
+    {
+        debug!(
+            "Failed to remove capture temp file {:?}: {}",
+            capture.temp_path, e
+        );
+    }
+}
+
+impl Drop for ClipboardContent {
+    fn drop(&mut self) {
+        cleanup_capture_content(self);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -115,11 +141,59 @@ struct ProcessSettings {
 }
 
 /// 剪贴板变更热路径所需的设置，单次批量查询
-pub(crate) struct ClipChangeSettings {
+#[derive(Debug, Clone)]
+pub struct ClipChangeSettings {
     app_filter_enabled: bool,
     app_filter_list: Option<String>,
     app_filter_mode: String,
-    pub(crate) max_image_bytes: usize,
+    pub max_image_bytes: usize,
+}
+
+impl Default for ClipChangeSettings {
+    fn default() -> Self {
+        Self {
+            app_filter_enabled: false,
+            app_filter_list: None,
+            app_filter_mode: "blacklist".to_string(),
+            max_image_bytes: DEFAULT_MAX_IMAGE_SIZE,
+        }
+    }
+}
+
+impl ClipChangeSettings {
+    /// 检查来源应用是否应被过滤（无 DB 查询）
+    pub fn is_source_app_excluded(&self, source: &Option<SourceAppInfo>) -> bool {
+        let Some(source) = source else {
+            return false;
+        };
+
+        if !self.app_filter_enabled {
+            return false;
+        }
+
+        let filter_list = match self.app_filter_list.as_deref() {
+            Some(s) => s,
+            None => return false,
+        };
+
+        let exe_name = std::path::Path::new(&source.exe_path)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+
+        let matches = filter_list.split(',').any(|entry| {
+            let entry = entry.trim();
+            if entry.is_empty() {
+                return false;
+            }
+            matches_app_filter(entry, &source.app_name, exe_name, &source.exe_path)
+        });
+
+        match self.app_filter_mode.as_str() {
+            "whitelist" => !matches,
+            _ => matches,
+        }
+    }
 }
 
 pub struct ClipboardHandler {
@@ -253,7 +327,7 @@ impl ClipboardHandler {
             ClipboardContent::Text(_) => "text",
             ClipboardContent::Html { .. } => "html",
             ClipboardContent::Rtf { .. } => "rtf",
-            ClipboardContent::Image(_) => "image",
+            ClipboardContent::ImageFile(_) => "image",
             ClipboardContent::Files(_) => "files",
         };
 
@@ -262,47 +336,6 @@ impl ClipboardHandler {
         }
 
         allowed.split(',').any(|t| t.trim() == content_type)
-    }
-
-    /// 检查来源应用是否应被过滤（使用预取的设置，无额外 DB 查询）
-    ///
-    /// 黑名单模式：匹配则排除；白名单模式：不匹配则排除
-    pub(crate) fn is_source_app_excluded(
-        &self,
-        source: &Option<super::source_app::SourceAppInfo>,
-        settings: &ClipChangeSettings,
-    ) -> bool {
-        let Some(source) = source else {
-            return false;
-        };
-
-        if !settings.app_filter_enabled {
-            return false;
-        }
-
-        let filter_list = match settings.app_filter_list.as_deref() {
-            Some(s) => s,
-            None => return false,
-        };
-
-        // 提取可执行文件名
-        let exe_name = std::path::Path::new(&source.exe_path)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("");
-
-        let matches = filter_list.split(',').any(|entry| {
-            let entry = entry.trim();
-            if entry.is_empty() {
-                return false;
-            }
-            matches_app_filter(entry, &source.app_name, exe_name, &source.exe_path)
-        });
-
-        match settings.app_filter_mode.as_str() {
-            "whitelist" => !matches, // 白名单：不在列表中则排除
-            _ => matches,            // 黑名单（默认）：在列表中则排除
-        }
     }
 
     /// 处理剪贴板内容，去重后存入数据库
@@ -331,7 +364,7 @@ impl ClipboardHandler {
             }
         }
 
-        let hashes = self.calculate_hashes(&content);
+        let hashes = self.calculate_hashes(&content)?;
         let dedup = &settings.dedup_strategy;
         let text_like = Self::is_text_like_content(&content);
         let text_dedup_mode = &settings.text_dedup_mode;
@@ -412,17 +445,36 @@ impl ClipboardHandler {
             }
             None => (None, None),
         };
-
-        let mut item = match content {
-            ClipboardContent::Text(text) => self.process_text(text, &hashes, max_content_size)?,
-            ClipboardContent::Html { html, text, rtf } => {
-                self.process_html(html, text, rtf, &hashes, max_content_size)?
+        // 安全地从 ClipboardContent（impl Drop）中取出内部值
+        // 通过 ManuallyDrop 阻止 Drop 运行，process_image_file 已自行处理临时文件
+        let mut item = {
+            let mut content = std::mem::ManuallyDrop::new(content);
+            // SAFETY: 逐字段 take 所有权，ManuallyDrop 阻止外层 Drop
+            match &mut *content {
+                ClipboardContent::Text(text) => {
+                    let text = std::mem::take(text);
+                    self.process_text(text, &hashes, max_content_size)?
+                }
+                ClipboardContent::Html { html, text, rtf } => {
+                    let html = std::mem::take(html);
+                    let text = std::mem::take(text);
+                    let rtf = std::mem::take(rtf);
+                    self.process_html(html, text, rtf, &hashes, max_content_size)?
+                }
+                ClipboardContent::Rtf { rtf, text } => {
+                    let rtf = std::mem::take(rtf);
+                    let text = std::mem::take(text);
+                    self.process_rtf(rtf, text, &hashes, max_content_size)?
+                }
+                ClipboardContent::ImageFile(capture) => {
+                    let capture = std::mem::take(capture);
+                    self.process_image_file(capture, &hashes)?
+                }
+                ClipboardContent::Files(files) => {
+                    let files = std::mem::take(files);
+                    self.process_files(files, &hashes)?
+                }
             }
-            ClipboardContent::Rtf { rtf, text } => {
-                self.process_rtf(rtf, text, &hashes, max_content_size)?
-            }
-            ClipboardContent::Image(data) => self.process_image(data, &hashes)?,
-            ClipboardContent::Files(files) => self.process_files(files, &hashes)?,
         };
 
         item.source_app_name = source_app_name;
@@ -485,7 +537,7 @@ impl ClipboardHandler {
             ClipboardContent::Text(text) => text.len(),
             ClipboardContent::Html { html, .. } => html.len(),
             ClipboardContent::Rtf { rtf, .. } => rtf.len(),
-            ClipboardContent::Image(data) => data.len(),
+            ClipboardContent::ImageFile(capture) => capture.byte_size,
             ClipboardContent::Files(files) => files.iter().map(std::string::String::len).sum(),
         }
     }
@@ -499,8 +551,8 @@ impl ClipboardHandler {
         )
     }
 
-    fn calculate_hashes(&self, content: &ClipboardContent) -> ContentHashes {
-        let content_hash = self.calculate_hash(content);
+    fn calculate_hashes(&self, content: &ClipboardContent) -> Result<ContentHashes, String> {
+        let content_hash = self.calculate_hash(content)?;
         let semantic_hash = match content {
             ClipboardContent::Text(text) => {
                 if is_url(text) {
@@ -515,17 +567,17 @@ impl ClipboardHandler {
             ClipboardContent::Rtf { text, .. } => {
                 compute_semantic_hash("rtf", text.as_deref(), &content_hash)
             }
-            ClipboardContent::Image(_) => content_hash.clone(),
+            ClipboardContent::ImageFile(_) => content_hash.clone(),
             ClipboardContent::Files(_) => content_hash.clone(),
         };
 
-        ContentHashes {
+        Ok(ContentHashes {
             content_hash,
             semantic_hash,
-        }
+        })
     }
 
-    fn calculate_hash(&self, content: &ClipboardContent) -> String {
+    fn calculate_hash(&self, content: &ClipboardContent) -> Result<String, String> {
         let mut hasher = Hasher::new();
 
         match content {
@@ -546,9 +598,9 @@ impl ClipboardHandler {
                 hasher.update(b"rtf:");
                 hasher.update(rtf.as_bytes());
             }
-            ClipboardContent::Image(data) => {
+            ClipboardContent::ImageFile(capture) => {
                 hasher.update(b"image:");
-                hasher.update(data);
+                hash_file_into_hasher(&mut hasher, &capture.temp_path)?;
             }
             ClipboardContent::Files(files) => {
                 hasher.update(b"files:");
@@ -559,7 +611,7 @@ impl ClipboardHandler {
             }
         }
 
-        hasher.finalize().to_hex().to_string()
+        Ok(hasher.finalize().to_hex().to_string())
     }
 
     fn process_text(
@@ -655,19 +707,20 @@ impl ClipboardHandler {
         })
     }
 
-    /// 处理图片内容：保存到磁盘并提取宽高元数据
-    fn process_image(
+    /// 处理图片：将 watcher 写入的临时 PNG rename 到 hash 命名路径
+    fn process_image_file(
         &self,
-        data: Vec<u8>,
+        capture: ImageCapture,
         hashes: &ContentHashes,
     ) -> Result<NewClipboardItem, String> {
-        let byte_size = data.len() as i64;
+        let byte_size = capture.byte_size as i64;
+        let image_width = i64::from(capture.width);
+        let image_height = i64::from(capture.height);
 
         let filename = format!("{}.png", &hashes.content_hash[..16]);
         let image_path = self.images_path.join(&filename);
         let image_path_str = image_path.to_string_lossy().to_string();
 
-        let (image_width, image_height) = self.extract_image_dimensions(&data)?;
         debug!(
             "Processing image: {}x{}, {} bytes, hash={}",
             image_width,
@@ -676,15 +729,11 @@ impl ClipboardHandler {
             &hashes.content_hash[..16]
         );
 
-        // 先写临时文件再原子 rename，避免其他进程读到写入一半的文件
-        let tmp_path = image_path.with_extension("tmp");
-        if let Err(e) = std::fs::write(&tmp_path, &data) {
-            let _ = std::fs::remove_file(&tmp_path);
+        if image_path.exists() {
+            let _ = std::fs::remove_file(&capture.temp_path);
+        } else if let Err(e) = std::fs::rename(&capture.temp_path, &image_path) {
+            let _ = std::fs::remove_file(&capture.temp_path);
             return Err(format!("Failed to save image: {e}"));
-        }
-        if let Err(e) = std::fs::rename(&tmp_path, &image_path) {
-            let _ = std::fs::remove_file(&tmp_path);
-            return Err(format!("Failed to rename image: {e}"));
         }
         debug!("Saved image to {:?}", image_path);
 
@@ -699,16 +748,6 @@ impl ClipboardHandler {
             image_height: Some(image_height),
             ..Default::default()
         })
-    }
-
-    fn extract_image_dimensions(&self, data: &[u8]) -> Result<(i64, i64), String> {
-        let (w, h) = ImageReader::new(std::io::Cursor::new(data))
-            .with_guessed_format()
-            .map_err(|e| format!("Failed to guess image format: {e}"))?
-            .into_dimensions()
-            .map_err(|e| format!("Failed to read image dimensions: {e}"))?;
-
-        Ok((i64::from(w), i64::from(h)))
     }
 
     fn process_files(
@@ -755,6 +794,35 @@ impl ClipboardHandler {
             format!("{}...", &trimmed[..idx])
         } else {
             trimmed.to_string()
+        }
+    }
+}
+
+fn hash_file_into_hasher(hasher: &mut Hasher, path: &Path) -> Result<(), String> {
+    let mut file = std::fs::File::open(path)
+        .map_err(|e| format!("Failed to open image file for hash: {e}"))?;
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        let n = file
+            .read(&mut buf)
+            .map_err(|e| format!("Failed to read image file for hash: {e}"))?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(())
+}
+
+/// 清理 images/captures 目录中的残留临时文件
+pub fn cleanup_stale_capture_files(capture_dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(capture_dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().is_some_and(|ext| ext == "tmp") {
+            std::fs::remove_file(path).ok();
         }
     }
 }

@@ -106,7 +106,7 @@
 | **哈希** | BLAKE3（内容去重） |
 | **锁** | parking_lot（高性能 Mutex/RwLock） |
 | **并行** | rayon（文件检查并行化） |
-| **剪贴板** | arboard（CF_DIB / CF_HDROP / RTF / HTML / 文本） |
+| **剪贴板** | clipboard-rs（文本 / HTML / RTF / 图片 / 文件 / 监听） |
 | **窗口特效** | window-vibrancy（Mica/Acrylic/Tabbed） |
 | **键盘模拟** | enigo |
 | **输入监控** | Win32 LL Hook（WH_MOUSE_LL + WH_KEYBOARD_LL，仅窗口可见时启用键盘钩子） |

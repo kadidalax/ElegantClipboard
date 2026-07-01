@@ -165,8 +165,7 @@ const items = await invoke<ClipboardItem[]>("get_clipboard_items", {
 **2. 服务模式（Service Pattern）**
 - 位置：`src-tauri/src/clipboard/monitor.rs`
 - `ClipboardMonitor` 管理剪贴板监控生命周期
-- 使用独立线程运行（`clipboard-master`）
-- 通过 Tauri 事件向前端推送更新：`app.emit("clipboard-updated", id)`
+- 使用独立线程运行（`clipboard-rs` ClipboardWatcherContext + worker 线程）
 
 **3. 状态管理**
 - **前端**：Zustand stores（`src/stores/`）
@@ -350,8 +349,7 @@ Windows 的注册表 `Run` 键会静默跳过需要 UAC 提权的程序，因此
 
 ## 剪贴板处理
 
-- **图片**：使用 `clipboard-rs`（更好的 Windows 支持）
-- **文本**：使用 `arboard`
+- **读写+监听**：统一使用 `clipboard-rs`（text / HTML / RTF / image / files / watcher）
 - **粘贴**：使用 `enigo` 模拟 Ctrl+V
 
 ## 关键依赖
@@ -362,8 +360,7 @@ Windows 的注册表 `Run` 键会静默跳过需要 UAC 提权的程序，因此
 - `rusqlite` - SQLite 数据库（bundled 特性）
 - `tokio` - 异步运行时
 - `rayon` - 并行处理（文件检查）
-- `clipboard-master` - 剪贴板监控
-- `clipboard-rs` / `arboard` - 剪贴板操作
+- `clipboard-rs` - 剪贴板读写+监听（统一库）
 - `enigo` - 键盘模拟粘贴
 - `window-vibrancy` - 窗口背景特效（Mica/Acrylic/Tabbed）
 - `parking_lot` - 高性能锁

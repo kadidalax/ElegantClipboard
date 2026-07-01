@@ -3,8 +3,10 @@ import { listen } from "@tauri-apps/api/event";
 import debounce from "lodash.debounce";
 import { create } from "zustand";
 import { cancelPendingFocusRestore } from "@/hooks/useInputFocus";
+import { LIST_FETCH_LIMIT } from "@/lib/constants";
 import { logError } from "@/lib/logger";
 import { playCopySound, playPasteSound } from "@/lib/sounds";
+import { mergeCaptureItem, matchesListFilter } from "@/stores/clipboard-merge";
 import { useUISettings } from "@/stores/ui-settings";
 
 export interface ClipboardItem {
@@ -70,6 +72,8 @@ interface ClipboardState {
   pasteAsPlainText: (id: number) => Promise<void>;
   clearHistory: (contentType?: string | null) => Promise<void>;
   refresh: () => Promise<void>;
+  /** 剪贴板捕获后增量更新列表（单条 IPC） */
+  applyCaptureUpdate: (id: number) => Promise<void>;
   /** 重置视图：清除搜索、类型筛选，滚动到顶部，刷新 */
   resetView: () => Promise<void>;
   setupListener: () => Promise<() => void>;
@@ -127,7 +131,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
         pinnedOnly: false,
         favoriteOnly: isFavoritesView,
         groupId: state.selectedGroupId,
-        limit: options.limit ?? null,
+        limit: options.limit ?? LIST_FETCH_LIMIT,
         offset: options.offset ?? 0,
       });
       if (get()._fetchId === fetchId) {
@@ -250,7 +254,32 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
   },
 
   refresh: async () => {
-    await get().fetchItems();
+    await get().fetchItems({ limit: LIST_FETCH_LIMIT });
+  },
+
+  applyCaptureUpdate: async (id: number) => {
+    const state = get();
+    if (state.searchQuery) {
+      await get().fetchItems({ limit: LIST_FETCH_LIMIT });
+      return;
+    }
+
+    try {
+      const item = await invoke<ClipboardItem | null>("get_clipboard_item", { id });
+      if (!item) {
+        return;
+      }
+      if (!matchesListFilter(item, state.selectedGroup, state.selectedGroupId)) {
+        return;
+      }
+      set((s) => ({
+        items: mergeCaptureItem(s.items, item),
+        activeIndex: -1,
+      }));
+    } catch (error) {
+      logError("Failed to apply capture update:", error);
+      await get().fetchItems({ limit: LIST_FETCH_LIMIT });
+    }
   },
 
   resetView: async () => {
@@ -263,19 +292,19 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
       lastSelectedIndex: -1,
       _resetToken: state._resetToken + 1,
     }));
-    await get().fetchItems({ search: "" });
+    await get().fetchItems({ search: "", limit: LIST_FETCH_LIMIT });
   },
 
   setupListener: async () => {
     // 防抖合并快速连续的剪贴板变化事件，避免 IPC 风暴
-    const debouncedRefresh = debounce(async () => {
-      await get().refresh();
+    const debouncedCaptureUpdate = debounce(async (id: number) => {
+      await get().applyCaptureUpdate(id);
       playCopySound("after_success");
     }, 150, { leading: true, trailing: true });
 
-    const unlisten = await listen<number>("clipboard-updated", () => {
+    const unlisten = await listen<number>("clipboard-updated", (event) => {
       playCopySound("immediate");
-      void debouncedRefresh();
+      void debouncedCaptureUpdate(event.payload);
     });
     return unlisten;
   },

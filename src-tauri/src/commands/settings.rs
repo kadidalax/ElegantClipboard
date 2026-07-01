@@ -67,8 +67,13 @@ pub async fn set_setting(
 ) -> Result<(), String> {
     let repo = SettingsRepository::new(&state.db);
     repo.set(&key, &value).map_err(|e| e.to_string())?;
-    // 更新定位缓存（仅位置相关 key）
     update_position_cache(&state, &key, &value);
+    if matches!(
+        key.as_str(),
+        "app_filter_enabled" | "app_filter_list" | "app_filter_mode" | "max_image_size_kb"
+    ) {
+        state.monitor.refresh_clip_change_settings();
+    }
     Ok(())
 }
 
@@ -183,6 +188,7 @@ pub async fn open_data_folder() -> Result<(), String> {
 pub async fn reset_settings(state: State<'_, Arc<AppState>>) -> Result<(), String> {
     let repo = SettingsRepository::new(&state.db);
     repo.clear_all().map_err(|e| e.to_string())?;
+    state.monitor.refresh_clip_change_settings();
     tracing::info!("All settings reset to defaults");
     Ok(())
 }
