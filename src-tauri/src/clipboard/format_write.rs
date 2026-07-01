@@ -184,27 +184,24 @@ fn write_rich_item(item: &ClipboardItem, ctx: &mut ClipboardContext) -> Result<(
         match ctx.set(contents) {
             Ok(()) => {
                 let (verified, verify_detail) = rich_clipboard_verify_detail(item, ctx);
-                debug!(
-                    id = item.id,
-                    stage,
-                    formats = %formats,
-                    set = "ok",
-                    verified,
-                    verify_detail = %verify_detail,
-                    "write_rich_item: set done"
-                );
                 if verified {
-                    return Ok(());
+                    debug!(
+                        id = item.id, stage, formats = %formats,
+                        "write_rich_item: set ok, verified"
+                    );
+                } else {
+                    // ctx.set() 成功但读回验证失败 — 剪贴板已写入，可能是读回格式差异
+                    warn!(
+                        id = item.id, stage, formats = %formats, verify_detail = %verify_detail,
+                        "write_rich_item: set ok but verify failed (clipboard written, proceeding)"
+                    );
                 }
+                return Ok(());
             }
             Err(e) => {
                 debug!(
-                    id = item.id,
-                    stage,
-                    formats = %formats,
-                    set = "err",
-                    error = %e,
-                    "write_rich_item: set failed"
+                    id = item.id, stage, formats = %formats,
+                    error = %e, "write_rich_item: set failed"
                 );
             }
         }
