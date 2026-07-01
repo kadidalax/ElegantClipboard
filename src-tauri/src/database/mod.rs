@@ -560,6 +560,27 @@ impl Database {
     }
 
     fn backfill_semantic_hashes(conn: &Connection) -> Result<(), rusqlite::Error> {
+        // 版本守卫：已完成的迁移不再执行，避免每次启动全表扫描
+        let settings_exist: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='settings'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if settings_exist {
+            let already_done: bool = conn
+                .query_row(
+                    "SELECT COALESCE((SELECT value FROM settings WHERE key = '_migration_backfill_semantic_hash' LIMIT 1), '') = 'done'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(false);
+            if already_done {
+                return Ok(());
+            }
+        }
+
         let mut stmt = conn.prepare(
             "SELECT id, content_type, text_content, content_hash, semantic_hash
              FROM clipboard_items
@@ -590,24 +611,30 @@ impl Database {
         }
         drop(stmt);
 
-        if updates.is_empty() {
-            return Ok(());
+        let tx = conn.unchecked_transaction()?;
+        if !updates.is_empty() {
+            let updated_count = updates.len();
+            {
+                let mut update_stmt =
+                    tx.prepare("UPDATE clipboard_items SET semantic_hash = ?1 WHERE id = ?2")?;
+                for (id, semantic_hash) in updates {
+                    update_stmt.execute(params![semantic_hash, id])?;
+                }
+            }
+            info!(
+                "Migration complete: semantic_hash backfilled for {} rows",
+                updated_count
+            );
         }
 
-        let updated_count = updates.len();
-        let tx = conn.unchecked_transaction()?;
-        {
-            let mut update_stmt =
-                tx.prepare("UPDATE clipboard_items SET semantic_hash = ?1 WHERE id = ?2")?;
-            for (id, semantic_hash) in updates {
-                update_stmt.execute(params![semantic_hash, id])?;
-            }
+        // 写入版本标记，后续启动跳过
+        if settings_exist {
+            tx.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES ('_migration_backfill_semantic_hash', 'done')",
+                [],
+            )?;
         }
         tx.commit()?;
-        info!(
-            "Migration complete: semantic_hash backfilled for {} rows",
-            updated_count
-        );
         Ok(())
     }
 
