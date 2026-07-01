@@ -168,18 +168,19 @@ impl CMHandler for MonitorHandler {
         // 先获取来源应用（在读取内容之前）
         let source = super::source_app::get_clipboard_source_app();
 
-        // 同一次加锁内完成排除判断与限制读取，避免多次 lock
+        // 单次批量查询获取热路径所需设置（替代原先 4 次独立 DB 查询）
         let max_image_bytes = {
             let guard = self.handler.lock();
             if let Some(ref handler) = *guard {
-                if handler.is_source_app_excluded(&source) {
+                let settings = handler.get_clip_change_settings();
+                if handler.is_source_app_excluded(&source, &settings) {
                     debug!(
                         "Clipboard change ignored (source app excluded: {:?})",
                         source.as_ref().map(|s| &s.app_name)
                     );
                     return CallbackResult::Next;
                 }
-                handler.get_max_image_size()
+                settings.max_image_bytes
             } else {
                 0
             }

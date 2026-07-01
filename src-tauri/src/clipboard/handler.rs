@@ -114,6 +114,14 @@ struct ProcessSettings {
     auto_cleanup_days: i64,
 }
 
+/// 剪贴板变更热路径所需的设置，单次批量查询
+pub(crate) struct ClipChangeSettings {
+    app_filter_enabled: bool,
+    app_filter_list: Option<String>,
+    app_filter_mode: String,
+    pub(crate) max_image_bytes: usize,
+}
+
 pub struct ClipboardHandler {
     repository: ClipboardRepository,
     settings_repo: SettingsRepository,
@@ -187,14 +195,45 @@ impl ClipboardHandler {
         }
     }
 
-    /// 图片大小上限（字节），0 表示不限制
-    pub fn get_max_image_size(&self) -> usize {
-        self.settings_repo
+    /// 批量读取剪贴板变更热路径所需的全部设置，单次数据库查询
+    pub(crate) fn get_clip_change_settings(&self) -> ClipChangeSettings {
+        let keys = [
+            "app_filter_enabled",
+            "app_filter_list",
+            "app_filter_mode",
+            "max_image_size_kb",
+        ];
+        let batch = self.settings_repo.get_batch(&keys);
+
+        let app_filter_enabled = batch
+            .get("app_filter_enabled")
+            .and_then(|v| v.as_deref())
+            .is_some_and(|v| v == "true");
+
+        let app_filter_list = batch
+            .get("app_filter_list")
+            .and_then(|v| v.as_deref())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+
+        let app_filter_mode = batch
+            .get("app_filter_mode")
+            .and_then(|v| v.as_deref())
+            .unwrap_or("blacklist")
+            .to_string();
+
+        let max_image_bytes = batch
             .get("max_image_size_kb")
-            .ok()
-            .flatten()
+            .and_then(|v| v.as_deref())
             .and_then(|s| s.parse::<usize>().ok())
-            .map_or(DEFAULT_MAX_IMAGE_SIZE, |kb| kb.saturating_mul(1024))
+            .map_or(DEFAULT_MAX_IMAGE_SIZE, |kb| kb.saturating_mul(1024));
+
+        ClipChangeSettings {
+            app_filter_enabled,
+            app_filter_list,
+            app_filter_mode,
+            max_image_bytes,
+        }
     }
 
     /// 检查内容类型是否被允许监听
@@ -225,45 +264,26 @@ impl ClipboardHandler {
         allowed.split(',').any(|t| t.trim() == content_type)
     }
 
-    /// 检查来源应用是否应被过滤
-    /// 设置项：
-    ///   - `app_filter_enabled`: "true"/"false"（默认 false）
-    ///   - `app_filter_mode`: "blacklist"（默认）/ "whitelist"
-    ///   - `app_filter_list`: 逗号分隔的规则列表，支持通配符 * 和 ?
+    /// 检查来源应用是否应被过滤（使用预取的设置，无额外 DB 查询）
     ///
     /// 黑名单模式：匹配则排除；白名单模式：不匹配则排除
-    pub fn is_source_app_excluded(
+    pub(crate) fn is_source_app_excluded(
         &self,
         source: &Option<super::source_app::SourceAppInfo>,
+        settings: &ClipChangeSettings,
     ) -> bool {
         let Some(source) = source else {
             return false;
         };
 
-        // 检查是否启用
-        let enabled = self
-            .settings_repo
-            .get("app_filter_enabled")
-            .ok()
-            .flatten()
-            .is_some_and(|v| v == "true");
-        if !enabled {
+        if !settings.app_filter_enabled {
             return false;
         }
 
-        let filter_list = self.settings_repo.get("app_filter_list").ok().flatten();
-
-        let filter_list = match filter_list {
-            Some(ref s) if !s.is_empty() => s,
-            _ => return false,
+        let filter_list = match settings.app_filter_list.as_deref() {
+            Some(s) => s,
+            None => return false,
         };
-
-        let mode = self
-            .settings_repo
-            .get("app_filter_mode")
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| "blacklist".to_string());
 
         // 提取可执行文件名
         let exe_name = std::path::Path::new(&source.exe_path)
@@ -279,7 +299,7 @@ impl ClipboardHandler {
             matches_app_filter(entry, &source.app_name, exe_name, &source.exe_path)
         });
 
-        match mode.as_str() {
+        match settings.app_filter_mode.as_str() {
             "whitelist" => !matches, // 白名单：不在列表中则排除
             _ => matches,            // 黑名单（默认）：在列表中则排除
         }
