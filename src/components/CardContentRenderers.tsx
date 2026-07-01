@@ -238,12 +238,16 @@ const ImagePreview = memo(function ImagePreview({
   onError,
   overlay,
   imagePath,
+  imageWidth,
+  imageHeight,
 }: {
   src: string;
   alt: string;
   onError: () => void;
   overlay?: React.ReactNode;
   imagePath?: string;
+  imageWidth?: number | null;
+  imageHeight?: number | null;
 }) {
   const imagePreviewEnabled = useUISettings((s) => s.imagePreviewEnabled);
   const previewUnboundedMode = useUISettings((s) => s.previewUnboundedMode);
@@ -502,15 +506,24 @@ const ImagePreview = memo(function ImagePreview({
     };
   }, [hidePreview]);
 
-  // 非自适应模式时按 cardMaxLines 计算高度
+  // 基于图片元数据的 aspect-ratio，让浏览器在图片加载前就预留准确高度
   const containerStyle = useMemo(() => {
+    const hasDims = imageWidth && imageHeight && imageWidth > 0 && imageHeight > 0;
+    const aspectRatio = hasDims ? `${imageWidth}/${imageHeight}` : undefined;
+
     if (imageAutoHeight) {
-      // 自适应模式：使用用户设置的最大高度
-      return { maxHeight: `${imageMaxHeight}px` };
+      return {
+        maxHeight: `${imageMaxHeight}px`,
+        aspectRatio,
+        minHeight: hasDims ? "40px" : undefined, // 最小高度避免零高度闪烁
+      };
     }
     // 固定模式：跟随 cardMaxLines
-    return { maxHeight: `${cardMaxLines * 1.5}rem` };
-  }, [imageAutoHeight, cardMaxLines, imageMaxHeight]);
+    return {
+      maxHeight: `${cardMaxLines * 1.5}rem`,
+      aspectRatio,
+    };
+  }, [imageAutoHeight, cardMaxLines, imageMaxHeight, imageWidth, imageHeight]);
 
   const imgClass = useMemo(() => {
     return imageAutoHeight
@@ -548,12 +561,16 @@ const ImagePreview = memo(function ImagePreview({
           setImgLoaded(true);
         }}
       />
-      {overlay}
+      {overlay && (
+        <div className="absolute inset-0 flex items-end justify-center pointer-events-none">
+          {overlay}
+        </div>
+      )}
     </div>
   );
 });
 
-// ============ 图片卡片 ============
+// ============ 图片卡片（带缩略图 + 底部元数据） ============
 
 interface ImageCardProps {
   image_path: string;
@@ -563,6 +580,8 @@ interface ImageCardProps {
   isDragOverlay?: boolean;
   sourceAppName?: string | null;
   sourceAppIcon?: string | null;
+  imageWidth?: number | null;
+  imageHeight?: number | null;
 }
 
 export const ImageCard = memo(function ImageCard({
@@ -573,11 +592,12 @@ export const ImageCard = memo(function ImageCard({
   isDragOverlay,
   sourceAppName,
   sourceAppIcon,
+  imageWidth,
+  imageHeight,
 }: ImageCardProps) {
   const { t } = useTranslation();
   const [error, setError] = useState(false);
 
-  // 虚拟列表复用组件时，image_path 变化需重置错误状态
   useEffect(() => setError(false), [image_path]);
 
   return (
@@ -595,6 +615,8 @@ export const ImageCard = memo(function ImageCard({
           alt="Preview"
           onError={() => setError(true)}
           imagePath={image_path}
+          imageWidth={imageWidth}
+          imageHeight={imageHeight}
         />
       )}
       <CardFooter

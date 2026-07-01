@@ -725,6 +725,8 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
               isDragOverlay={isDragOverlay}
               sourceAppName={showSourceApp && sourceAppDisplay !== "icon" ? item.source_app_name : undefined}
               sourceAppIcon={showSourceApp && sourceAppDisplay !== "name" ? item.source_app_icon : undefined}
+              imageWidth={item.image_width}
+              imageHeight={item.image_height}
             />
           ) : item.content_type === "files" ? (
             <FileContent
