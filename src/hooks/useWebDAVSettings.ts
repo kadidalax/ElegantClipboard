@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { logError } from "@/lib/logger";
 
@@ -12,6 +12,12 @@ const SETTINGS_KEYS = [
   "webdav_max_image_size_kb", "webdav_max_file_size_kb", "webdav_max_video_size_kb",
   "webdav_last_sync_time",
 ] as const;
+
+const DEBOUNCE_KEYS: Record<string, true> = {
+  webdav_url: true, webdav_username: true, webdav_password: true,
+  webdav_remote_dir: true, webdav_proxy_url: true,
+  webdav_max_image_size_kb: true, webdav_max_file_size_kb: true, webdav_max_video_size_kb: true,
+};
 
 export function useWebDAVSettings() {
   const [enabled, setEnabled] = useState(false);
@@ -84,10 +90,12 @@ export function useWebDAVSettings() {
     saveTimersRef.current.set(key, setTimeout(() => saveSetting(key, value), 300));
   }, [saveSetting]);
 
+  const syncTypesKey = useMemo(() => JSON.stringify([...syncTypes].sort()), [syncTypes]);
+
   useEffect(() => {
     if (!loaded) return;
 
-    const syncTypesValue = JSON.stringify([...syncTypes].sort());
+    const prev = snapshotRef.current;
     const current: Record<string, string> = {
       webdav_enabled: enabled ? "true" : "false",
       webdav_auto_sync: autoSync ? "true" : "false",
@@ -99,17 +107,10 @@ export function useWebDAVSettings() {
       webdav_proxy_mode: proxyMode,
       webdav_proxy_url: proxyUrl,
       webdav_accept_invalid_certs: acceptInvalidCerts ? "true" : "false",
-      webdav_sync_types: syncTypesValue,
+      webdav_sync_types: syncTypesKey,
       webdav_max_image_size_kb: maxImageSizeKb,
       webdav_max_file_size_kb: maxFileSizeKb,
       webdav_max_video_size_kb: maxVideoSizeKb,
-    };
-
-    const prev = snapshotRef.current;
-    const debounceKeys: Record<string, true> = {
-      webdav_url: true, webdav_username: true, webdav_password: true,
-      webdav_remote_dir: true, webdav_proxy_url: true,
-      webdav_max_image_size_kb: true, webdav_max_file_size_kb: true, webdav_max_video_size_kb: true,
     };
 
     for (const [key, value] of Object.entries(current)) {
@@ -119,7 +120,7 @@ export function useWebDAVSettings() {
           saveSetting("webdav_sync_image", syncTypes.has("image") ? "true" : "false");
           saveSetting("webdav_sync_files", syncTypes.has("files") ? "true" : "false");
           saveSetting("webdav_sync_video", syncTypes.has("video") ? "true" : "false");
-        } else if (debounceKeys[key]) {
+        } else if (DEBOUNCE_KEYS[key]) {
           debouncedSave(key, value);
         } else {
           saveSetting(key, value);
@@ -130,7 +131,7 @@ export function useWebDAVSettings() {
     snapshotRef.current = current;
   }, [
     loaded, enabled, autoSync, syncInterval, url, username, password,
-    remoteDir, proxyMode, proxyUrl, acceptInvalidCerts, syncTypes,
+    remoteDir, proxyMode, proxyUrl, acceptInvalidCerts, syncTypesKey,
     maxImageSizeKb, maxFileSizeKb, maxVideoSizeKb,
     saveSetting, debouncedSave,
   ]);
