@@ -32,6 +32,8 @@ pub struct ClipboardItem {
     pub char_count: Option<i64>,
     pub source_app_name: Option<String>,
     pub source_app_icon: Option<String>,
+    /// 所属分组（NULL = 默认分组，Some(id) = 自定义分组）
+    pub group_id: Option<i64>,
     /// 文件是否有效（查询时计算，不存储）
     #[serde(default, skip_deserializing)]
     pub files_valid: Option<bool>,
@@ -267,9 +269,9 @@ impl ClipboardRepository {
         let new_sort_order = max_sort_order + 1;
 
         conn.execute(
-            "INSERT INTO clipboard_items 
-             (content_type, text_content, html_content, rtf_content, image_path, file_paths, 
-              content_hash, semantic_hash, preview, byte_size, image_width, image_height, sort_order, 
+            "INSERT INTO clipboard_items
+             (content_type, text_content, html_content, rtf_content, image_path, file_paths,
+              content_hash, semantic_hash, preview, byte_size, image_width, image_height, sort_order,
               char_count, source_app_name, source_app_icon, group_id)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
             params![
@@ -367,6 +369,8 @@ impl ClipboardRepository {
         hash: &str,
         group_id: Option<i64>,
     ) -> Result<Option<i64>, rusqlite::Error> {
+        // 注意：write_conn 是单连接 + Mutex，SELECT MAX 和 UPDATE 在同一锁作用域内，
+        // 已经是串行安全的，无需额外事务保护。
         let conn = self.write_conn.lock();
 
         let max_sort_order: i64 = conn
@@ -400,7 +404,6 @@ impl ClipboardRepository {
                      SET access_count = access_count + 1, \
                          last_accessed_at = datetime('now', 'localtime'), \
                          updated_at = datetime('now', 'localtime'), \
-                         created_at = datetime('now', 'localtime'), \
                          sort_order = ?1 \
                      WHERE id = ?2",
                     params![new_sort, id],
@@ -485,13 +488,13 @@ impl ClipboardRepository {
     const LIST_COLUMNS: &'static str = "id, content_type, NULL AS text_content, NULL AS html_content, NULL AS rtf_content, \
          image_path, file_paths, content_hash, semantic_hash, preview, byte_size, image_width, image_height, \
          is_pinned, is_favorite, favorite_order, sort_order, created_at, updated_at, access_count, last_accessed_at, char_count, \
-         source_app_name, source_app_icon";
+         source_app_name, source_app_icon, group_id";
 
     /// 搜索查询列（含 text_content 用于关键词上下文预览）
     const SEARCH_COLUMNS: &'static str = "id, content_type, text_content, NULL AS html_content, NULL AS rtf_content, \
          image_path, file_paths, content_hash, semantic_hash, preview, byte_size, image_width, image_height, \
          is_pinned, is_favorite, favorite_order, sort_order, created_at, updated_at, access_count, last_accessed_at, char_count, \
-         source_app_name, source_app_icon";
+         source_app_name, source_app_icon, group_id";
 
     /// 构建通用的 WHERE 条件（content_type / pinned_only / favorite_only / search）
     fn build_filter_conditions(
@@ -914,7 +917,7 @@ impl ClipboardRepository {
         conn.execute(
             "UPDATE clipboard_items SET text_content = ?1, preview = ?2, content_hash = ?3, semantic_hash = ?4, \
              byte_size = ?5, char_count = ?6, content_type = 'text', \
-             html_content = NULL, rtf_content = NULL WHERE id = ?7",
+             html_content = NULL, rtf_content = NULL, image_path = NULL, file_paths = NULL WHERE id = ?7",
             params![new_text, preview, content_hash, semantic_hash, byte_size, char_count, id],
         )?;
         debug!("Updated text content for item {}", id);
@@ -1056,6 +1059,7 @@ impl ClipboardRepository {
             char_count: row.get("char_count")?,
             source_app_name: row.get("source_app_name")?,
             source_app_icon: row.get("source_app_icon")?,
+            group_id: row.get("group_id")?,
             files_valid: None, // 查询时计算
         })
     }
@@ -1092,10 +1096,9 @@ impl ClipboardRepository {
                  (content_type, text_content, html_content, rtf_content, image_path, file_paths,
                   content_hash, semantic_hash, preview, byte_size, image_width, image_height,
                   is_pinned, is_favorite, sort_order, created_at, updated_at,
-                  access_count, last_accessed_at, char_count, source_app_name, source_app_icon)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)"
+                  access_count, last_accessed_at, char_count, source_app_name, source_app_icon, group_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)"
             )?;
-
             for item in items {
                 let exists = exists_stmt.exists(params![item.content_hash])?;
                 if exists {
@@ -1124,6 +1127,7 @@ impl ClipboardRepository {
                     item.char_count,
                     item.source_app_name,
                     item.source_app_icon,
+                    item.group_id,
                 ])?;
                 count += 1;
             }
@@ -1137,24 +1141,40 @@ impl ClipboardRepository {
     }
 
     fn rebuild_sort_order_by_created_at(tx: &Transaction<'_>) -> Result<(), rusqlite::Error> {
-        let ids: Vec<i64> = {
+        // 按 group_id 分组，组内按 created_at 排序
+        let rows: Vec<(i64, Option<i64>)> = {
             let mut stmt = tx.prepare(
-                "SELECT id FROM clipboard_items
-                 ORDER BY
-                   CASE
-                     WHEN created_at IS NULL OR trim(created_at) = '' OR datetime(created_at) IS NULL THEN 0
-                     ELSE 1
-                   END ASC,
-                   datetime(created_at) ASC,
+                "SELECT id, group_id FROM clipboard_items \
+                 ORDER BY \
+                   CASE \
+                     WHEN group_id IS NULL THEN 0 \
+                     ELSE 1 \
+                   END, \
+                   COALESCE(group_id, 0), \
+                   CASE \
+                     WHEN created_at IS NULL OR trim(created_at) = '' OR datetime(created_at) IS NULL THEN 0 \
+                     ELSE 1 \
+                   END ASC, \
+                   datetime(created_at) ASC, \
                    id ASC",
             )?;
-            stmt.query_map([], |row| row.get::<_, i64>(0))?
+            stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
                 .collect::<Result<Vec<_>, _>>()?
         };
+
+        // 按 group_id 分配 sort_order
         let mut update_stmt =
             tx.prepare_cached("UPDATE clipboard_items SET sort_order = ?1 WHERE id = ?2")?;
-        for (index, id) in ids.iter().enumerate() {
-            update_stmt.execute(params![index as i64 + 1, id])?;
+        let mut last_group: Option<i64> = None;
+        let mut sort_counter: i64 = 0;
+        for (id, group_id) in rows {
+            if last_group != group_id {
+                sort_counter = 1;
+                last_group = group_id;
+            } else {
+                sort_counter += 1;
+            }
+            update_stmt.execute(params![sort_counter, id])?;
         }
         Ok(())
     }

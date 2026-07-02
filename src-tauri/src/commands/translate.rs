@@ -393,7 +393,7 @@ enum ClipboardBackup {
     Text(String),
     Html {
         html: String,
-        #[allow(dead_code)]
+        #[allow(dead_code)] // clipboard-rs 的 set_html 自动生成 text fallback
         text: Option<String>,
     },
     /// 图片以 PNG 字节形式保存
@@ -401,7 +401,6 @@ enum ClipboardBackup {
     /// RTF 富文本
     Rtf {
         rtf: String,
-        #[allow(dead_code)]
         text: Option<String>,
     },
     /// 文件路径列表
@@ -452,9 +451,22 @@ fn backup_clipboard() -> ClipboardBackup {
 
 fn read_rtf_from_clipboard(ctx: &clipboard_rs::ClipboardContext) -> Option<String> {
     use clipboard_rs::Clipboard as ClipboardTrait;
-    // clipboard-rs 没有 get_rtf，尝试通过 get_html 获取富文本
-    // 如果 HTML 为空但有文本，则返回 None
-    ctx.get_html().ok().filter(|h| !h.is_empty())
+    let bytes = ctx.get_buffer("Rich Text Format").ok()?;
+    if bytes.is_empty() {
+        return None;
+    }
+    // Trim trailing null (Windows clipboard convention) and encode with b64: prefix
+    // to match the storage format used by clipboard::rtf_storage
+    let trimmed = if bytes.last() == Some(&0) {
+        &bytes[..bytes.len().saturating_sub(1)]
+    } else {
+        &bytes
+    };
+    use base64::Engine as _;
+    Some(format!(
+        "b64:{}",
+        base64::engine::general_purpose::STANDARD.encode(trimmed)
+    ))
 }
 
 fn restore_clipboard(backup: &ClipboardBackup) {
@@ -469,10 +481,20 @@ fn restore_clipboard(backup: &ClipboardBackup) {
     let result = match backup {
         ClipboardBackup::Empty => Ok(()),
         ClipboardBackup::Text(text) => ctx.set_text(text.clone()),
-        ClipboardBackup::Html { html, .. } => ctx.set_html(html.clone()),
-        ClipboardBackup::Rtf { rtf, .. } => {
-            // clipboard-rs 没有 set_rtf，尝试用 set_html 恢复富文本
-            ctx.set_html(rtf.clone())
+        ClipboardBackup::Html { html, .. } => {
+            // 仅设置 HTML，clipboard-rs 会自动生成 CF_UNICODETEXT fallback
+            // 不要单独调用 set_text，避免 EmptyClipboard 清除已设置的 HTML 格式
+            ctx.set_html(html.clone())
+        }
+        ClipboardBackup::Rtf { rtf, text } => {
+            // 使用 rtf_storage 公共函数解码，自动追加 null 终止符
+            let rtf_bytes = crate::clipboard::rtf_storage::decode_rtf_for_clipboard(rtf);
+            let _ = ctx.set_buffer("Rich Text Format", rtf_bytes);
+            // 同时恢复伴生纯文本 (Bug 6)
+            if let Some(t) = text {
+                let _ = ctx.set_text(t.clone());
+            }
+            Ok(())
         }
         ClipboardBackup::Files(files) => ctx.set_files(files.clone()),
         ClipboardBackup::Image(png_bytes) => match RustImageData::from_bytes(png_bytes) {

@@ -25,8 +25,8 @@ export function matchesListFilter(
   selectedGroupId: number | null,
 ): boolean {
   if (selectedGroupId !== null) {
-    // 自定义分组视图：新捕获条目写入当前活动分组
-    return true;
+    // 自定义分组视图：仅显示属于当前分组的条目
+    return item.group_id === selectedGroupId;
   }
 
   if (!selectedGroup) {

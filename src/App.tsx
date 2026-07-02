@@ -259,6 +259,7 @@ function App() {
   }, []);
 
   // 窗口显示时按需刷新数据
+  // NOTE: refresh/fetchItems/setSearchQuery 均来自 zustand store，引用稳定，不会引起 effect 重执行
   useEffect(() => {
     const unlisten = listen("window-shown", () => {
       setWindowVisible(true);
@@ -341,7 +342,7 @@ function App() {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [handleEscape]);
 
-  // 防抖搜索
+  // 防抖搜索（fetchItems 是 zustand store 方法，引用稳定，debounce 实例仅创建一次）
   const debouncedSearch = useMemo(
     () => debounce(() => {
       fetchItems();

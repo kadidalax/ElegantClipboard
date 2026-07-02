@@ -489,7 +489,7 @@ impl Database {
             .collect();
 
         let mut update =
-            conn.prepare_cached("UPDATE clipboard_items SET content_type = 'url' WHERE id = ?1")?;
+            conn.prepare_cached("UPDATE clipboard_items SET content_type = 'url', semantic_hash = content_hash WHERE id = ?1")?;
         let mut count = 0;
         for (id, text) in rows {
             if is_url(&text) {

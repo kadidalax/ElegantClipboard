@@ -335,7 +335,7 @@ impl ClipboardHandler {
         };
 
         if content_type == "url" && !allowed.split(',').any(|t| t.trim() == "url") {
-            return allowed.split(',').any(|t| t.trim() == "text");
+            return false;
         }
 
         allowed.split(',').any(|t| t.trim() == content_type)
@@ -731,7 +731,7 @@ impl ClipboardHandler {
         let image_width = i64::from(capture.width);
         let image_height = i64::from(capture.height);
 
-        let filename = format!("{}.png", &hashes.content_hash[..16]);
+        let filename = format!("{}.png", &hashes.content_hash[..32]);
         let image_path = self.images_path.join(&filename);
         let image_path_str = image_path.to_string_lossy().to_string();
 
@@ -740,7 +740,7 @@ impl ClipboardHandler {
             image_width,
             image_height,
             byte_size,
-            &hashes.content_hash[..16]
+            &hashes.content_hash[..32]
         );
 
         if image_path.exists() {

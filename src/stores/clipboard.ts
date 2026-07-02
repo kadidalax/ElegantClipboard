@@ -32,6 +32,8 @@ export interface ClipboardItem {
   char_count: number | null;
   source_app_name: string | null;
   source_app_icon: string | null;
+  /** 所属自定义分组 ID（null = 默认分组） */
+  group_id: number | null;
   /** 所有文件是否存在（仅 files 类型，查询时计算） */
   files_valid?: boolean;
 }
@@ -240,6 +242,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
     await doPaste(get, id, "paste_content_as_plain");
   },
 
+  // contentType=null 时后端 Option<String> 为 None，清除所有类型（正确行为）
   clearHistory: async (contentType = null) => {
     try {
       await invoke<number>("clear_history", {
