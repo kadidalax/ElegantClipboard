@@ -89,6 +89,8 @@ pub struct ImageCapture {
     pub width: u32,
     pub height: u32,
     pub byte_size: usize,
+    /// 伴侣文件：原始 CF_DIB 数据（用于 Photoshop 等专业软件粘贴兼容）
+    pub dib_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone)]
@@ -106,16 +108,17 @@ pub enum ClipboardContent {
     ImageFile(ImageCapture),
     Files(Vec<String>),
 }
-
-/// 丢弃未处理的图片临时文件（channel 合并或处理失败时）
 pub(crate) fn cleanup_capture_content(content: &ClipboardContent) {
-    if let ClipboardContent::ImageFile(capture) = content
-        && let Err(e) = std::fs::remove_file(&capture.temp_path)
-    {
-        debug!(
-            "Failed to remove capture temp file {:?}: {}",
-            capture.temp_path, e
-        );
+    if let ClipboardContent::ImageFile(capture) = content {
+        if let Err(e) = std::fs::remove_file(&capture.temp_path) {
+            debug!(
+                "Failed to remove capture temp file {:?}: {}",
+                capture.temp_path, e
+            );
+        }
+        if let Some(ref dib_path) = capture.dib_path {
+            let _ = std::fs::remove_file(dib_path);
+        }
     }
 }
 
@@ -721,7 +724,7 @@ impl ClipboardHandler {
         })
     }
 
-    /// 处理图片：将 watcher 写入的临时 PNG rename 到 hash 命名路径
+    /// 处理图片：将 watcher 写入的临时 PNG rename 到 hash 命名路径，同时处理 DIB 伴侣文件
     fn process_image_file(
         &self,
         capture: ImageCapture,
@@ -750,6 +753,17 @@ impl ClipboardHandler {
             return Err(format!("Failed to save image: {e}"));
         }
         debug!("Saved image to {:?}", image_path);
+
+        // 处理 DIB 伴侣文件
+        if let Some(ref dib_temp) = capture.dib_path {
+            let dib_filename = format!("{}.dib", &hashes.content_hash[..32]);
+            let dib_target = self.images_path.join(&dib_filename);
+            if dib_target.exists() {
+                let _ = std::fs::remove_file(dib_temp);
+            } else if std::fs::rename(dib_temp, &dib_target).is_ok() {
+                debug!("Saved DIB companion to {:?}", dib_target);
+            }
+        }
 
         Ok(NewClipboardItem {
             content_type: ContentType::Image,

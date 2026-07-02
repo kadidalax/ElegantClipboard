@@ -413,6 +413,7 @@ fn read_clipboard_content_inner(
         }
     };
 
+    // ── 1. 文件：无歧义，直接返回 ──
     match ctx.get_files() {
         Ok(files) if !files.is_empty() => {
             debug!("Got {} files from clipboard", files.len());
@@ -422,45 +423,44 @@ fn read_clipboard_content_inner(
         Err(e) => debug!("Clipboard get_files failed: {}", e),
     }
 
-    match ctx.get_image() {
-        Ok(img) => {
-            if let Some(content) = write_image_capture(img, max_image_bytes, capture_dir) {
-                return Some(content);
-            }
-        }
-        Err(e) => debug!(
-            "Clipboard get_image failed: {} (may not contain image data or format unsupported)",
-            e
-        ),
-    }
+    // ── 2. 探测所有文本格式（不短路） ──
+    let html: Option<String> = ctx.get_html().ok().filter(|h| !h.is_empty());
+    let rtf: Option<String> = read_rtf_from_context(&ctx);
+    let text: Option<String> = ctx.get_text().ok().filter(|t| !t.is_empty());
 
-    match ctx.get_html() {
-        Ok(html) if !html.is_empty() => {
-            let text = ctx.get_text().ok().filter(|t| !t.is_empty());
-            let rtf = read_rtf_from_context(&ctx);
+    let has_text = html.is_some() || rtf.is_some() || text.is_some();
+
+    // ── 3. 探测图片格式 ──
+    let image_result = ctx.get_image_dib().ok();
+
+    // ── 4. 按语义决定类型 ──
+    // Word/WPS/浏览器等复制富文本时会同时放 CF_DIB（文字位图预览），
+    // 此时应优先作为富文本存储，而非图片。
+    if has_text {
+        if let Some(html) = html {
             debug!(
-                "Got HTML from clipboard: {} bytes, rtf={}",
+                "Got HTML from clipboard: {} bytes, rtf={}, text={}",
                 html.len(),
-                rtf.is_some()
+                rtf.is_some(),
+                text.is_some()
             );
             return Some(ClipboardContent::Html { html, text, rtf });
         }
-        Ok(_) => {}
-        Err(e) => debug!("Clipboard get_html failed: {}", e),
-    }
-
-    if let Some(rtf) = read_rtf_from_context(&ctx) {
-        let text = ctx.get_text().ok().filter(|t| !t.is_empty());
-        debug!("Got RTF from clipboard: {} bytes", rtf.len());
-        return Some(ClipboardContent::Rtf { rtf, text });
-    }
-
-    match ctx.get_text() {
-        Ok(text) if !text.is_empty() => {
+        if let Some(rtf) = rtf {
+            debug!("Got RTF from clipboard: {} bytes", rtf.len());
+            return Some(ClipboardContent::Rtf { rtf, text });
+        }
+        if let Some(text) = text {
+            debug!("Got text from clipboard: {} bytes", text.len());
             return Some(ClipboardContent::Text(text));
         }
-        Ok(_) => debug!("Clipboard text is empty"),
-        Err(e) => debug!("Clipboard get_text failed: {}", e),
+    }
+
+    // ── 5. 纯图片（无文本格式） ──
+    if let Some((img, dib_bytes)) = image_result {
+        if let Some(content) = write_image_capture(img, dib_bytes, max_image_bytes, capture_dir) {
+            return Some(content);
+        }
     }
 
     debug!("No recognizable content in clipboard");
@@ -468,8 +468,10 @@ fn read_clipboard_content_inner(
 }
 
 /// 将剪贴板图片编码为 PNG 写入临时文件，避免大 Vec 在 channel/worker 间传递
+/// 如果有原始 CF_DIB 数据，同时写入 .dib 伴侣文件
 fn write_image_capture(
     img: impl RustImage,
+    dib_bytes: Option<Vec<u8>>,
     max_image_bytes: usize,
     capture_dir: &std::path::Path,
 ) -> Option<ClipboardContent> {
@@ -514,11 +516,27 @@ fn write_image_capture(
         byte_size, temp_path
     );
 
+    // 写入 DIB 伴侣文件（如果有的话）
+    let dib_path = dib_bytes.and_then(|dib| {
+        let dib_path = temp_path.with_extension("dib");
+        if std::fs::write(&dib_path, &dib).is_ok() {
+            debug!(
+                "Wrote capture temp DIB: {} bytes -> {:?}",
+                dib.len(),
+                dib_path
+            );
+            Some(dib_path)
+        } else {
+            None
+        }
+    });
+
     Some(ClipboardContent::ImageFile(ImageCapture {
         temp_path,
         width,
         height,
         byte_size,
+        dib_path,
     }))
 }
 
