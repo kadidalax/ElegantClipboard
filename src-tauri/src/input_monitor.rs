@@ -149,11 +149,16 @@ pub fn start_monitoring() {
 }
 
 pub fn enable_mouse_monitoring() {
+    info!("[INPUT_MONITOR] enable_mouse_monitoring called");
     MOUSE_MONITORING_ENABLED.store(true, Ordering::Relaxed);
     #[cfg(windows)]
     {
         KEYBOARD_HOOK_DESIRED.store(true, Ordering::SeqCst);
         let tid = HOOK_THREAD_ID.load(Ordering::SeqCst);
+        info!(
+            "[INPUT_MONITOR] hook thread id={}, posting INSTALL_KB_HOOK",
+            tid
+        );
         if tid != 0 {
             unsafe {
                 if PostThreadMessageW(tid, MSG_INSTALL_KB_HOOK, WPARAM(0), LPARAM(0)).is_err() {
@@ -192,8 +197,10 @@ pub fn is_window_pinned() -> bool {
 }
 
 pub fn setup_translate_window(window: &WebviewWindow) {
+    info!("[INPUT_MONITOR] setup_translate_window called");
     #[cfg(windows)]
     if let Ok(hwnd) = window.hwnd() {
+        info!("[INPUT_MONITOR] translate HWND={:?}", hwnd.0);
         TRANSLATE_HWND.store(hwnd.0 as isize, Ordering::Relaxed);
     }
     *TRANSLATE_WINDOW.lock() = Some(window.clone());
@@ -205,12 +212,15 @@ pub fn setup_translate_window(window: &WebviewWindow) {
             event,
             tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed
         ) {
+            info!("[INPUT_MONITOR] translate window closed/destroyed");
             cleanup_translate_window();
         }
     });
+    info!("[INPUT_MONITOR] setup_translate_window done");
 }
 
 pub fn translate_window_shown() {
+    info!("[INPUT_MONITOR] translate_window_shown called");
     TRANSLATE_WINDOW_PINNED.store(false, Ordering::Relaxed);
     enable_mouse_monitoring();
 }
@@ -450,6 +460,10 @@ unsafe extern "system" fn keyboard_hook_proc(code: i32, wparam: WPARAM, lparam: 
                     };
                     if let Some(key) = nav_key {
                         if is_keydown {
+                            trace!(
+                                "[KB_HOOK] intercepting {} (fg={:#x}, main={:#x})",
+                                key, fg.0 as isize, main_raw
+                            );
                             let shift = unsafe { GetAsyncKeyState(i32::from(VK_SHIFT.0)) < 0 };
                             handle_nav_key(key, shift);
                         }

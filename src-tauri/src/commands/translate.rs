@@ -512,6 +512,7 @@ fn restore_clipboard(backup: &ClipboardBackup) {
 
 /// 获取系统当前选中的文字（通过模拟 Ctrl+C 读取剪贴板）
 fn get_selected_text_from_system(state: &Arc<AppState>) -> Result<String, String> {
+    tracing::info!("[TRANSLATE] get_selected_text_from_system start");
     // 备份剪贴板完整内容（在暂停监控前完成，避免影响监控状态）
     let backup = backup_clipboard();
 
@@ -520,6 +521,7 @@ fn get_selected_text_from_system(state: &Arc<AppState>) -> Result<String, String
         #[cfg(target_os = "windows")]
         let seq_before =
             unsafe { windows::Win32::System::DataExchange::GetClipboardSequenceNumber() };
+        tracing::info!("[TRANSLATE] simulating Ctrl+C, seq_before={}", seq_before);
 
         super::clipboard::simulate_copy()?;
 
@@ -527,11 +529,16 @@ fn get_selected_text_from_system(state: &Arc<AppState>) -> Result<String, String
         #[cfg(target_os = "windows")]
         let clipboard_changed = {
             let mut changed = false;
-            for _ in 0..30 {
+            for i in 0..30 {
                 std::thread::sleep(std::time::Duration::from_millis(20));
                 let seq_after =
                     unsafe { windows::Win32::System::DataExchange::GetClipboardSequenceNumber() };
                 if seq_after != seq_before {
+                    tracing::info!(
+                        "[TRANSLATE] clipboard changed after {} iterations, seq_after={}",
+                        i,
+                        seq_after
+                    );
                     changed = true;
                     break;
                 }
@@ -545,13 +552,24 @@ fn get_selected_text_from_system(state: &Arc<AppState>) -> Result<String, String
             .and_then(|ctx| ctx.get_text().ok())
             .unwrap_or_default();
 
+        tracing::info!(
+            "[TRANSLATE] clipboard_changed={}, text_len={}",
+            clipboard_changed,
+            text.len()
+        );
+
         if !clipboard_changed && text.is_empty() {
+            tracing::warn!("[TRANSLATE] no clipboard change and empty text");
             return Ok(String::new());
         }
 
         // 恢复剪贴板原始内容（文本/HTML/图片）
         restore_clipboard(&backup);
 
+        tracing::info!(
+            "[TRANSLATE] get_selected_text_from_system done, returning {} chars",
+            text.len()
+        );
         Ok(text)
     })
 }
@@ -570,17 +588,24 @@ pub async fn open_translate_result_window(
     text: String,
 ) -> Result<(), String> {
     let label = "translate-result";
+    tracing::info!(
+        "[TRANSLATE] open_translate_result_window called, text len={}",
+        text.len()
+    );
 
     if let Some(window) = app.get_webview_window(label) {
+        tracing::info!("[TRANSLATE] window already exists, showing + focusing");
         let _ = window.emit("translate-result-update", &text);
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_always_on_top(true);
         let _ = window.set_focus();
         crate::input_monitor::translate_window_shown();
+        tracing::info!("[TRANSLATE] existing window shown + focused done");
         return Ok(());
     }
 
+    tracing::info!("[TRANSLATE] window does not exist, creating new");
     *PENDING_TRANSLATE_TEXT.lock() = text;
 
     let window = tauri::WebviewWindowBuilder::new(
@@ -601,10 +626,25 @@ pub async fn open_translate_result_window(
     .build()
     .map_err(|e| format!("TRANSLATE:CREATE_WINDOW_FAILED:{e}"))?;
 
+    tracing::info!("[TRANSLATE] window built, calling setup_translate_window");
     crate::input_monitor::setup_translate_window(&window);
+
+    // 立即显示窗口，不依赖前端（WebView2 加载有延迟）
+    tracing::info!("[TRANSLATE] showing + focusing new window from Rust");
+    let _ = window.show();
+    let _ = window.set_focus();
     crate::input_monitor::translate_window_shown();
+    tracing::info!("[TRANSLATE] new window shown + focused done");
 
     Ok(())
+}
+
+/// 前端窗口完成 show + setFocus 后调用，通知后端启用输入监控
+#[tauri::command]
+pub fn translate_window_ready() {
+    tracing::info!("[TRANSLATE] translate_window_ready called from frontend");
+    crate::input_monitor::translate_window_shown();
+    tracing::info!("[TRANSLATE] translate_window_shown() done");
 }
 
 #[tauri::command]
@@ -645,15 +685,23 @@ pub fn register_translate_selection_shortcut(app: &tauri::AppHandle) {
         _ => return,
     };
 
+    tracing::info!("[TRANSLATE] registering shortcut: {}", shortcut_str);
     let registered = crate::hotkey::register(
         &shortcut_str,
         std::sync::Arc::new(|app, key_state| {
+            tracing::info!("[TRANSLATE] shortcut fired, key_state={:?}", key_state);
             // 松键后触发：避免快捷键修饰键仍按住时模拟 Ctrl+C 失败
             if key_state == crate::hotkey::KeyState::Released {
+                tracing::info!("[TRANSLATE] key released, spawning trigger thread");
                 let app = app.clone();
                 std::thread::spawn(move || {
+                    tracing::info!("[TRANSLATE] trigger thread started, acquiring lock");
                     let _guard = TRANSLATE_SELECTION_LOCK.lock();
+                    tracing::info!(
+                        "[TRANSLATE] lock acquired, calling trigger_translate_selection"
+                    );
                     trigger_translate_selection(&app);
+                    tracing::info!("[TRANSLATE] trigger_translate_selection returned");
                 });
             }
         }),
@@ -684,26 +732,38 @@ pub fn unregister_translate_selection_shortcut(app: &tauri::AppHandle) {
 }
 
 fn trigger_translate_selection(app: &tauri::AppHandle) {
+    tracing::info!("[TRANSLATE] trigger_translate_selection called");
     let Some(state) = app.try_state::<Arc<AppState>>() else {
+        tracing::error!("[TRANSLATE] no AppState");
         return;
     };
     match get_selected_text_from_system(&state) {
         Ok(text) if !text.trim().is_empty() => {
+            tracing::info!(
+                "[TRANSLATE] got text ({} chars), dispatching to UI thread",
+                text.len()
+            );
             let app = app.clone();
             if let Err(err) = crate::main_thread::run_on_ui_thread(&app.clone(), move || {
                 tauri::async_runtime::spawn(async move {
+                    tracing::info!("[TRANSLATE] calling open_translate_result_window");
                     if let Err(e) = open_translate_result_window(app, text).await {
-                        tracing::error!("Failed to open translate result window: {}", e);
+                        tracing::error!(
+                            "[TRANSLATE] Failed to open translate result window: {}",
+                            e
+                        );
                     }
+                    tracing::info!("[TRANSLATE] open_translate_result_window returned Ok");
                 });
             }) {
                 tracing::error!(
-                    "Failed to dispatch translate window to main thread: {}",
+                    "[TRANSLATE] Failed to dispatch translate window to main thread: {}",
                     err
                 );
             }
         }
         Ok(_) => {
+            tracing::warn!("[TRANSLATE] no text selected");
             use tauri_plugin_notification::NotificationExt;
             let _ = app
                 .notification()
@@ -712,7 +772,7 @@ fn trigger_translate_selection(app: &tauri::AppHandle) {
                 .body("No text detected")
                 .show();
         }
-        Err(e) => tracing::error!("Failed to get selected text: {}", e),
+        Err(e) => tracing::error!("[TRANSLATE] Failed to get selected text: {}", e),
     }
 }
 

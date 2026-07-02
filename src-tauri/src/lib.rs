@@ -1170,6 +1170,7 @@ pub fn run() {
             commands::translate::set_translate_window_pinned,
             commands::translate::is_translate_window_pinned,
             commands::translate::update_translate_selection_shortcut,
+            commands::translate::translate_window_ready,
             commands::settings::get_settings_batch,
         ])
         .run(tauri::generate_context!());

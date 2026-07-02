@@ -33,14 +33,9 @@ export function TranslateResult() {
   }, [translateLoaded]);
 
   useEffect(() => {
-    initTheme().then(async () => {
-      const win = getCurrentWindow();
-      document.body.getBoundingClientRect();
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-      await new Promise((r) => setTimeout(r, 30));
-      win.show();
-      win.setFocus();
-      await new Promise((r) => requestAnimationFrame(r));
+    initTheme().catch((error) => {
+      logError("initTheme failed:", error);
+    }).finally(() => {
       setThemeReady(true);
     });
   }, []);
