@@ -78,6 +78,7 @@ type NavIndicator = {
 export function Settings() {
   const { t, locale } = useTranslation();
   const [activeTab, setActiveTab] = useState<TabType>("general");
+  const [suppressTransition, setSuppressTransition] = useState(false);
   const [pluginsEnabled, setPluginsEnabled] = useState<Record<string, boolean>>({ webdav: false, translate: false });
   const navRef = useRef<HTMLElement>(null);
   const [navIndicator, setNavIndicator] = useState<NavIndicator>({
@@ -177,6 +178,13 @@ export function Settings() {
   useLayoutEffect(() => {
     updateNavIndicator();
   }, [updateNavIndicator, activeTab, pluginsEnabled.webdav, pluginsEnabled.translate]);
+
+  // tab 切换后一帧解除 transition 抑制，避免 Switch 等组件入场动画
+  useEffect(() => {
+    if (!suppressTransition) return;
+    const id = requestAnimationFrame(() => setSuppressTransition(false));
+    return () => cancelAnimationFrame(id);
+  }, [suppressTransition, activeTab]);
   
   const [settings, setSettings] = useState<AppSettings>({
     data_path: "",
@@ -406,7 +414,7 @@ export function Settings() {
                       key={item.id}
                       type="button"
                       data-nav-id={item.id}
-                      onClick={() => setActiveTab(item.id)}
+                      onClick={() => { setSuppressTransition(true); setActiveTab(item.id); }}
                       className={cn(
                         "relative z-10 flex items-center rounded-md transition-[color,transform,background-color] duration-200 active:scale-[0.98]",
                         item.child
@@ -450,7 +458,7 @@ export function Settings() {
         </div>
 
         {/* Right Content */}
-        <div className="flex-1 min-h-0 min-w-0">
+        <div className={cn("flex-1 min-h-0 min-w-0", suppressTransition && "*:transition-none!")}>
           {activeTab === "about" ? (
             <div
               key="about"
@@ -459,8 +467,8 @@ export function Settings() {
               <AboutTab />
             </div>
           ) : (
-            <ScrollArea key={activeTab} className="flex-1 h-full">
-            <div className="space-y-3 p-1">
+            <ScrollArea key={activeTab} className="flex-1 min-h-0">
+            <div className="flex flex-col gap-3">
               {activeTab === "general" && (
                 <GeneralTab
                   settings={settings}

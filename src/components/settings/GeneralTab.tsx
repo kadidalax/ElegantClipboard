@@ -126,7 +126,7 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
 
   return (
     <>
-      <div className="space-y-4">
+      <div className="space-y-3">
         <div className="rounded-lg border bg-card p-4">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">

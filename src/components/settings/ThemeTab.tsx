@@ -156,7 +156,7 @@ export function ThemeTab() {
   );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="rounded-lg border bg-card p-4">
         <h3 className="text-sm font-medium mb-3">{t("settings.theme.colorTitle")}</h3>
         <p className="text-xs text-muted-foreground mb-4">{t("settings.theme.colorDesc")}</p>

@@ -43,7 +43,7 @@ export function AudioTab() {
   } = useUISettings();
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <SoundCard title={t("settings.audio.copyTitle")} desc={t("settings.audio.copyDesc")}
         enabled={copySound} onToggle={setCopySound}
         timing={copySoundTiming} onTimingChange={setCopySoundTiming} />

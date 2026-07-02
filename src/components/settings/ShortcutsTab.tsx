@@ -327,7 +327,7 @@ export function ShortcutsTab({
 
   return (
     <>
-      <div className="space-y-4">
+      <div className="space-y-3">
         {/* Keyboard Navigation Card */}
         <div className="rounded-lg border bg-card p-4">
           <h3 className="text-sm font-medium mb-3">{t("settings.shortcuts.navTitle")}</h3>

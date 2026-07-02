@@ -157,7 +157,7 @@ export function AppFilterTab() {
     appMetaCache.current.get(process.toLowerCase());
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* 监听内容类型 */}
       <div className="rounded-lg border bg-card p-4">
         <h3 className="text-sm font-medium mb-3">{t("settings.appFilter.monitorTypesTitle")}</h3>

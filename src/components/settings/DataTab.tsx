@@ -469,7 +469,7 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
 
   return (
     <>
-      <div className="space-y-4">
+      <div className="space-y-3">
         {/* Data Size Card */}
         <div className="rounded-lg border bg-card p-4">
           <div className="flex items-center justify-between mb-3">
