@@ -454,13 +454,13 @@ export function Settings() {
           {activeTab === "about" ? (
             <div
               key="about"
-              className="flex-1 flex flex-col gap-3 animate-settings-in"
+              className="flex-1 flex flex-col gap-3"
             >
               <AboutTab />
             </div>
           ) : (
             <ScrollArea key={activeTab} className="flex-1 h-full">
-            <div className="space-y-3 animate-settings-in p-1">
+            <div className="space-y-3 p-1">
               {activeTab === "general" && (
                 <GeneralTab
                   settings={settings}
