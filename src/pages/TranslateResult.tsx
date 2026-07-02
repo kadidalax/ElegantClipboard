@@ -38,6 +38,8 @@ export function TranslateResult() {
     }).finally(() => {
       setThemeReady(true);
     });
+    // 注意：窗口 show 由 Rust 端在创建时立即执行，前端不重复调用
+    // translate_window_ready 由 Rust 端 translate_window_shown() 处理
   }, []);
 
   const doTranslate = useCallback(async (sourceText: string) => {
@@ -133,7 +135,7 @@ export function TranslateResult() {
   }, [translatedText, recordTranslation]);
 
   return (
-    <div className={cn("h-screen flex flex-col bg-muted/40 overflow-hidden p-3 gap-3", !themeReady && "**:transition-none!")}>
+    <div className={cn("h-screen flex flex-col bg-muted/40 overflow-hidden p-3 gap-3", !themeReady ? "opacity-0 **:transition-none!" : "opacity-100")}>
       <WindowTitleBar
         icon={<Translate16Regular className="w-5 h-5 text-muted-foreground" />}
         title={t("translateResult.title")}

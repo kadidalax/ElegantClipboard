@@ -279,7 +279,7 @@ html.dark[data-window-effect="acrylic"] {
 }
 
 body {
-    background-color: var(--color-background);
+    background-color: var(--color-background, oklch(0.145 0 0));
     color: var(--color-foreground);
     font-family:
         "CustomFont",
@@ -306,7 +306,8 @@ html {
        so body's background-color won't reach the compositing canvas.
        With transparent:true in WebView2 the canvas would be fully transparent
        unless <html> declares its own background-color. */
-    background-color: var(--color-background);
+    /* fallback: 在 initTheme() 设置 CSS 变量之前，用深色背景避免白屏闪烁 */
+    background-color: var(--color-background, oklch(0.145 0 0));
 }
 html {
     font-family: var(--font-sans);

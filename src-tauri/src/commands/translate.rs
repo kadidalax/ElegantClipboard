@@ -629,7 +629,7 @@ pub async fn open_translate_result_window(
     tracing::info!("[TRANSLATE] window built, calling setup_translate_window");
     crate::input_monitor::setup_translate_window(&window);
 
-    // 立即显示窗口，不依赖前端（WebView2 加载有延迟）
+    // 立即显示窗口（与原 commit 行为一致，保证响应速度）
     tracing::info!("[TRANSLATE] showing + focusing new window from Rust");
     let _ = window.show();
     let _ = window.set_focus();
@@ -772,7 +772,16 @@ fn trigger_translate_selection(app: &tauri::AppHandle) {
                 .body("No text detected")
                 .show();
         }
-        Err(e) => tracing::error!("[TRANSLATE] Failed to get selected text: {}", e),
+        Err(e) => {
+            tracing::error!("[TRANSLATE] Failed to get selected text: {}", e);
+            use tauri_plugin_notification::NotificationExt;
+            let _ = app
+                .notification()
+                .builder()
+                .title("Translate Selection")
+                .body(format!("Failed to get selected text: {}", e))
+                .show();
+        }
     }
 }
 
