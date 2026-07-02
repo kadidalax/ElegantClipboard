@@ -37,9 +37,10 @@
     --color-chart-4: hsl(43 74% 66%);
     --color-chart-5: hsl(27 87% 67%);
     --radius: 0.5rem;
-    --radius-lg: 0.5rem;
-    --radius-md: calc(0.5rem - 2px);
-    --radius-sm: calc(0.5rem - 4px);
+    --radius-sm: 0.25rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.625rem;
+    --radius-xl: 0.75rem;
     /* Subtle elevation — surface < floating < modal < lift */
     --shadow-xs: 0 1px 2px 0 hsl(220 25% 10% / 0.04);
     --shadow-sm: 0 1px 2px 0 hsl(220 25% 10% / 0.05), 0 1px 1px -1px hsl(220 25% 10% / 0.04);
@@ -260,9 +261,10 @@ html.dark[data-window-effect="acrylic"] {
 .sharp-corners,
 .sharp-corners * {
     --radius: 0px !important;
-    --radius-lg: 0px !important;
-    --radius-md: 0px !important;
     --radius-sm: 0px !important;
+    --radius-md: 0px !important;
+    --radius-lg: 0px !important;
+    --radius-xl: 0px !important;
     border-radius: 0px !important;
 }
 
@@ -446,11 +448,21 @@ textarea,
     background-color: hsl(from var(--color-primary) h s l / 0.3);
 }
 
+/* Smoother rounded corners on small interactive surfaces (WebView2) */
+.interactive-surface {
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+
 /* Settings sidebar sliding active indicator */
 .settings-nav-indicator {
+    top: 0;
+    left: 0;
+    will-change: transform, width, height;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
     transition:
-        top 0.28s cubic-bezier(0.22, 1, 0.36, 1),
-        left 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+        transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
         width 0.28s cubic-bezier(0.22, 1, 0.36, 1),
         height 0.28s cubic-bezier(0.22, 1, 0.36, 1),
         opacity 0.15s ease-out;

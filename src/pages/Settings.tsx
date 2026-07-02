@@ -396,12 +396,11 @@ export function Settings() {
                 <div
                   aria-hidden
                   className={cn(
-                    "settings-nav-indicator absolute rounded-md bg-primary shadow-sm pointer-events-none",
+                    "settings-nav-indicator absolute rounded-md bg-primary pointer-events-none",
                     navIndicator.visible ? "opacity-100" : "opacity-0",
                   )}
                   style={{
-                    top: navIndicator.top,
-                    left: navIndicator.left,
+                    transform: `translate3d(${navIndicator.left}px, ${navIndicator.top}px, 0)`,
                     width: navIndicator.width,
                     height: navIndicator.height,
                   }}
@@ -416,7 +415,7 @@ export function Settings() {
                       data-nav-id={item.id}
                       onClick={() => { setSuppressTransition(true); setActiveTab(item.id); }}
                       className={cn(
-                        "relative z-10 flex items-center rounded-md transition-[color,transform,background-color] duration-200 active:scale-[0.98]",
+                        "interactive-surface relative z-10 flex items-center rounded-md transition-[color,transform,background-color] duration-200 active:scale-[0.98]",
                         item.child
                           ? "ml-5 w-[calc(100%-1.25rem)] gap-2 px-2.5 py-1.5 text-xs before:absolute before:-left-2.5 before:top-1/2 before:-translate-y-1/2 before:h-3 before:w-px before:rounded-full before:bg-border before:content-['']"
                           : "w-full gap-3 px-3 py-2 text-sm",
@@ -467,7 +466,7 @@ export function Settings() {
               <AboutTab />
             </div>
           ) : (
-            <ScrollArea key={activeTab} className="flex-1 min-h-0">
+            <ScrollArea key={activeTab} className="h-full">
             <div className="flex flex-col gap-3">
               {activeTab === "general" && (
                 <GeneralTab
