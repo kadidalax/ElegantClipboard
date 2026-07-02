@@ -208,7 +208,7 @@ impl Database {
             tx.execute_batch(
                 "CREATE TABLE clipboard_items_new (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    content_type TEXT NOT NULL CHECK(content_type IN ('text', 'image', 'html', 'rtf', 'files')),
+                    content_type TEXT NOT NULL CHECK(content_type IN ('text', 'image', 'html', 'rtf', 'files', 'url')),
                     text_content TEXT,
                     html_content TEXT,
                     rtf_content TEXT,
