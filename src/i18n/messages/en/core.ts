@@ -45,6 +45,10 @@ export const core = {
     batchSelectDesc: "Select multiple items with Ctrl/Shift, then delete in bulk",
     settings: "Settings",
     settingsDesc: "Open settings",
+    webdavUpload: "Upload to cloud",
+    webdavDownload: "Download to local",
+    webdavUploadDesc: "Upload clipboard data to WebDAV cloud",
+    webdavDownloadDesc: "Download clipboard data from WebDAV cloud to local",
   },
   groups: {
     all: "All",

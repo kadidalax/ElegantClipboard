@@ -10,6 +10,8 @@ import {
   Add16Regular,
   ChevronDown16Regular,
   MultiselectLtr16Regular,
+  ArrowUpload16Regular,
+  ArrowDownload16Regular,
 } from "@fluentui/react-icons";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -90,6 +92,7 @@ function App() {
   const setBatchMode = useClipboardStore((s) => s.setBatchMode);
   const batchDelete = useClipboardStore((s) => s.batchDelete);
   const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false);
+  const [webdavSyncing, setWebdavSyncing] = useState(false);
   const { groups, fetchGroups, createGroup, renameGroup, deleteGroup } = useGroupStore();
   const autoResetState = useUISettings((s) => s.autoResetState);
   const searchAutoFocus = useUISettings((s) => s.searchAutoFocus);
@@ -402,6 +405,31 @@ function App() {
       logError("Failed to toggle pinned state:", error);
     }
   };
+  const handleWebdavUpload = async () => {
+    setWebdavSyncing(true);
+    try {
+      const msg = await invoke<string>("webdav_upload");
+      await refresh();
+      logError("WebDAV upload:", msg);
+    } catch (error) {
+      logError("WebDAV upload failed:", error);
+    } finally {
+      setWebdavSyncing(false);
+    }
+  };
+
+  const handleWebdavDownload = async () => {
+    setWebdavSyncing(true);
+    try {
+      const msg = await invoke<string>("webdav_download");
+      await refresh();
+      logError("WebDAV download:", msg);
+    } catch (error) {
+      logError("WebDAV download failed:", error);
+    } finally {
+      setWebdavSyncing(false);
+    }
+  };
 
   const renderToolbarButton = useCallback((id: ToolbarButton) => {
     switch (id) {
@@ -411,7 +439,7 @@ function App() {
             <TooltipTrigger asChild>
               <button
                 onClick={() => setClearDialogOpen(true)}
-                className="w-7 h-7 flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-md transition-colors"
+                className="w-7 h-7 p-1 flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-md transition-colors"
               >
                 <Delete16Regular className="w-4 h-4" />
               </button>
@@ -425,7 +453,7 @@ function App() {
             <TooltipTrigger asChild>
               <button
                 onClick={togglePinned}
-                className={`w-7 h-7 flex items-center justify-center rounded-md transition-colors ${
+                className={`w-7 h-7 p-1 flex items-center justify-center rounded-md transition-colors ${
                   isPinned
                     ? "text-primary bg-primary/10"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
@@ -447,7 +475,7 @@ function App() {
             <TooltipTrigger asChild>
               <button
                 onClick={() => setBatchMode(!batchMode)}
-                className={`w-7 h-7 flex items-center justify-center rounded-md transition-colors ${
+                className={`w-7 h-7 p-1 flex items-center justify-center rounded-md transition-colors ${
                   batchMode
                     ? "text-primary bg-primary/10"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
@@ -465,7 +493,7 @@ function App() {
             <TooltipTrigger asChild>
               <button
                 onClick={openSettings}
-                className="w-7 h-7 flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-md transition-colors"
+                className="w-7 h-7 p-1 flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-md transition-colors"
               >
                 <Settings16Regular className="w-4 h-4" />
               </button>
@@ -473,10 +501,40 @@ function App() {
             <TooltipContent>{t("toolbar.settings")}</TooltipContent>
           </Tooltip>
         );
+      case "webdav-upload":
+        return (
+          <Tooltip key={id}>
+            <TooltipTrigger asChild>
+              <button
+                onClick={handleWebdavUpload}
+                disabled={webdavSyncing}
+                className="w-7 h-7 p-1 flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-md transition-colors disabled:opacity-40"
+              >
+                <ArrowUpload16Regular className="w-4 h-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>{t("toolbar.webdavUpload")}</TooltipContent>
+          </Tooltip>
+        );
+      case "webdav-download":
+        return (
+          <Tooltip key={id}>
+            <TooltipTrigger asChild>
+              <button
+                onClick={handleWebdavDownload}
+                disabled={webdavSyncing}
+                className="w-7 h-7 p-1 flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-md transition-colors disabled:opacity-40"
+              >
+                <ArrowDownload16Regular className="w-4 h-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>{t("toolbar.webdavDownload")}</TooltipContent>
+          </Tooltip>
+        );
       default:
         return null;
     }
-  }, [isPinned, openSettings, togglePinned, batchMode, setBatchMode, t]);
+  }, [isPinned, openSettings, togglePinned, batchMode, setBatchMode, webdavSyncing, t]);
 
   return (
     <div className={cn("h-screen flex flex-col bg-muted/40 overflow-hidden", windowAnimation && windowVisible === true && "window-enter", windowAnimation && windowVisible === false && "window-hidden")}>

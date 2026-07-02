@@ -26,6 +26,17 @@ describe("TOOLBAR_BUTTON_REGISTRY", () => {
     expect(registry.settings).toBeDefined();
     expect(registry.settings.label).toBe(t("toolbar.settings"));
   });
+  it("has webdav-upload button", () => {
+    const registry = getToolbarButtonRegistry();
+    expect(registry["webdav-upload"]).toBeDefined();
+    expect(registry["webdav-upload"].label).toBe(t("toolbar.webdavUpload"));
+  });
+
+  it("has webdav-download button", () => {
+    const registry = getToolbarButtonRegistry();
+    expect(registry["webdav-download"]).toBeDefined();
+    expect(registry["webdav-download"].label).toBe(t("toolbar.webdavDownload"));
+  });
 
   it("all buttons have descriptions", () => {
     for (const [key, value] of Object.entries(getToolbarButtonRegistry())) {

@@ -45,6 +45,10 @@ export const core = {
     batchSelectDesc: "進入批次選擇模式，支援 Ctrl 多選、Shift 連選，批次刪除",
     settings: "設定",
     settingsDesc: "開啟設定視窗",
+    webdavUpload: "上傳到雲端",
+    webdavDownload: "下載到本機",
+    webdavUploadDesc: "將剪貼簿資料上傳到 WebDAV 雲端",
+    webdavDownloadDesc: "從 WebDAV 雲端下載剪貼簿資料到本機",
   },
   groups: {
     all: "全部",

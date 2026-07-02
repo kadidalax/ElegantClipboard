@@ -11,6 +11,8 @@ export function getToolbarButtonRegistry(): Record<
     pin: { label: t("toolbar.pinWindow"), description: t("toolbar.pinWindowDesc") },
     batch: { label: t("toolbar.batchSelect"), description: t("toolbar.batchSelectDesc") },
     settings: { label: t("toolbar.settings"), description: t("toolbar.settingsDesc") },
+    "webdav-upload": { label: t("toolbar.webdavUpload"), description: t("toolbar.webdavUploadDesc") },
+    "webdav-download": { label: t("toolbar.webdavDownload"), description: t("toolbar.webdavDownloadDesc") },
   };
 }
 

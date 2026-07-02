@@ -9,10 +9,10 @@ export type CardDensity = "compact" | "standard" | "spacious";
 export type TimeFormat = "relative" | "absolute";
 export type WindowEffect = "none" | "mica" | "acrylic" | "tabbed";
 export type SoundTiming = "immediate" | "after_success";
-export type ToolbarButton = "clear" | "pin" | "batch" | "settings";
+export type ToolbarButton = "clear" | "pin" | "batch" | "settings" | "webdav-upload" | "webdav-download";
 
 export const DEFAULT_TOOLBAR_BUTTONS: ToolbarButton[] = ["clear", "batch", "pin", "settings"];
-export const MAX_TOOLBAR_BUTTONS = 5;
+export const MAX_TOOLBAR_BUTTONS = 6;
 
 const UI_SETTINGS_DB_KEY = "ui_settings_json";
 const LEGACY_UI_SETTINGS_STORAGE_KEY = "clipboard-ui-settings";
@@ -179,7 +179,7 @@ function mergeUISettings(raw: unknown): UISettingsData {
     ...persisted,
     toolbarButtons: Array.isArray(persisted.toolbarButtons) && persisted.toolbarButtons.length > 0
       ? persisted.toolbarButtons.filter((button): button is ToolbarButton =>
-        ["clear", "pin", "batch", "settings"].includes(button),
+        ["clear", "pin", "batch", "settings", "webdav-upload", "webdav-download"].includes(button),
       )
       : DEFAULT_TOOLBAR_BUTTONS,
   };

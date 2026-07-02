@@ -20,6 +20,8 @@ import {
   LockClosed16Regular,
   Settings16Regular,
   MultiselectLtr16Regular,
+  ArrowUpload16Regular,
+  ArrowDownload16Regular,
 } from "@fluentui/react-icons";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -38,9 +40,11 @@ const TOOLBAR_BUTTON_ICONS: Record<ToolbarButton, React.ComponentType<{ classNam
   pin: LockClosed16Regular,
   batch: MultiselectLtr16Regular,
   settings: Settings16Regular,
+  "webdav-upload": ArrowUpload16Regular,
+  "webdav-download": ArrowDownload16Regular,
 };
 
-const ALL_TOOLBAR_BUTTONS: ToolbarButton[] = ["clear", "pin", "batch", "settings"];
+const ALL_TOOLBAR_BUTTONS: ToolbarButton[] = ["clear", "pin", "batch", "settings", "webdav-upload", "webdav-download"];
 
 function SortableToolbarItem({
   id,

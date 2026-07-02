@@ -45,6 +45,10 @@ export const core = {
     batchSelectDesc: "进入批量选择模式，支持 Ctrl 多选、Shift 连选，批量删除",
     settings: "设置",
     settingsDesc: "打开设置窗口",
+    webdavUpload: "上传到云端",
+    webdavDownload: "下载到本地",
+    webdavUploadDesc: "将剪贴板数据上传到 WebDAV 云端",
+    webdavDownloadDesc: "从 WebDAV 云端下载剪贴板数据到本地",
   },
   groups: {
     all: "全部",
