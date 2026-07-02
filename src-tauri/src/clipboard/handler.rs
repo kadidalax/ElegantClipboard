@@ -201,6 +201,8 @@ pub struct ClipboardHandler {
     settings_repo: SettingsRepository,
     images_path: PathBuf,
     icons_path: PathBuf,
+    /// 内存级去重：最近一次成功处理的内容哈希，防止快速连续事件绕过 DB dedup
+    last_content_hash: parking_lot::Mutex<String>,
 }
 
 impl ClipboardHandler {
@@ -216,6 +218,7 @@ impl ClipboardHandler {
             settings_repo: SettingsRepository::new(db),
             images_path,
             icons_path,
+            last_content_hash: parking_lot::Mutex::new(String::new()),
         }
     }
 
@@ -369,6 +372,17 @@ impl ClipboardHandler {
         let text_like = Self::is_text_like_content(&content);
         let text_dedup_mode = &settings.text_dedup_mode;
         let text_use_strict = text_like && text_dedup_mode == "strict";
+
+        // 内存级去重：防止快速连续事件（如 Zen 浏览器 1ms 内两次事件）绕过 DB dedup
+        // 仅在 dedup 策略不是 always_new 时生效
+        if dedup != "always_new" {
+            let mut last = self.last_content_hash.lock();
+            if *last == hashes.content_hash {
+                debug!("Content hash matches last processed, skipping (memory dedup)");
+                return Ok(None);
+            }
+            last.clone_from(&hashes.content_hash);
+        }
 
         if dedup != "always_new"
             && if text_like {

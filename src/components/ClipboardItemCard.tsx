@@ -311,7 +311,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
   const filesInvalid =
     item.content_type === "files" && effectiveFilesValid === false;
   const isTextLikeContent =
-    item.content_type === "text" || item.content_type === "html" || item.content_type === "rtf";
+    item.content_type === "text" || item.content_type === "html" || item.content_type === "rtf" || item.content_type === "url";
 
   const {
     attributes,
@@ -875,8 +875,8 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
   // 上下文菜单配置
   const contextMenuItems: ContextMenuItemConfig[] | null = (() => {
     if (isDragOverlay || batchMode) return null;
-    // 文本类内容（text/html/rtf）可编辑
-    if (item.content_type === "text" || item.content_type === "html" || item.content_type === "rtf") {
+    // 文本类内容（text/html/rtf/url）可编辑
+    if (item.content_type === "text" || item.content_type === "html" || item.content_type === "rtf" || item.content_type === "url") {
       return [
         { icon: ClipboardPaste16Regular, label: t("clipboard.contextMenu.paste"), onClick: () => pasteContent(item.id) },
         { icon: TextDescription16Regular, label: t("clipboard.contextMenu.pastePlainText"), onClick: () => pasteAsPlainText(item.id) },

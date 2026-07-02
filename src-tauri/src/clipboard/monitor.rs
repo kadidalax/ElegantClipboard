@@ -185,6 +185,9 @@ impl ClipboardMonitor {
                 break;
             };
 
+            // 防抖：等待 30ms 让快速连续事件（如 Firefox/Zen 多次 SetClipboardData）合并
+            std::thread::sleep(std::time::Duration::from_millis(30));
+
             while let Ok(newer) = rx.try_recv() {
                 cleanup_capture_content(&item.content);
                 item = newer;
