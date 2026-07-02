@@ -411,7 +411,7 @@ function App() {
             <TooltipTrigger asChild>
               <button
                 onClick={() => setClearDialogOpen(true)}
-                className="w-7 h-7 flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded transition-colors"
+                className="w-7 h-7 flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-md transition-colors"
               >
                 <Delete16Regular className="w-4 h-4" />
               </button>
@@ -425,7 +425,7 @@ function App() {
             <TooltipTrigger asChild>
               <button
                 onClick={togglePinned}
-                className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${
+                className={`w-7 h-7 flex items-center justify-center rounded-md transition-colors ${
                   isPinned
                     ? "text-primary bg-primary/10"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
@@ -447,7 +447,7 @@ function App() {
             <TooltipTrigger asChild>
               <button
                 onClick={() => setBatchMode(!batchMode)}
-                className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${
+                className={`w-7 h-7 flex items-center justify-center rounded-md transition-colors ${
                   batchMode
                     ? "text-primary bg-primary/10"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
@@ -465,7 +465,7 @@ function App() {
             <TooltipTrigger asChild>
               <button
                 onClick={openSettings}
-                className="w-7 h-7 flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded transition-colors"
+                className="w-7 h-7 flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-md transition-colors"
               >
                 <Settings16Regular className="w-4 h-4" />
               </button>
