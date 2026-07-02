@@ -138,13 +138,6 @@ export function TextEditor() {
           </span>
           <div className="flex gap-2">
             <Button
-              variant="outline"
-              size="sm"
-              onClick={() => getCurrentWindow().close()}
-            >
-              {t("textEditor.cancel")}
-            </Button>
-            <Button
               size="sm"
               onClick={handleSaveAndClose}
               disabled={saving}
