@@ -35,11 +35,12 @@
     --radius: var(--radius);
     --radius-sm: var(--radius-sm);
     --radius-md: var(--radius-md);
-    --radius-lg: var(--radius-lg);
-    --shadow-xs: var(--shadow-xs);
-    --shadow: var(--shadow);
-    --shadow-xl: var(--shadow-xl);
+    --radius-lg: var(--radius-md);
+    --radius-xs: var(--radius-xs);
     --radius-full: var(--radius-full);
+    --text-micro: var(--text-micro);
+    --text-caption: var(--text-caption);
+    --text-body-sm: var(--text-body-sm);
     --duration-150: var(--motion-normal);
     --duration-200: var(--motion-moderate);
     --duration-300: var(--motion-slower);
@@ -57,8 +58,8 @@
 
 /*
  * Elevation & motion — see public/surface-tokens.css
- *   .elevation-flat     — flat surfaces (list cards, settings)
- *   .elevation-control   — inputs, buttons, toolbars, default cards
+ *   .elevation-flat     — flat surfaces (list cards, settings); Card default
+ *   .elevation-control   — inputs, buttons, toolbars
  *   .elevation-floating  — popovers, dialogs, toasts, dropdowns
  *   .elevation-overlay   — drag overlay, lifted elements
  *   duration-150/200/300 — wired to --motion-* tokens via @theme inline
@@ -128,6 +129,80 @@
 }
 .border-status-success {
     border-color: var(--status-success-border);
+}
+
+/* Primary / destructive / muted semantic surfaces */
+.bg-primary-faint {
+    background-color: var(--color-primary-faint);
+}
+.bg-primary-subtle {
+    background-color: var(--color-primary-subtle);
+}
+.hover\:bg-primary-subtle-hover:hover {
+    background-color: var(--color-primary-subtle-hover);
+}
+.bg-primary-subtle-active {
+    background-color: var(--color-primary-subtle-active);
+}
+.border-primary-subtle {
+    border-color: var(--color-primary-subtle-border);
+}
+.border-primary-subtle-strong {
+    border-color: var(--color-primary-subtle-border-strong);
+}
+.bg-primary-dim {
+    background-color: var(--color-primary-dim);
+}
+.bg-destructive-subtle {
+    background-color: var(--color-destructive-subtle);
+}
+.hover\:bg-destructive-subtle-hover:hover {
+    background-color: var(--color-destructive-subtle-hover);
+}
+.border-destructive-subtle {
+    border-color: var(--color-destructive-subtle-border);
+}
+.bg-muted-surface-faint {
+    background-color: var(--color-muted-surface-faint);
+}
+.bg-muted-surface-subtle {
+    background-color: var(--color-muted-surface-subtle);
+}
+.bg-muted-surface {
+    background-color: var(--color-muted-surface);
+}
+.bg-muted-surface-strong {
+    background-color: var(--color-muted-surface-strong);
+}
+.hover\:bg-muted-surface-strong:hover {
+    background-color: var(--color-muted-surface-strong);
+}
+.bg-page-shell {
+    background-color: var(--color-page-shell);
+}
+
+/* Overlay / glass */
+.overlay-scrim {
+    background-color: var(--color-overlay-scrim);
+    backdrop-filter: blur(var(--blur-backdrop));
+}
+.overlay-scrim-soft {
+    background-color: var(--color-overlay-scrim-soft);
+    backdrop-filter: blur(var(--blur-backdrop));
+}
+.surface-glass {
+    background-color: var(--color-surface-glass);
+    backdrop-filter: blur(var(--blur-backdrop));
+}
+
+.text-micro {
+    font-size: var(--text-micro);
+}
+.text-caption {
+    font-size: var(--text-caption);
+}
+.text-body-sm {
+    font-size: var(--text-body-sm);
 }
 
 /* Standard interactive surface transition */

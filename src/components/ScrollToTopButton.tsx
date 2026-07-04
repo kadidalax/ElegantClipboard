@@ -106,11 +106,11 @@ export function ScrollToTopButton({ visible, onScrollToTop }: ScrollToTopButtonP
           : "opacity-0 pointer-events-none",
       )}
     >
-      <div className="flex flex-col items-center gap-0.5 rounded-lg border bg-background/95 backdrop-blur-sm elevation-control p-1">
+      <div className="flex flex-col items-center gap-0.5 rounded-md border surface-glass elevation-control p-1">
         {/* 回到顶部 */}
         <button
           onClick={onScrollToTop}
-          className="w-7 h-7 rounded-md flex items-center justify-center text-primary hover:bg-accent transition-colors"
+          className="w-7 h-7 rounded-md flex items-center justify-center text-primary hover:bg-accent transition-surface"
 
         >
           <ArrowUp16Regular className="w-4 h-4" />
@@ -123,7 +123,7 @@ export function ScrollToTopButton({ visible, onScrollToTop }: ScrollToTopButtonP
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
-          className="w-7 h-5 rounded-md flex items-center justify-center cursor-move text-muted-foreground/50 hover:text-muted-foreground hover:bg-accent transition-colors touch-none"
+          className="w-7 h-5 rounded-md flex items-center justify-center cursor-move text-muted-foreground/50 hover:text-muted-foreground hover:bg-accent transition-surface touch-none"
 
         >
           <svg width="10" height="9" viewBox="0 0 10 9" fill="currentColor">

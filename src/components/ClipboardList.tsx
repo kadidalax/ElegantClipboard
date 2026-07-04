@@ -35,15 +35,15 @@ interface ClipboardListProps {
 // Virtuoso scrollSeek 占位符 — 快速滚动时替代完整卡片，接收精确高度避免布局抖动
 const ScrollSeekPlaceholder = ({ height }: { height: number }) => (
   <div style={{ height }} className="px-2 pb-2">
-    <div className="rounded-lg border bg-card overflow-hidden px-3 py-2.5 h-full">
+    <div className="rounded-md border bg-card overflow-hidden px-3 py-2.5 h-full">
       <div className="space-y-1.5">
-        <div className="h-4 bg-muted rounded w-4/5" />
-        <div className="h-3.5 bg-muted/70 rounded w-3/5" />
-        <div className="h-3 bg-muted/50 rounded w-2/5" />
+        <div className="h-4 bg-muted rounded-md w-4/5" />
+        <div className="h-3.5 bg-muted-surface-strong rounded-md w-3/5" />
+        <div className="h-3 bg-muted-surface rounded-md w-2/5" />
       </div>
       <div className="flex items-center gap-1.5 mt-1.5">
-        <div className="h-3 bg-muted/40 rounded w-16" />
-        <div className="h-3 bg-muted/40 rounded w-12" />
+        <div className="h-3 bg-muted-surface-subtle rounded-md w-16" />
+        <div className="h-3 bg-muted-surface-subtle rounded-md w-12" />
       </div>
     </div>
   </div>
@@ -566,7 +566,7 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
           </div>
           <button
             onClick={() => useClipboardStore.getState().resetView()}
-            className="text-xs text-primary hover:text-primary/80 hover:underline transition-colors"
+            className="text-xs text-primary hover:text-primary/80 hover:underline transition-surface"
           >
             {t("clipboard.searchEmptyClearFilter")}
           </button>

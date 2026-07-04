@@ -185,7 +185,7 @@ export function ThemeTab() {
                 className={`
                   w-full flex items-center gap-3 p-3 rounded-md border transition-surface
                   ${isActive
-                    ? "border-primary bg-primary/5"
+                    ? "border-primary bg-primary-faint"
                     : "border-transparent hover:bg-accent"
                   }
                 `}
@@ -201,7 +201,7 @@ export function ThemeTab() {
                       <Checkmark16Filled className="w-3.5 h-3.5 text-primary" />
                     )}
                   </div>
-                  <span className="text-[11px] text-muted-foreground">
+                  <span className="text-caption text-muted-foreground">
                     {theme.description}
                   </span>
                 </div>
@@ -220,7 +220,7 @@ export function ThemeTab() {
         <div
           role="radiogroup"
           aria-label={t("settings.theme.darkModeAria")}
-          className="relative rounded-lg border bg-muted/40 p-1"
+          className="relative rounded-md border bg-muted-surface-subtle p-1"
         >
           <div className="relative grid grid-cols-3">
             <div
@@ -237,7 +237,7 @@ export function ThemeTab() {
                   role="radio"
                   aria-checked={isActive}
                   onClick={() => setDarkMode(opt.value)}
-                  className={`relative z-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                  className={`relative z-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-surface ${
                     isActive
                       ? "text-primary-foreground"
                       : "text-foreground/80 hover:text-foreground"
@@ -281,7 +281,7 @@ export function ThemeTab() {
               onClick={() => setWindowEffect(opt.value)}
               className={`flex flex-col items-start p-3 rounded-md border transition-surface text-left ${
                 windowEffect === opt.value
-                  ? "border-primary bg-primary/5"
+                  ? "border-primary bg-primary-faint"
                   : "border-transparent hover:bg-accent"
               }`}
             >
@@ -291,7 +291,7 @@ export function ThemeTab() {
                   <Checkmark16Filled className="w-3.5 h-3.5 text-primary" />
                 )}
               </div>
-              <span className="text-[11px] text-muted-foreground mt-0.5">
+              <span className="text-caption text-muted-foreground mt-0.5">
                 {opt.desc}
               </span>
             </button>
@@ -307,7 +307,7 @@ export function ThemeTab() {
           action={
             <button
               type="button"
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
+              className="text-xs text-muted-foreground hover:text-foreground transition-surface shrink-0"
               onClick={resetFontSettings}
             >
               {t("settings.theme.fontReset")}

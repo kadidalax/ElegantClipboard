@@ -70,7 +70,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   const isLastStep = currentStep === steps.length - 1;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overlay-scrim-soft">
       <div className="w-full max-w-sm mx-4">
         <div
           className={cn(
@@ -80,7 +80,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         >
           <div className="p-6 text-center">
             <div className="flex justify-center mb-4">
-              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+              <div className="w-16 h-16 rounded-full bg-primary-subtle flex items-center justify-center">
                 {step.icon}
               </div>
             </div>
@@ -89,7 +89,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
               {step.description}
             </p>
             {step.tip && (
-              <div className="flex items-center justify-center gap-2 text-xs text-primary bg-primary/5 rounded-md px-3 py-2">
+              <div className="flex items-center justify-center gap-2 text-xs text-primary bg-primary-faint rounded-md px-3 py-2">
                 <CheckmarkCircle16Filled className="w-4 h-4 shrink-0" />
                 <span>{step.tip}</span>
               </div>
@@ -105,7 +105,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
                   index === currentStep
                     ? "bg-primary w-4"
                     : index < currentStep
-                      ? "bg-primary/50"
+                      ? "bg-primary-dim"
                       : "bg-muted",
                 )}
               />

@@ -22,9 +22,9 @@ export function AboutTab() {
 
   return (
     <>
-      <div className="flex-1 rounded-lg border bg-card p-6 flex flex-col justify-center overflow-auto">
+      <div className="flex-1 rounded-md border bg-card p-6 flex flex-col justify-center overflow-auto">
         <div className="flex flex-col items-center text-center space-y-4">
-          <div className="h-16 w-16 rounded-2xl overflow-hidden">
+          <div className="h-16 w-16 rounded-md overflow-hidden">
             <img
               src="/icon.png"
               alt="ElegantClipboard"

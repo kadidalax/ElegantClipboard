@@ -621,9 +621,9 @@ export function ShortcutsTab({
             }
           />
           <div className="space-y-2">
-            <div className="flex items-center justify-between py-2 px-3 rounded-md bg-primary/10 border border-primary/20">
+            <div className="flex items-center justify-between py-2 px-3 rounded-md bg-primary-subtle border border-primary-subtle">
               <span className="text-sm font-medium">{t("settings.shortcuts.toggleWindow")}</span>
-              <kbd className="pointer-events-none inline-flex h-6 select-none items-center gap-1 rounded border bg-background px-2 font-mono text-xs font-medium">
+              <kbd className="pointer-events-none inline-flex h-6 select-none items-center gap-1 rounded-md border bg-background px-2 font-mono text-xs font-medium">
                 {settings.winv_replacement ? "Win+V" : settings.shortcut}
               </kbd>
             </div>
@@ -631,9 +631,9 @@ export function ShortcutsTab({
               <div className="space-y-1">
                 {quickPasteShortcuts.map((shortcut, idx) =>
                   shortcut ? (
-                    <div key={idx} className="flex items-center justify-between py-1.5 px-3 rounded-md bg-muted/50">
+                    <div key={idx} className="flex items-center justify-between py-1.5 px-3 rounded-md bg-muted-surface">
                       <span className="text-xs text-muted-foreground">{t("settings.shortcuts.quickPasteLabel", { num: idx + 1 })}</span>
-                      <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-background px-1.5 font-mono text-[10px] font-medium">
+                      <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded-md border bg-background px-1.5 font-mono text-micro font-medium">
                         {shortcut}
                       </kbd>
                     </div>
@@ -645,9 +645,9 @@ export function ShortcutsTab({
               <div className="space-y-1 mt-1">
                 {favPasteShortcuts.map((shortcut, idx) =>
                   shortcut ? (
-                    <div key={`fav-${idx}`} className="flex items-center justify-between py-1.5 px-3 rounded-md bg-muted/50">
+                    <div key={`fav-${idx}`} className="flex items-center justify-between py-1.5 px-3 rounded-md bg-muted-surface">
                       <span className="text-xs text-muted-foreground">{t("settings.shortcuts.favoritePasteLabel", { num: idx + 1 })}</span>
-                      <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-background px-1.5 font-mono text-[10px] font-medium">
+                      <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded-md border bg-background px-1.5 font-mono text-micro font-medium">
                         {shortcut}
                       </kbd>
                     </div>
@@ -689,9 +689,9 @@ export function ShortcutsTab({
           <div className="space-y-4 py-4">
             <div
               className={cn(
-                "h-16 flex items-center justify-center rounded-md border-2 border-dashed transition-colors",
+                "h-16 flex items-center justify-center rounded-md border-2 border-dashed transition-surface",
                 recordingShortcut
-                  ? "border-primary bg-primary/5"
+                  ? "border-primary bg-primary-faint"
                   : "border-muted",
               )}
               onClick={startRecording}

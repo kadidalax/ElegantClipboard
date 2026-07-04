@@ -36,12 +36,12 @@
     --color-chart-4: hsl(43 74% 66%);
     --color-chart-5: hsl(27 87% 67%);
 
-    /* ========== Radius Scale ========== */
+    /* ========== Radius Scale (default 8px; sm/lg alias md) ========== */
     --radius: 0.5rem;
     --radius-xs: 0.125rem;
-    --radius-sm: 0.25rem;
+    --radius-sm: var(--radius-md);
     --radius-md: 0.5rem;
-    --radius-lg: 0.625rem;
+    --radius-lg: var(--radius-md);
     --radius-pill: 999px;
     --radius-full: 9999px;
 
@@ -126,6 +126,36 @@
     --status-success-fg: var(--color-chart-2);
     --status-success-border: hsl(from var(--color-chart-2) h s l / 0.28);
 
+    /* ========== Semantic surfaces (primary / destructive / muted) ========== */
+    --color-primary-faint: hsl(from var(--color-primary) h s l / 0.05);
+    --color-primary-subtle: hsl(from var(--color-primary) h s l / 0.1);
+    --color-primary-subtle-hover: hsl(from var(--color-primary) h s l / 0.2);
+    --color-primary-subtle-active: hsl(from var(--color-primary) h s l / 0.25);
+    --color-primary-subtle-border: hsl(from var(--color-primary) h s l / 0.2);
+    --color-primary-subtle-border-strong: hsl(from var(--color-primary) h s l / 0.4);
+    --color-primary-dim: hsl(from var(--color-primary) h s l / 0.5);
+    --color-destructive-subtle: hsl(from var(--color-destructive) h s l / 0.1);
+    --color-destructive-subtle-hover: hsl(from var(--color-destructive) h s l / 0.2);
+    --color-destructive-subtle-border: hsl(from var(--color-destructive) h s l / 0.3);
+    --color-muted-surface-faint: hsl(from var(--color-muted) h s l / 0.3);
+    --color-muted-surface-subtle: hsl(from var(--color-muted) h s l / 0.4);
+    --color-muted-surface: hsl(from var(--color-muted) h s l / 0.5);
+    --color-muted-surface-strong: hsl(from var(--color-muted) h s l / 0.7);
+    --color-page-shell: hsl(from var(--color-muted) h s l / 0.4);
+
+    /* ========== Overlay / glass ========== */
+    --color-overlay-scrim: hsl(from var(--color-foreground) h s l / 0.4);
+    --color-overlay-scrim-soft: hsl(from var(--color-background) h s l / 0.8);
+    --color-surface-glass: color-mix(in srgb, var(--color-background) 95%, transparent);
+    --color-scrollbar-track: hsl(from var(--color-foreground) h s l / 0.2);
+    --color-scrollbar-track-hover: hsl(from var(--color-foreground) h s l / 0.3);
+    --blur-backdrop: 4px;
+
+    /* ========== Typography scale ========== */
+    --text-micro: 10px;
+    --text-caption: 11px;
+    --text-body-sm: 12px;
+
     /* ========== Preview Surface (derived from semantic colors) ========== */
     --preview-radius: var(--radius-md);
     --preview-shadow: var(--shadow-elevation-floating);
@@ -178,6 +208,11 @@
     --preview-content: hsl(from var(--color-card-foreground) h s l / 0.94);
     --preview-scrollbar-thumb: hsl(from var(--color-muted-foreground) h s l / 0.3);
     --preview-badge-bg: hsl(from var(--color-foreground) h s l / 0.55);
+
+    --color-overlay-scrim: hsl(0 0% 0% / 0.55);
+    --color-overlay-scrim-soft: hsl(from var(--color-background) h s l / 0.85);
+    --color-scrollbar-track: hsl(from var(--color-foreground) h s l / 0.25);
+    --color-scrollbar-track-hover: hsl(from var(--color-foreground) h s l / 0.35);
 }
 
 /* ========== Theme Color Variants ========== */

@@ -174,10 +174,10 @@ export function AppFilterTab() {
                 key={type}
                 type="button"
                 onClick={() => toggleMonitorType(type)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors ${
+                className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-surface ${
                   active
                     ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-muted/40 text-muted-foreground border-transparent hover:bg-muted"
+                    : "bg-muted-surface-subtle text-muted-foreground border-transparent hover:bg-muted"
                 }`}
               >
                 {label}
@@ -201,10 +201,10 @@ export function AppFilterTab() {
               key={mode}
               type="button"
               onClick={() => switchAppFilterMode(mode)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors ${
+              className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-surface ${
                 appFilterMode === mode
                   ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-muted/40 text-muted-foreground border-transparent hover:bg-muted"
+                  : "bg-muted-surface-subtle text-muted-foreground border-transparent hover:bg-muted"
               }`}
             >
               {mode === "blacklist" ? t("settings.appFilter.blacklist") : t("settings.appFilter.whitelist")}
@@ -261,7 +261,7 @@ export function AppFilterTab() {
               return (
                 <div
                   key={rule}
-                  className="group flex items-center gap-2.5 px-2.5 py-2 rounded-md bg-muted/40 hover:bg-muted/70 transition-colors"
+                  className="group flex items-center gap-2.5 px-2.5 py-2 rounded-md bg-muted-surface-subtle hover:bg-muted-surface-strong transition-surface"
                 >
                   {meta?.icon ? (
                     <img
@@ -271,7 +271,7 @@ export function AppFilterTab() {
                       onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                     />
                   ) : (
-                    <div className="w-5 h-5 shrink-0 rounded bg-muted flex items-center justify-center text-[10px] text-muted-foreground">
+                    <div className="w-5 h-5 shrink-0 rounded-md bg-muted flex items-center justify-center text-micro text-muted-foreground">
                       {rule.includes("*") || rule.includes("?") ? "*" : "?"}
                     </div>
                   )}
@@ -279,7 +279,7 @@ export function AppFilterTab() {
                     {meta ? (
                       <>
                         <div className="text-xs font-medium truncate">{meta.name}</div>
-                        <div className="text-[10px] text-muted-foreground truncate">{rule}</div>
+                        <div className="text-micro text-muted-foreground truncate">{rule}</div>
                       </>
                     ) : (
                       <div className="text-xs font-medium truncate">{rule}</div>
@@ -300,7 +300,7 @@ export function AppFilterTab() {
         ) : (
           <div className="text-center py-6">
             <p className="text-xs text-muted-foreground/60">{t("settings.appFilter.noRules")}</p>
-            <p className="text-[10px] text-muted-foreground/40 mt-1">
+            <p className="text-micro text-muted-foreground/40 mt-1">
               {t("settings.appFilter.noRulesHint")}
             </p>
           </div>
@@ -329,7 +329,7 @@ export function AppFilterTab() {
                   type="button"
                   disabled={alreadyAdded}
                   onClick={() => addFilterApp(app.process, { name: app.name, icon: app.icon })}
-                  className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-left transition-colors ${
+                  className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-left transition-surface ${
                     alreadyAdded
                       ? "opacity-40 cursor-not-allowed"
                       : "hover:bg-accent"
@@ -343,16 +343,16 @@ export function AppFilterTab() {
                       onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                     />
                   ) : (
-                    <div className="w-5 h-5 shrink-0 rounded bg-muted flex items-center justify-center text-[10px] text-muted-foreground">
+                    <div className="w-5 h-5 shrink-0 rounded-md bg-muted flex items-center justify-center text-micro text-muted-foreground">
                       ?
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-medium truncate">{app.name}</div>
-                    <div className="text-[10px] text-muted-foreground truncate">{app.process}</div>
+                    <div className="text-micro text-muted-foreground truncate">{app.process}</div>
                   </div>
                   {alreadyAdded && (
-                    <span className="text-[10px] text-muted-foreground shrink-0">{t("settings.appFilter.alreadyAdded")}</span>
+                    <span className="text-micro text-muted-foreground shrink-0">{t("settings.appFilter.alreadyAdded")}</span>
                   )}
                 </button>
               );

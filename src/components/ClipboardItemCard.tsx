@@ -676,12 +676,12 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
     <div ref={setNodeRef} style={style}>
       <Card
         className={cn(
-          "group relative cursor-pointer overflow-hidden border elevation-flat hover:border-primary/40",
-          !showDragAreaIndicator && "transition-colors duration-150 hover:bg-accent/50",
+          "group relative cursor-pointer overflow-hidden border hover:border-primary-subtle-strong",
+          !showDragAreaIndicator && "transition-surface hover:bg-accent/50",
           isDragOverlay && "elevation-floating border-primary cursor-move",
           justPasted && "animate-paste-flash",
-          isActive && "bg-accent border-primary/30",
-          batchMode && isSelected && "bg-primary/5",
+          isActive && "bg-accent border-primary-subtle",
+          batchMode && isSelected && "bg-primary-faint",
           batchMode && !isSelected && "opacity-90",
         )}
         onClick={handlePaste}
@@ -704,7 +704,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
               className={cn(
                 "absolute inset-y-0 left-0 z-10 flex items-center justify-center rounded-l-md cursor-move",
                 showDragAreaIndicator
-                  ? "border-r border-dashed border-primary/40 bg-primary/15 text-primary opacity-0 group-hover:opacity-90 transition-[opacity,colors] duration-150 hover:bg-primary/25 hover:text-primary"
+                  ? "border-r border-dashed border-primary-subtle-strong bg-primary-subtle-active text-primary opacity-0 group-hover:opacity-90 transition-[opacity,colors] duration-150 hover:bg-primary-subtle-active hover:text-primary"
                   : "border-r border-transparent bg-transparent text-transparent opacity-0",
               )}
               style={{ width: dragHandleWidth }}
@@ -713,7 +713,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
             >
               <span
                 aria-hidden
-                className="pointer-events-none text-[10px] leading-tight text-center text-primary/80"
+                className="pointer-events-none text-micro leading-tight text-center text-primary/80"
               >
                 {t("clipboard.card.dragArea")}
               </span>
@@ -728,7 +728,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
               className={cn(
                 "absolute inset-y-0 right-0 z-10 flex items-center justify-center rounded-r-md cursor-move",
                 showDragAreaIndicator
-                  ? "border-l border-dashed border-primary/40 bg-primary/15 text-primary opacity-0 group-hover:opacity-90 transition-[opacity,colors] duration-150 hover:bg-primary/25 hover:text-primary"
+                  ? "border-l border-dashed border-primary-subtle-strong bg-primary-subtle-active text-primary opacity-0 group-hover:opacity-90 transition-[opacity,colors] duration-150 hover:bg-primary-subtle-active hover:text-primary"
                   : "border-l border-transparent bg-transparent text-transparent opacity-0",
               )}
               style={{ width: dragHandleWidth }}
@@ -737,7 +737,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
             >
               <span
                 aria-hidden
-                className="pointer-events-none text-[10px] leading-tight text-center text-primary/80"
+                className="pointer-events-none text-micro leading-tight text-center text-primary/80"
               >
                 {t("clipboard.card.dragArea")}
               </span>
@@ -750,9 +750,9 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
                 style={{ left: dragHandleWidth, right: dragHandleWidth }}
               >
                 <div className="text-center">
-                  <div className="text-[10px] leading-none text-status-warning">{t("clipboard.card.pasteZoneHint")}</div>
-                  <div className="mt-0.5 text-[10px] leading-none text-status-warning">{t("clipboard.card.clickToPaste")}</div>
-                  <div className="mt-0.5 text-[10px] leading-none text-status-warning">{t("clipboard.card.disableInSettings")}</div>
+                  <div className="text-micro leading-none text-status-warning">{t("clipboard.card.pasteZoneHint")}</div>
+                  <div className="mt-0.5 text-micro leading-none text-status-warning">{t("clipboard.card.clickToPaste")}</div>
+                  <div className="mt-0.5 text-micro leading-none text-status-warning">{t("clipboard.card.disableInSettings")}</div>
                 </div>
               </div>
             )}
@@ -847,7 +847,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
       </Card>
       {translateStatus !== "idle" && (
         <div
-          className="mt-1 rounded-md border bg-muted/40 px-3 py-2"
+          className="mt-1 rounded-md border bg-muted-surface-subtle px-3 py-2"
           onClick={(e) => e.stopPropagation()}
         >
           {translateStatus === "loading" && (

@@ -388,7 +388,7 @@ export function Settings() {
   return (
     <div
       className={cn(
-        "h-screen flex flex-col bg-muted/40 overflow-hidden p-3 gap-3",
+        "h-screen flex flex-col bg-page-shell overflow-hidden p-3 gap-3",
         !themeReady && "**:transition-none!",
       )}
     >
@@ -452,18 +452,18 @@ export function Settings() {
               </nav>
               <div className="shrink-0 pt-2 mt-2 border-t px-2 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-muted-foreground">{t("settings.version")}</span>
+                  <span className="text-caption text-muted-foreground">{t("settings.version")}</span>
                   <button
                     type="button"
                     onClick={() => setUpdateDialogOpen(true)}
-                    className="text-[11px] text-foreground transition-colors hover:text-primary hover:underline"
+                    className="text-caption text-foreground transition-surface hover:text-primary hover:underline"
                   >
                     v{appVersion}
                   </button>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-muted-foreground">{t("settings.buildTime")}</span>
-                  <span className="text-[11px] text-foreground">{buildTime}</span>
+                  <span className="text-caption text-muted-foreground">{t("settings.buildTime")}</span>
+                  <span className="text-caption text-foreground">{buildTime}</span>
                 </div>
               </div>
             </CardContent>

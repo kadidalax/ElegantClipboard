@@ -101,7 +101,7 @@ export function TextEditor() {
   return (
     <div
       className={cn(
-        "h-screen flex flex-col bg-muted/40 overflow-hidden p-3 gap-3",
+        "h-screen flex flex-col bg-page-shell overflow-hidden p-3 gap-3",
         !themeReady && "**:transition-none!",
       )}
     >

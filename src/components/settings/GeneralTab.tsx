@@ -171,7 +171,7 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
                 <Label className="text-xs flex items-center gap-2">
                   {t("settings.general.adminLaunch")}
                   {settings.is_running_as_admin && (
-                    <span className="text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary rounded animate-in fade-in duration-200">
+                    <span className="text-micro px-1.5 py-0.5 bg-primary-subtle text-primary rounded-md animate-in fade-in duration-200">
                       {t("settings.general.adminLaunchBadge")}
                     </span>
                   )}

@@ -199,7 +199,7 @@ export function TranslateTab() {
                       placeholder={t("settings.translate.googleApiKey")} value={googleApiKey}
                       onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ googleApiKey: v }); debounced("googleApiKey", setGoogleApiKey, v); }}
                     />
-                    <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-surface"
                       onClick={() => setShowGoogleKey(!showGoogleKey)}>
                       {showGoogleKey ? <EyeOff16Regular className="w-3.5 h-3.5" /> : <Eye16Regular className="w-3.5 h-3.5" />}
                     </button>
@@ -239,7 +239,7 @@ export function TranslateTab() {
                         placeholder={t("settings.translate.baiduSecretPlaceholder")} value={baiduSecretKey}
                         onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ baiduSecretKey: v }); debounced("baiduSecretKey", setBaiduSecretKey, v); }}
                       />
-                      <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-surface"
                         onClick={() => setShowBaiduKey(!showBaiduKey)}>
                         {showBaiduKey ? <EyeOff16Regular className="w-3.5 h-3.5" /> : <Eye16Regular className="w-3.5 h-3.5" />}
                       </button>
@@ -272,7 +272,7 @@ export function TranslateTab() {
                         placeholder={t("settings.translate.openaiApiKey")} value={openaiApiKey}
                         onChange={(e) => { const v = e.target.value; useTranslateSettings.setState({ openaiApiKey: v }); debounced("openaiApiKey", setOpenaiApiKey, v); }}
                       />
-                      <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-surface"
                         onClick={() => setShowOpenaiKey(!showOpenaiKey)}>
                         {showOpenaiKey ? <EyeOff16Regular className="w-3.5 h-3.5" /> : <Eye16Regular className="w-3.5 h-3.5" />}
                       </button>

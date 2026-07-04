@@ -84,8 +84,8 @@ export const FileDetailsDialog = ({
             className={cn(
               "flex items-start gap-3 p-2 rounded-md border",
               file.exists
-                ? "bg-muted/30"
-                : "bg-destructive/10 border-destructive/30",
+                ? "bg-muted-surface-faint"
+                : "bg-destructive-subtle border-destructive-subtle",
             )}
           >
             <div className="shrink-0 mt-0.5">
@@ -151,7 +151,7 @@ export function MoveToGroupSection({
       <div
         role="menuitem"
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); setExpanded((v) => !v); }}
-        className="flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground hover:bg-accent hover:text-accent-foreground"
+        className="flex cursor-default select-none items-center rounded-md px-2 py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground hover:bg-accent hover:text-accent-foreground"
       >
         <span>{t("groups.moveToGroup")}</span>
         <ChevronDown16Regular
@@ -200,7 +200,7 @@ export const ActionToolbar = ({
   const { t } = useTranslation();
   return (
   <div
-    className="absolute right-1 top-1 z-20 flex items-center gap-0.5 bg-background/95 rounded-md p-0.5 elevation-floating border opacity-0 group-hover:opacity-100 transition-opacity"
+    className="absolute right-1 top-1 z-20 flex items-center gap-0.5 surface-glass rounded-md p-0.5 elevation-floating border opacity-0 group-hover:opacity-100 transition-surface"
     data-drag-ignore="true"
   >
     <Tooltip>

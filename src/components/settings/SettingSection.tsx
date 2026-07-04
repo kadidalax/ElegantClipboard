@@ -2,7 +2,7 @@ import * as React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-export const settingsCardClass = "rounded-lg border bg-card p-4 elevation-flat";
+export const settingsCardClass = "rounded-md border bg-card p-4 elevation-flat";
 
 type SettingsCardProps = React.HTMLAttributes<HTMLDivElement> & {
   children: React.ReactNode;
@@ -55,7 +55,7 @@ type SettingSectionProps = React.HTMLAttributes<HTMLDivElement> & {
 
 export function SettingSection({ className, children, ...props }: SettingSectionProps) {
   return (
-    <Card className={cn("elevation-flat", className)} {...props}>
+    <Card className={cn(className)} {...props}>
       <CardContent className="p-4">{children}</CardContent>
     </Card>
   );

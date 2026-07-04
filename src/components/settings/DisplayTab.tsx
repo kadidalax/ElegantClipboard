@@ -84,7 +84,7 @@ function SortableToolbarItem({
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-3 px-3 py-2 rounded-md transition-colors ${
+      className={`flex items-center gap-3 px-3 py-2 rounded-md transition-surface ${
         active ? "bg-accent/50" : "opacity-50"
       }`}
     >
@@ -101,7 +101,7 @@ function SortableToolbarItem({
       )}
       <div className="flex-1 min-w-0">
         <div className="text-xs font-medium">{label}</div>
-        <div className="text-[11px] text-muted-foreground truncate">{description}</div>
+        <div className="text-caption text-muted-foreground truncate">{description}</div>
       </div>
       <Switch
         checked={active}
@@ -234,7 +234,7 @@ export function DisplayTab() {
           action={
             <button
               onClick={() => setToolbarButtons([...DEFAULT_TOOLBAR_BUTTONS])}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              className="text-xs text-muted-foreground hover:text-foreground transition-surface"
             >
               {t("settings.display.toolbar.resetDefault")}
             </button>
@@ -313,7 +313,7 @@ export function DisplayTab() {
                 <button
                   key={opt.value}
                   onClick={() => setCardDensity(opt.value)}
-                  className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
+                  className={`px-2.5 py-1 text-xs rounded-md border transition-surface ${
                     cardDensity === opt.value
                       ? "bg-primary text-primary-foreground border-primary"
                       : "bg-background text-foreground border-input hover:bg-accent"
@@ -335,7 +335,7 @@ export function DisplayTab() {
                 <button
                   key={opt.value}
                   onClick={() => setListLayout(opt.value)}
-                  className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
+                  className={`px-2.5 py-1 text-xs rounded-md border transition-surface ${
                     listLayout === opt.value
                       ? "bg-primary text-primary-foreground border-primary"
                       : "bg-background text-foreground border-input hover:bg-accent"
@@ -440,7 +440,7 @@ export function DisplayTab() {
                     <button
                       key={opt.value}
                       onClick={() => setPreviewPosition(opt.value)}
-                      className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
+                      className={`px-2.5 py-1 text-xs rounded-md border transition-surface ${
                         previewPosition === opt.value
                           ? "bg-primary text-primary-foreground border-primary"
                           : "bg-background text-foreground border-input hover:bg-accent"
@@ -523,7 +523,7 @@ export function DisplayTab() {
                   <button
                     key={opt.value}
                     onClick={() => setTimeFormat(opt.value)}
-                    className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
+                    className={`px-2.5 py-1 text-xs rounded-md border transition-surface ${
                       timeFormat === opt.value
                         ? "bg-primary text-primary-foreground border-primary"
                         : "bg-background text-foreground border-input hover:bg-accent"
@@ -579,7 +579,7 @@ export function DisplayTab() {
                   <button
                     key={opt.value}
                     onClick={() => setSourceAppDisplay(opt.value)}
-                    className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
+                    className={`px-2.5 py-1 text-xs rounded-md border transition-surface ${
                       sourceAppDisplay === opt.value
                         ? "bg-primary text-primary-foreground border-primary"
                         : "bg-background text-foreground border-input hover:bg-accent"

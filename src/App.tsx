@@ -446,7 +446,7 @@ function App() {
             <TooltipTrigger asChild>
               <button
                 onClick={() => setClearDialogOpen(true)}
-                className="w-7 h-7 p-1 flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-md transition-colors"
+                className="interactive-surface w-7 h-7 p-1 flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-md transition-surface"
               >
                 <Delete16Regular className="w-4 h-4" />
               </button>
@@ -460,9 +460,9 @@ function App() {
             <TooltipTrigger asChild>
               <button
                 onClick={togglePinned}
-                className={`w-7 h-7 p-1 flex items-center justify-center rounded-md transition-colors ${
+                className={`interactive-surface w-7 h-7 p-1 flex items-center justify-center rounded-md transition-surface ${
                   isPinned
-                    ? "text-primary bg-primary/10"
+                    ? "text-primary bg-primary-subtle"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                 }`}
               >
@@ -482,9 +482,9 @@ function App() {
             <TooltipTrigger asChild>
               <button
                 onClick={() => setBatchMode(!batchMode)}
-                className={`w-7 h-7 p-1 flex items-center justify-center rounded-md transition-colors ${
+                className={`interactive-surface w-7 h-7 p-1 flex items-center justify-center rounded-md transition-surface ${
                   batchMode
-                    ? "text-primary bg-primary/10"
+                    ? "text-primary bg-primary-subtle"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                 }`}
               >
@@ -500,7 +500,7 @@ function App() {
             <TooltipTrigger asChild>
               <button
                 onClick={openSettings}
-                className="w-7 h-7 p-1 flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-md transition-colors"
+                className="interactive-surface w-7 h-7 p-1 flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-md transition-surface"
               >
                 <Settings16Regular className="w-4 h-4" />
               </button>
@@ -515,7 +515,7 @@ function App() {
               <button
                 onClick={handleWebdavUpload}
                 disabled={webdavSyncing}
-                className="w-7 h-7 p-1 flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-md transition-colors disabled:opacity-40"
+                className="interactive-surface w-7 h-7 p-1 flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-md transition-surface disabled:opacity-40"
               >
                 <CloudArrowUp16Regular className="w-4 h-4" />
               </button>
@@ -530,7 +530,7 @@ function App() {
               <button
                 onClick={handleWebdavDownload}
                 disabled={webdavSyncing}
-                className="w-7 h-7 p-1 flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-md transition-colors disabled:opacity-40"
+                className="interactive-surface w-7 h-7 p-1 flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-md transition-surface disabled:opacity-40"
               >
                 <CloudArrowDown16Regular className="w-4 h-4" />
               </button>
@@ -544,7 +544,7 @@ function App() {
   }, [isPinned, openSettings, togglePinned, batchMode, setBatchMode, webdavSyncing, t]);
 
   return (
-    <div className={cn("h-screen flex flex-col bg-muted/40 overflow-hidden", windowAnimation && windowVisible === true && "window-enter", windowAnimation && windowVisible === false && "window-hidden")}>
+    <div className={cn("h-screen flex flex-col bg-page-shell overflow-hidden", windowAnimation && windowVisible === true && "window-enter", windowAnimation && windowVisible === false && "window-hidden")}>
       {/* 顶栏：搜索 + 操作 */}
       <div
         className="flex items-center gap-2 px-2 pt-2 pb-0.5 shrink-0 select-none"
@@ -569,7 +569,7 @@ function App() {
           {searchQuery && (
             <button
               onClick={() => { setSearchQuery(""); fetchItems({ search: "" }); }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-sm transition-colors z-10"
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-md transition-surface z-10"
             >
               <Dismiss16Regular className="w-3.5 h-3.5" />
             </button>
@@ -589,7 +589,7 @@ function App() {
 
       {/* 批量操作栏 */}
       {batchMode && (
-        <div className="shrink-0 flex items-center justify-between px-3 py-1.5 bg-primary/5 border-b border-primary/20">
+        <div className="shrink-0 flex items-center justify-between px-3 py-1.5 bg-primary-faint border-b border-primary-subtle">
           <span className="text-xs text-muted-foreground">
             {t("app.batchSelected", { count: selectedIds.size })}
             <span className="ml-1.5 text-muted-foreground/60">{t("app.batchShiftHint")}</span>
@@ -605,20 +605,20 @@ function App() {
                 }
               }}
               disabled={selectedIds.size < 2}
-              className="text-xs px-2 py-1 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="text-xs px-2 py-1 rounded-md bg-primary-subtle text-primary hover:bg-primary-subtle-hover transition-surface disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {t("app.batchMergePaste")}
             </button>
             <button
               onClick={() => setBatchDeleteDialogOpen(true)}
               disabled={selectedIds.size === 0}
-              className="text-xs px-2 py-1 rounded bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="text-xs px-2 py-1 rounded-md bg-destructive-subtle text-destructive hover:bg-destructive-subtle-hover transition-surface disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {t("common.delete")}
             </button>
             <button
               onClick={() => setBatchMode(false)}
-              className="text-xs px-2 py-1 rounded hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
+              className="text-xs px-2 py-1 rounded-md hover:bg-accent transition-surface text-muted-foreground hover:text-foreground"
             >
               {t("common.cancel")}
             </button>
@@ -692,7 +692,7 @@ function App() {
                   <div
                     onClick={() => { setSelectedGroupId(null); setGroupDropdownOpen(false); }}
                     className={cn(
-                      "flex items-center gap-2 rounded-sm px-2 py-1.5 text-xs cursor-default hover:bg-accent hover:text-accent-foreground",
+                      "flex items-center gap-2 rounded-md px-2 py-1.5 text-xs cursor-default hover:bg-accent hover:text-accent-foreground",
                       selectedGroupId === null && "bg-accent/50 text-foreground"
                     )}
                   >
@@ -709,7 +709,7 @@ function App() {
                             key={g.id}
                             onClick={() => { setSelectedGroupId(g.id); setGroupDropdownOpen(false); }}
                             className={cn(
-                              "flex items-center gap-2 rounded-sm px-2 py-1.5 text-xs cursor-default hover:bg-accent hover:text-accent-foreground group/row",
+                              "flex items-center gap-2 rounded-md px-2 py-1.5 text-xs cursor-default hover:bg-accent hover:text-accent-foreground group/row",
                               selectedGroupId === g.id && "bg-accent/50 text-foreground"
                             )}
                           >
@@ -720,13 +720,13 @@ function App() {
                             >
                               <button
                                 onClick={() => { openRenameDialog(g); setGroupDropdownOpen(false); }}
-                                className="w-5 h-5 flex items-center justify-center rounded hover:bg-muted"
+                                className="w-5 h-5 flex items-center justify-center rounded-md hover:bg-muted"
                               >
                                 <Edit16Regular className="w-3 h-3" />
                               </button>
                               <button
                                 onClick={() => { requestDeleteGroup(g); setGroupDropdownOpen(false); }}
-                                className="w-5 h-5 flex items-center justify-center rounded hover:bg-muted text-destructive"
+                                className="w-5 h-5 flex items-center justify-center rounded-md hover:bg-muted text-destructive"
                               >
                                 <Delete16Regular className="w-3 h-3" />
                               </button>
@@ -740,7 +740,7 @@ function App() {
                   <div className="-mx-1 my-1 h-px bg-border" />
                   <div
                     onClick={() => { setCreateDialogOpen(true); setGroupDropdownOpen(false); }}
-                    className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-xs cursor-default hover:bg-accent hover:text-accent-foreground"
+                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs cursor-default hover:bg-accent hover:text-accent-foreground"
                   >
                     <Add16Regular className="w-3.5 h-3.5" />
                     {t("groups.createGroup")}

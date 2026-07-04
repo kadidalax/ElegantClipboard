@@ -125,10 +125,10 @@ export function SyncTypesSection({
                     return next;
                   });
                 }}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors ${
+                className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-surface ${
                   active
                     ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-muted/40 text-muted-foreground border-transparent hover:bg-muted"
+                    : "bg-muted-surface-subtle text-muted-foreground border-transparent hover:bg-muted"
                 }`}
               >
                 {typeLabels[type]}

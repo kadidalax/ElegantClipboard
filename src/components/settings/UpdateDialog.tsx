@@ -658,7 +658,7 @@ export function SimpleMarkdown({ content }: { content: string }) {
           {commit ? (
             <div className="flex items-start gap-1.5">
               <span
-                className={`inline-flex h-5 shrink-0 items-center self-start rounded border px-1.5 text-[10px] font-semibold uppercase tracking-wide ${getPrefixTagClass(commit.kind)}`}
+                className={`inline-flex h-5 shrink-0 items-center self-start rounded-md border px-1.5 text-micro font-semibold uppercase tracking-wide ${getPrefixTagClass(commit.kind)}`}
               >
                 {commit.label}
               </span>

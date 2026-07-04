@@ -45,9 +45,9 @@ export function WindowTitleBar({ icon, title, extra, center, pinControl }: Windo
               <TooltipTrigger asChild>
                 <button
                   onClick={pinControl.onToggle}
-                  className={`interactive-surface w-8 h-8 flex items-center justify-center rounded-md transition-colors ${
+                  className={`interactive-surface w-8 h-8 flex items-center justify-center rounded-md transition-surface ${
                     pinControl.pinned
-                      ? "text-primary bg-primary/10"
+                      ? "text-primary bg-primary-subtle"
                       : "text-muted-foreground hover:bg-accent"
                   }`}
                 >
@@ -66,7 +66,7 @@ export function WindowTitleBar({ icon, title, extra, center, pinControl }: Windo
             <>
               <button
                 onClick={() => getCurrentWindow().minimize()}
-                className="interactive-surface w-8 h-8 flex items-center justify-center text-muted-foreground hover:bg-accent rounded-md transition-colors"
+                className="interactive-surface w-8 h-8 flex items-center justify-center text-muted-foreground hover:bg-accent rounded-md transition-surface"
               >
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                   <rect
@@ -81,7 +81,7 @@ export function WindowTitleBar({ icon, title, extra, center, pinControl }: Windo
               </button>
               <button
                 onClick={() => getCurrentWindow().close()}
-                className="interactive-surface w-8 h-8 flex items-center justify-center text-muted-foreground hover:bg-destructive hover:text-destructive-foreground rounded-md transition-colors"
+                className="interactive-surface w-8 h-8 flex items-center justify-center text-muted-foreground hover:bg-destructive hover:text-destructive-foreground rounded-md transition-surface"
               >
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                   <path

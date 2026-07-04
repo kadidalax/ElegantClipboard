@@ -81,7 +81,7 @@ export function ManualSyncSection({
               statusType === "success"
                 ? "bg-status-success-subtle text-status-success"
                 : statusType === "error"
-                  ? "bg-destructive/10 text-destructive"
+                  ? "bg-destructive-subtle text-destructive"
                   : "bg-muted text-muted-foreground"
             }`}
           >

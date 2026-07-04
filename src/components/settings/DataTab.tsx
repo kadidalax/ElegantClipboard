@@ -107,7 +107,7 @@ function DedupStrategyCard({ strategy, onChange }: DedupStrategyCardProps) {
       <div
         role="radiogroup"
         aria-label={t("settings.data.dedupAria")}
-        className="relative rounded-lg border bg-muted/40 p-1"
+        className="relative rounded-md border bg-muted-surface-subtle p-1"
       >
         <div className="relative grid grid-cols-3">
           <div
@@ -124,7 +124,7 @@ function DedupStrategyCard({ strategy, onChange }: DedupStrategyCardProps) {
                 role="radio"
                 aria-checked={isActive}
                 onClick={() => { void onChange(opt.value); }}
-                className={`relative z-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                className={`relative z-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-surface ${
                   isActive
                     ? "text-primary-foreground"
                     : "text-foreground/80 hover:text-foreground"
@@ -186,7 +186,7 @@ function TextDedupModeCard({ dedupStrategy }: { dedupStrategy: DedupStrategy }) 
         role="radiogroup"
         aria-label={t("settings.data.textDedupAria")}
         aria-disabled={!dedupEnabled}
-        className={`relative rounded-lg border p-1 ${dedupEnabled ? "bg-muted/40" : "bg-muted/30 opacity-70"}`}
+        className={`relative rounded-md border p-1 ${dedupEnabled ? "bg-muted-surface-subtle" : "bg-muted-surface-faint opacity-70"}`}
       >
         <div className="relative grid grid-cols-2">
           <div
@@ -204,7 +204,7 @@ function TextDedupModeCard({ dedupStrategy }: { dedupStrategy: DedupStrategy }) 
                 aria-checked={isActive}
                 disabled={!dedupEnabled}
                 onClick={() => { if (dedupEnabled) void handleChange(opt.value); }}
-                className={`relative z-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                className={`relative z-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-surface ${
                   !dedupEnabled
                     ? "text-muted-foreground cursor-not-allowed"
                     : isActive
@@ -500,15 +500,15 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
           />
           {dataSize ? (
             <div className="grid grid-cols-3 gap-3">
-              <div className="text-center p-2 rounded-md bg-muted/50">
+              <div className="text-center p-2 rounded-md bg-muted-surface">
                 <p className="text-sm font-medium tabular-nums">{formatDataSize(dataSize.total_size)}</p>
                 <p className="text-xs text-muted-foreground">{t("settings.data.totalSize")}</p>
               </div>
-              <div className="text-center p-2 rounded-md bg-muted/50">
+              <div className="text-center p-2 rounded-md bg-muted-surface">
                 <p className="text-sm font-medium tabular-nums">{formatDataSize(dataSize.db_size)}</p>
                 <p className="text-xs text-muted-foreground">{t("settings.data.database")}</p>
               </div>
-              <div className="text-center p-2 rounded-md bg-muted/50">
+              <div className="text-center p-2 rounded-md bg-muted-surface">
                 <p className="text-sm font-medium tabular-nums">{formatDataSize(dataSize.images_size)}</p>
                 <p className="text-xs text-muted-foreground">{t("common.imagesCount", { count: dataSize.images_count })}</p>
               </div>
@@ -803,13 +803,13 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
           <div className="space-y-3 py-2">
             <div className="text-sm">
               <span className="text-muted-foreground">{t("settings.data.currentPath")}</span>
-              <span className="path-text text-xs block mt-1 p-2 bg-muted rounded">
+              <span className="path-text text-xs block mt-1 p-2 bg-muted rounded-md">
                 {settings.data_path}
               </span>
             </div>
             <div className="text-sm">
               <span className="text-muted-foreground">{t("settings.data.newPath")}</span>
-              <span className="path-text text-xs block mt-1 p-2 bg-muted rounded">
+              <span className="path-text text-xs block mt-1 p-2 bg-muted rounded-md">
                 {pendingPath}
               </span>
             </div>
@@ -833,7 +833,7 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
                   variant="ghost"
                   onClick={handleMigrate}
                   disabled={migrating}
-                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                  className="text-destructive hover:text-destructive hover:bg-destructive-subtle-hover"
                 >
                   {migrating ? t("settings.data.overwriting") : t("settings.data.keepOldData")}
                 </Button>
@@ -850,7 +850,7 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
                   variant="ghost"
                   onClick={handleSkipMigration}
                   disabled={migrating}
-                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                  className="text-destructive hover:text-destructive hover:bg-destructive-subtle-hover"
                 >
                   {t("settings.data.skipMigration")}
                 </Button>

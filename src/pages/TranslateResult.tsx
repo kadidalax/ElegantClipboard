@@ -135,7 +135,7 @@ export function TranslateResult() {
   }, [translatedText, recordTranslation]);
 
   return (
-    <div className={cn("h-screen flex flex-col bg-muted/40 overflow-hidden p-3 gap-3", !themeReady ? "opacity-0 **:transition-none!" : "opacity-100")}>
+    <div className={cn("h-screen flex flex-col bg-page-shell overflow-hidden p-3 gap-3", !themeReady ? "opacity-0 **:transition-none!" : "opacity-100")}>
       <WindowTitleBar
         icon={<Translate16Regular className="w-5 h-5 text-muted-foreground" />}
         title={t("translateResult.title")}
@@ -190,7 +190,7 @@ export function TranslateResult() {
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 px-2 text-xs text-primary hover:text-primary hover:bg-primary/10"
+            className="h-7 px-2 text-xs text-primary hover:text-primary hover:bg-primary-subtle"
             onClick={() => doTranslate(text)}
             disabled={translating || !text.trim()}
           >
