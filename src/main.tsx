@@ -1,17 +1,24 @@
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
 import { Toaster } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { initLocale } from "@/i18n";
 import { initPluginAvailability } from "@/stores/plugin-availability";
-import { initTranslateSettingsListener, useTranslateSettings } from "@/stores/translate-settings";
+import { useTranslateSettings } from "@/stores/translate-settings";
 import { initUISettingsStore } from "@/stores/ui-settings";
 import App from "./App";
-import { Settings } from "./pages/Settings";
-import { TextEditor } from "./pages/TextEditor";
-import { TranslateResult } from "./pages/TranslateResult";
 import "overlayscrollbars/overlayscrollbars.css";
 import "./index.css";
+
+const Settings = lazy(() =>
+  import("./pages/Settings").then((m) => ({ default: m.Settings })),
+);
+const TextEditor = lazy(() =>
+  import("./pages/TextEditor").then((m) => ({ default: m.TextEditor })),
+);
+const TranslateResult = lazy(() =>
+  import("./pages/TranslateResult").then((m) => ({ default: m.TranslateResult })),
+);
 
 // 禁用右键菜单
 document.addEventListener("contextmenu", (e) => {
@@ -33,30 +40,58 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// 基于 URL 路径的简单路由
+function RouteFallback() {
+  return (
+    <div className="h-screen flex items-center justify-center bg-page-shell">
+      <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
+
+// 基于 URL 路径的简单路由（主窗口同步加载，其它窗口 lazy）
 function Router() {
   const path = window.location.pathname;
-  
+
   if (path === "/settings" || path === "/settings.html") {
-    return <Settings />;
+    return (
+      <Suspense fallback={<RouteFallback />}>
+        <Settings />
+      </Suspense>
+    );
   }
   if (path === "/editor" || path === "/editor.html") {
-    return <TextEditor />;
+    return (
+      <Suspense fallback={<RouteFallback />}>
+        <TextEditor />
+      </Suspense>
+    );
   }
   if (path === "/translate-result") {
-    return <TranslateResult />;
+    return (
+      <Suspense fallback={<RouteFallback />}>
+        <TranslateResult />
+      </Suspense>
+    );
   }
-  
+
   return <App />;
+}
+
+/** WebDAV / 翻译配置：主窗口首屏不需要，render 后再加载 */
+function deferSecondaryInit() {
+  void (async () => {
+    try {
+      await initPluginAvailability();
+      await useTranslateSettings.getState().loadSettings();
+    } catch (error) {
+      console.error("Deferred bootstrap init failed:", error);
+    }
+  })();
 }
 
 async function bootstrap() {
   try {
-    await initLocale();
-    await initUISettingsStore();
-    await initPluginAvailability();
-    await initTranslateSettingsListener();
-    await useTranslateSettings.getState().loadSettings();
+    await Promise.all([initLocale(), initUISettingsStore()]);
   } catch (error) {
     console.error("Bootstrap init failed:", error);
   }
@@ -69,6 +104,8 @@ async function bootstrap() {
       </TooltipProvider>
     </React.StrictMode>,
   );
+
+  deferSecondaryInit();
 }
 
 void bootstrap();
