@@ -45,6 +45,11 @@
         background-color var(--motion-fast) var(--motion-ease),
         border-color var(--motion-fast) var(--motion-ease);
     }
+    /* 默认/无 DWM 特效：与主窗口卡片一致，不用 backdrop-blur 避免背后界面渗色 */
+    :root:not([data-window-effect="mica"]):not([data-window-effect="acrylic"]):not([data-window-effect="tabbed"]) #panel {
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
     #panel.visible {
       opacity: 1;
     }
