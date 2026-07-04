@@ -10,8 +10,8 @@ import {
   Add16Regular,
   ChevronDown16Regular,
   MultiselectLtr16Regular,
-  ArrowUpload16Regular,
-  ArrowDownload16Regular,
+  CloudArrowUp16Regular,
+  CloudArrowDown16Regular,
 } from "@fluentui/react-icons";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -510,7 +510,7 @@ function App() {
                 disabled={webdavSyncing}
                 className="w-7 h-7 p-1 flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-md transition-colors disabled:opacity-40"
               >
-                <ArrowUpload16Regular className="w-4 h-4" />
+                <CloudArrowUp16Regular className="w-4 h-4" />
               </button>
             </TooltipTrigger>
             <TooltipContent>{t("toolbar.webdavUpload")}</TooltipContent>
@@ -525,7 +525,7 @@ function App() {
                 disabled={webdavSyncing}
                 className="w-7 h-7 p-1 flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-md transition-colors disabled:opacity-40"
               >
-                <ArrowDownload16Regular className="w-4 h-4" />
+                <CloudArrowDown16Regular className="w-4 h-4" />
               </button>
             </TooltipTrigger>
             <TooltipContent>{t("toolbar.webdavDownload")}</TooltipContent>

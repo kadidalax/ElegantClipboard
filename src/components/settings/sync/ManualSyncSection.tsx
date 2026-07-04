@@ -1,8 +1,8 @@
 import type { RefObject } from "react";
 import {
-  ArrowDown16Regular,
+  CloudArrowDown16Regular,
+  CloudArrowUp16Regular,
   ArrowSync16Regular,
-  ArrowUp16Regular,
 } from "@fluentui/react-icons";
 import { SettingsCard, SettingsCardHeader } from "@/components/settings/SettingSection";
 import { Button } from "@/components/ui/button";
@@ -49,7 +49,7 @@ export function ManualSyncSection({
             {syncing ? (
               <ArrowSync16Regular className="w-3.5 h-3.5 mr-1 animate-spin" />
             ) : (
-              <ArrowUp16Regular className="w-3.5 h-3.5 mr-1" />
+              <CloudArrowUp16Regular className="w-3.5 h-3.5 mr-1" />
             )}
             {t("settings.sync.upload")}
           </Button>
@@ -62,7 +62,7 @@ export function ManualSyncSection({
             {syncing ? (
               <ArrowSync16Regular className="w-3.5 h-3.5 mr-1 animate-spin" />
             ) : (
-              <ArrowDown16Regular className="w-3.5 h-3.5 mr-1" />
+              <CloudArrowDown16Regular className="w-3.5 h-3.5 mr-1" />
             )}
             {t("settings.sync.download")}
           </Button>
