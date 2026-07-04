@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Folder16Regular, Open16Regular, ArrowSync16Regular, ArrowDownload16Regular, ArrowUpload16Regular, Delete16Regular, ArrowCounterclockwise16Regular, ArrowClockwise16Regular } from "@fluentui/react-icons";
 import { invoke } from "@tauri-apps/api/core";
+import { SettingsCard, SettingsCardHeader } from "@/components/settings/SettingSection";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -98,9 +99,11 @@ function DedupStrategyCard({ strategy, onChange }: DedupStrategyCardProps) {
   );
 
   return (
-    <div className="rounded-lg border bg-card p-4">
-      <h3 className="text-sm font-medium mb-3">{t("settings.data.dedupTitle")}</h3>
-      <p className="text-xs text-muted-foreground mb-4">{t("settings.data.dedupDesc")}</p>
+    <SettingsCard>
+      <SettingsCardHeader
+        title={t("settings.data.dedupTitle")}
+        description={t("settings.data.dedupDesc")}
+      />
       <div
         role="radiogroup"
         aria-label={t("settings.data.dedupAria")}
@@ -137,7 +140,7 @@ function DedupStrategyCard({ strategy, onChange }: DedupStrategyCardProps) {
       <p className="text-xs text-muted-foreground mt-2">
         {dedupOptions.find((o) => o.value === strategy)?.desc}
       </p>
-    </div>
+    </SettingsCard>
   );
 }
 
@@ -174,9 +177,11 @@ function TextDedupModeCard({ dedupStrategy }: { dedupStrategy: DedupStrategy }) 
   };
 
   return (
-    <div className="rounded-lg border bg-card p-4">
-      <h3 className="text-sm font-medium mb-3">{t("settings.data.textDedupTitle")}</h3>
-      <p className="text-xs text-muted-foreground mb-4">{t("settings.data.textDedupDesc")}</p>
+    <SettingsCard>
+      <SettingsCardHeader
+        title={t("settings.data.textDedupTitle")}
+        description={t("settings.data.textDedupDesc")}
+      />
       <div
         role="radiogroup"
         aria-label={t("settings.data.textDedupAria")}
@@ -218,7 +223,7 @@ function TextDedupModeCard({ dedupStrategy }: { dedupStrategy: DedupStrategy }) 
           ? textDedupModeOptions.find((o) => o.value === mode)?.desc
           : t("settings.data.textDedupDisabled")}
       </p>
-    </div>
+    </SettingsCard>
   );
 }
 function formatKB(kb: number, fractionDigits = 1, unlimitedLabel: string): string {
@@ -473,24 +478,26 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
     <>
       <div className="space-y-3">
         {/* Data Size Card */}
-        <div className="rounded-lg border bg-card p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-medium">{t("settings.data.statsTitle")}</h3>
-            <div className="flex items-center gap-2">
-              {dataSizeTime && (
-                <span className="text-xs text-muted-foreground">{t("common.updatedAt", { time: dataSizeTime })}</span>
-              )}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={refreshDataSize}
-                disabled={dataSizeLoading}
-                className="h-6 w-6"
-              >
-                <ArrowSync16Regular className={`w-3.5 h-3.5 ${dataSizeLoading ? "animate-spin" : ""}`} />
-              </Button>
-            </div>
-          </div>
+        <SettingsCard>
+          <SettingsCardHeader
+            title={t("settings.data.statsTitle")}
+            action={
+              <div className="flex items-center gap-2">
+                {dataSizeTime && (
+                  <span className="text-xs text-muted-foreground">{t("common.updatedAt", { time: dataSizeTime })}</span>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={refreshDataSize}
+                  disabled={dataSizeLoading}
+                  className="h-6 w-6"
+                >
+                  <ArrowSync16Regular className={`w-3.5 h-3.5 ${dataSizeLoading ? "animate-spin" : ""}`} />
+                </Button>
+              </div>
+            }
+          />
           {dataSize ? (
             <div className="grid grid-cols-3 gap-3">
               <div className="text-center p-2 rounded-md bg-muted/50">
@@ -509,12 +516,14 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
           ) : (
             <p className="text-xs text-muted-foreground">{t("settings.data.statsRefreshHint")}</p>
           )}
-        </div>
+        </SettingsCard>
 
         {/* Storage Path Card */}
-        <div className="rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-medium mb-3">{t("settings.data.storageTitle")}</h3>
-          <p className="text-xs text-muted-foreground mb-4">{t("settings.data.storageDesc")}</p>
+        <SettingsCard>
+          <SettingsCardHeader
+            title={t("settings.data.storageTitle")}
+            description={t("settings.data.storageDesc")}
+          />
           <div className="space-y-2">
             <Label htmlFor="data-path" className="text-xs">{t("settings.data.storagePath")}</Label>
             <div className="flex gap-2">
@@ -554,12 +563,14 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
               </button>
             </div>
           </div>
-        </div>
+        </SettingsCard>
 
         {/* Export / Import Card */}
-        <div className="rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-medium mb-3">{t("settings.data.backupTitle")}</h3>
-          <p className="text-xs text-muted-foreground mb-4">{t("settings.data.backupDesc")}</p>
+        <SettingsCard>
+          <SettingsCardHeader
+            title={t("settings.data.backupTitle")}
+            description={t("settings.data.backupDesc")}
+          />
           <div className="flex gap-2">
             <Button
               variant="outline"
@@ -587,12 +598,14 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
               {exportImportMsg}
             </p>
           )}
-        </div>
+        </SettingsCard>
 
         {/* Data Cleanup Card */}
-        <div className="rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-medium mb-1">{t("settings.data.cleanupTitle")}</h3>
-          <p className="text-xs text-muted-foreground mb-4">{t("settings.data.cleanupDesc")}</p>
+        <SettingsCard>
+          <SettingsCardHeader
+            title={t("settings.data.cleanupTitle")}
+            description={t("settings.data.cleanupDesc")}
+          />
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
@@ -647,16 +660,18 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
               {cleanMsg}
             </p>
           )}
-        </div>
+        </SettingsCard>
 
         {/* Dedup Strategy Card */}
         <DedupStrategyCard strategy={dedupStrategy} onChange={handleDedupStrategyChange} />
         <TextDedupModeCard dedupStrategy={dedupStrategy} />
 
         {/* History Limit Card */}
-        <div className="rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-medium mb-3">{t("settings.data.historyTitle")}</h3>
-          <p className="text-xs text-muted-foreground mb-4">{t("settings.data.historyDesc")}</p>
+        <SettingsCard>
+          <SettingsCardHeader
+            title={t("settings.data.historyTitle")}
+            description={t("settings.data.historyDesc")}
+          />
           
           <div className="space-y-4">
             <div className="space-y-3">
@@ -735,7 +750,7 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
               </p>
             </div>
           </div>
-        </div>
+        </SettingsCard>
       </div>
 
       {/* Data Cleanup Confirmation Dialog */}

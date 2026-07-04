@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Delete16Regular } from "@fluentui/react-icons";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+import { SettingsCard, SettingsCardHeader } from "@/components/settings/SettingSection";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -159,9 +160,11 @@ export function AppFilterTab() {
   return (
     <div className="space-y-3">
       {/* 监听内容类型 */}
-      <div className="rounded-lg border bg-card p-4">
-        <h3 className="text-sm font-medium mb-3">{t("settings.appFilter.monitorTypesTitle")}</h3>
-        <p className="text-xs text-muted-foreground mb-4">{t("settings.appFilter.monitorTypesDesc")}</p>
+      <SettingsCard>
+        <SettingsCardHeader
+          title={t("settings.appFilter.monitorTypesTitle")}
+          description={t("settings.appFilter.monitorTypesDesc")}
+        />
         <div className="flex flex-wrap gap-2">
           {ALL_MONITOR_TYPES.map((type) => {
             const active = monitorTypes.has(type);
@@ -182,19 +185,15 @@ export function AppFilterTab() {
             );
           })}
         </div>
-      </div>
+      </SettingsCard>
 
       {/* 开关 + 模式 */}
-      <div className="rounded-lg border bg-card p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h3 className="text-sm font-medium">{t("settings.appFilter.filterTitle")}</h3>
-            <p className="text-xs text-muted-foreground mt-1">
-              {t("settings.appFilter.filterDesc")}
-            </p>
-          </div>
-          <Switch checked={appFilterEnabled} onCheckedChange={toggleAppFilter} />
-        </div>
+      <SettingsCard>
+        <SettingsCardHeader
+          title={t("settings.appFilter.filterTitle")}
+          description={t("settings.appFilter.filterDesc")}
+          action={<Switch checked={appFilterEnabled} onCheckedChange={toggleAppFilter} />}
+        />
 
         <div className="flex gap-1.5">
           {(["blacklist", "whitelist"] as const).map((mode) => (
@@ -218,16 +217,18 @@ export function AppFilterTab() {
             ? t("settings.appFilter.blacklistDesc")
             : t("settings.appFilter.whitelistDesc")}
         </p>
-      </div>
+      </SettingsCard>
 
       {/* 规则列表 */}
-      <div className="rounded-lg border bg-card p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium">{t("settings.appFilter.rulesTitle")}</h3>
-          <Button variant="outline" size="sm" onClick={loadRunningApps} className="h-7 text-xs">
-            {t("settings.appFilter.selectApp")}
-          </Button>
-        </div>
+      <SettingsCard>
+        <SettingsCardHeader
+          title={t("settings.appFilter.rulesTitle")}
+          action={
+            <Button variant="outline" size="sm" onClick={loadRunningApps} className="h-7 text-xs">
+              {t("settings.appFilter.selectApp")}
+            </Button>
+          }
+        />
 
         <div className="flex gap-2 mb-4">
           <Input
@@ -304,7 +305,7 @@ export function AppFilterTab() {
             </p>
           </div>
         )}
-      </div>
+      </SettingsCard>
 
       {/* Running Apps Picker Dialog */}
       <Dialog open={showAppPicker} onOpenChange={setShowAppPicker}>

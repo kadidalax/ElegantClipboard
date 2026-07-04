@@ -4,6 +4,7 @@ import {
   ArrowSync16Regular,
   ArrowUp16Regular,
 } from "@fluentui/react-icons";
+import { SettingsCard, SettingsCardHeader } from "@/components/settings/SettingSection";
 import { Button } from "@/components/ui/button";
 import type { SyncStatusType } from "@/hooks/useWebDAVActions";
 import { useTranslation } from "@/i18n";
@@ -32,11 +33,11 @@ export function ManualSyncSection({
   const { t } = useTranslation();
 
   return (
-    <div className="rounded-lg border bg-card p-4">
-      <h3 className="text-sm font-medium mb-3">{t("settings.sync.manualTitle")}</h3>
-      <p className="text-xs text-muted-foreground mb-4">
-        {t("settings.sync.manualDesc")}
-      </p>
+    <SettingsCard>
+      <SettingsCardHeader
+        title={t("settings.sync.manualTitle")}
+        description={t("settings.sync.manualDesc")}
+      />
       <div className="space-y-3">
         <div className="flex items-center gap-2">
           <Button
@@ -88,6 +89,6 @@ export function ManualSyncSection({
           </div>
         )}
       </div>
-    </div>
+    </SettingsCard>
   );
 }

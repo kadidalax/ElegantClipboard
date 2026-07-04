@@ -1,3 +1,4 @@
+import { SettingsCard, SettingsCardHeader } from "@/components/settings/SettingSection";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -19,11 +20,11 @@ export function AutoSyncSection({
   const { t } = useTranslation();
 
   return (
-    <div className="rounded-lg border bg-card p-4">
-      <h3 className="text-sm font-medium mb-3">{t("settings.sync.autoTitle")}</h3>
-      <p className="text-xs text-muted-foreground mb-4">
-        {t("settings.sync.autoDesc")}
-      </p>
+    <SettingsCard>
+      <SettingsCardHeader
+        title={t("settings.sync.autoTitle")}
+        description={t("settings.sync.autoDesc")}
+      />
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
@@ -56,6 +57,6 @@ export function AutoSyncSection({
           </div>
         )}
       </div>
-    </div>
+    </SettingsCard>
   );
 }

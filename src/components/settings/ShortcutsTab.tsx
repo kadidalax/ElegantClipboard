@@ -4,6 +4,7 @@ import {
   ChevronUp16Regular,
 } from "@fluentui/react-icons";
 import { invoke } from "@tauri-apps/api/core";
+import { SettingsCard, SettingsCardHeader } from "@/components/settings/SettingSection";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -329,9 +330,11 @@ export function ShortcutsTab({
     <>
       <div className="space-y-3">
         {/* Keyboard Navigation Card */}
-        <div className="rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-medium mb-3">{t("settings.shortcuts.navTitle")}</h3>
-          <p className="text-xs text-muted-foreground mb-4">{t("settings.shortcuts.navDesc")}</p>
+        <SettingsCard>
+          <SettingsCardHeader
+            title={t("settings.shortcuts.navTitle")}
+            description={t("settings.shortcuts.navDesc")}
+          />
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
@@ -346,14 +349,14 @@ export function ShortcutsTab({
               />
             </div>
           </div>
-        </div>
+        </SettingsCard>
 
         {/* Shortcut Card */}
-        <div className="rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-medium mb-3">{t("settings.shortcuts.summonTitle")}</h3>
-          <p className="text-xs text-muted-foreground mb-4">
-            {t("settings.shortcuts.summonDesc")}
-          </p>
+        <SettingsCard>
+          <SettingsCardHeader
+            title={t("settings.shortcuts.summonTitle")}
+            description={t("settings.shortcuts.summonDesc")}
+          />
           <div
             className={cn(
               "space-y-2",
@@ -415,24 +418,25 @@ export function ShortcutsTab({
               {t("settings.shortcuts.registryWarning")}
             </p>
           </div>
-        </div>
+        </SettingsCard>
 
         {/* Quick Paste Card */}
-        <div className="rounded-lg border bg-card p-4">
+        <SettingsCard>
           <button
             type="button"
-            className="flex items-center justify-between w-full text-left"
+            className="w-full text-left"
             onClick={() => setQuickPasteExpanded((v) => !v)}
           >
-            <div>
-              <h3 className="text-sm font-medium">{t("settings.shortcuts.quickPasteTitle")}</h3>
-              <p className="text-xs text-muted-foreground mt-1">
-                {t("settings.shortcuts.quickPasteDesc")}
-              </p>
-            </div>
-            {quickPasteExpanded
-              ? <ChevronUp16Regular className="w-4 h-4 text-muted-foreground shrink-0" />
-              : <ChevronDown16Regular className="w-4 h-4 text-muted-foreground shrink-0" />}
+            <SettingsCardHeader
+              className="mb-0"
+              title={t("settings.shortcuts.quickPasteTitle")}
+              description={t("settings.shortcuts.quickPasteDesc")}
+              action={
+                quickPasteExpanded
+                  ? <ChevronUp16Regular className="w-4 h-4 text-muted-foreground shrink-0" />
+                  : <ChevronDown16Regular className="w-4 h-4 text-muted-foreground shrink-0" />
+              }
+            />
           </button>
 
           <div
@@ -509,24 +513,25 @@ export function ShortcutsTab({
               </p>
             </div>
           </div>
-        </div>
+        </SettingsCard>
 
         {/* Favorite Paste Card */}
-        <div className="rounded-lg border bg-card p-4">
+        <SettingsCard>
           <button
             type="button"
-            className="flex items-center justify-between w-full text-left"
+            className="w-full text-left"
             onClick={() => setFavPasteExpanded((v) => !v)}
           >
-            <div>
-              <h3 className="text-sm font-medium">{t("settings.shortcuts.favoritePasteTitle")}</h3>
-              <p className="text-xs text-muted-foreground mt-1">
-                {t("settings.shortcuts.favoritePasteDesc")}
-              </p>
-            </div>
-            {favPasteExpanded
-              ? <ChevronUp16Regular className="w-4 h-4 text-muted-foreground shrink-0" />
-              : <ChevronDown16Regular className="w-4 h-4 text-muted-foreground shrink-0" />}
+            <SettingsCardHeader
+              className="mb-0"
+              title={t("settings.shortcuts.favoritePasteTitle")}
+              description={t("settings.shortcuts.favoritePasteDesc")}
+              action={
+                favPasteExpanded
+                  ? <ChevronUp16Regular className="w-4 h-4 text-muted-foreground shrink-0" />
+                  : <ChevronDown16Regular className="w-4 h-4 text-muted-foreground shrink-0" />
+              }
+            />
           </button>
 
           <div
@@ -603,16 +608,18 @@ export function ShortcutsTab({
               </p>
             </div>
           </div>
-        </div>
+        </SettingsCard>
 
         {/* Current Active Card */}
-        <div className="rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-medium mb-3">{t("settings.shortcuts.activeTitle")}</h3>
-          <p className="text-xs text-muted-foreground mb-4">
-            {settings.winv_replacement
-              ? t("settings.shortcuts.activeWinV")
-              : t("settings.shortcuts.activeCustom", { shortcut: settings.shortcut })}
-          </p>
+        <SettingsCard>
+          <SettingsCardHeader
+            title={t("settings.shortcuts.activeTitle")}
+            description={
+              settings.winv_replacement
+                ? t("settings.shortcuts.activeWinV")
+                : t("settings.shortcuts.activeCustom", { shortcut: settings.shortcut })
+            }
+          />
           <div className="space-y-2">
             <div className="flex items-center justify-between py-2 px-3 rounded-md bg-primary/10 border border-primary/20">
               <span className="text-sm font-medium">{t("settings.shortcuts.toggleWindow")}</span>
@@ -652,7 +659,7 @@ export function ShortcutsTab({
           <p className="text-xs text-muted-foreground mt-2">
             {t("settings.shortcuts.mutualExclusive")}
           </p>
-        </div>
+        </SettingsCard>
       </div>
 
       {/* Shortcut Edit Dialog */}

@@ -23,6 +23,7 @@ import {
   ArrowUpload16Regular,
   ArrowDownload16Regular,
 } from "@fluentui/react-icons";
+import { SettingsCard, SettingsCardHeader } from "@/components/settings/SettingSection";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
@@ -202,19 +203,19 @@ export function DisplayTab() {
   return (
     <div className="space-y-3">
       {/* Toolbar Buttons Card */}
-      <div className="rounded-lg border bg-card p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium">{t("settings.display.toolbar.title")}</h3>
-          <button
-            onClick={() => setToolbarButtons([...DEFAULT_TOOLBAR_BUTTONS])}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {t("settings.display.toolbar.resetDefault")}
-          </button>
-        </div>
-        <p className="text-xs text-muted-foreground mb-4">
-          {t("settings.display.toolbar.desc", { max: MAX_TOOLBAR_BUTTONS })}
-        </p>
+      <SettingsCard>
+        <SettingsCardHeader
+          title={t("settings.display.toolbar.title")}
+          description={t("settings.display.toolbar.desc", { max: MAX_TOOLBAR_BUTTONS })}
+          action={
+            <button
+              onClick={() => setToolbarButtons([...DEFAULT_TOOLBAR_BUTTONS])}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {t("settings.display.toolbar.resetDefault")}
+            </button>
+          }
+        />
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -249,12 +250,14 @@ export function DisplayTab() {
             </div>
           </SortableContext>
         </DndContext>
-      </div>
+      </SettingsCard>
 
       {/* Content Preview Card */}
-      <div className="rounded-lg border bg-card p-4">
-        <h3 className="text-sm font-medium mb-3">{t("settings.display.preview.title")}</h3>
-        <p className="text-xs text-muted-foreground mb-4">{t("settings.display.preview.desc")}</p>
+      <SettingsCard>
+        <SettingsCardHeader
+          title={t("settings.display.preview.title")}
+          description={t("settings.display.preview.desc")}
+        />
         
         <div className="space-y-4">
           <div className="space-y-3">
@@ -343,12 +346,14 @@ export function DisplayTab() {
           )}
 
         </div>
-      </div>
+      </SettingsCard>
 
       {/* Hover Preview Card */}
-      <div className="rounded-lg border bg-card p-4">
-        <h3 className="text-sm font-medium mb-3">{t("settings.display.hoverPreview.title")}</h3>
-        <p className="text-xs text-muted-foreground mb-4">{t("settings.display.hoverPreview.desc")}</p>
+      <SettingsCard>
+        <SettingsCardHeader
+          title={t("settings.display.hoverPreview.title")}
+          description={t("settings.display.hoverPreview.desc")}
+        />
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -443,12 +448,14 @@ export function DisplayTab() {
             </div>
           )}
         </div>
-      </div>
+      </SettingsCard>
 
       {/* Info Display Card */}
-      <div className="rounded-lg border bg-card p-4">
-        <h3 className="text-sm font-medium mb-3">{t("settings.display.info.title")}</h3>
-        <p className="text-xs text-muted-foreground mb-4">{t("settings.display.info.desc")}</p>
+      <SettingsCard>
+        <SettingsCardHeader
+          title={t("settings.display.info.title")}
+          description={t("settings.display.info.desc")}
+        />
         
         <div className="space-y-3">
           <div className="flex items-center justify-between">
@@ -539,7 +546,7 @@ export function DisplayTab() {
             </div>
           )}
         </div>
-      </div>
+      </SettingsCard>
 
     </div>
   );

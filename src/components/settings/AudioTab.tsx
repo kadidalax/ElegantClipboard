@@ -1,3 +1,4 @@
+import { SettingsCard, SettingsCardHeader } from "@/components/settings/SettingSection";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -26,9 +27,8 @@ function SoundCard({
   const { t } = useTranslation();
 
   return (
-    <div className="rounded-lg border bg-card p-4">
-      <h3 className="text-sm font-medium mb-3">{title}</h3>
-      <p className="text-xs text-muted-foreground mb-4">{desc}</p>
+    <SettingsCard>
+      <SettingsCardHeader title={title} description={desc} />
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <Label className="text-xs">{t("common.enable")}</Label>
@@ -56,7 +56,7 @@ function SoundCard({
           </Button>
         </div>
       </div>
-    </div>
+    </SettingsCard>
   );
 }
 

@@ -5,6 +5,7 @@ import {
   Eye16Regular,
   EyeOff16Regular,
 } from "@fluentui/react-icons";
+import { SettingsCard, SettingsCardHeader } from "@/components/settings/SettingSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,11 +59,11 @@ export function ConnectionSection({
   const [showPassword, setShowPassword] = useState(false);
 
   return (
-    <div className="rounded-lg border bg-card p-4">
-      <h3 className="text-sm font-medium mb-3">{t("settings.sync.connectionTitle")}</h3>
-      <p className="text-xs text-muted-foreground mb-4">
-        {t("settings.sync.connectionDesc")}
-      </p>
+    <SettingsCard>
+      <SettingsCardHeader
+        title={t("settings.sync.connectionTitle")}
+        description={t("settings.sync.connectionDesc")}
+      />
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
@@ -176,6 +177,6 @@ export function ConnectionSection({
           </>
         )}
       </div>
-    </div>
+    </SettingsCard>
   );
 }

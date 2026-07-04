@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Eye16Regular, EyeOff16Regular } from "@fluentui/react-icons";
 import { invoke } from "@tauri-apps/api/core";
+import { SettingsCard, SettingsCardHeader } from "@/components/settings/SettingSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -139,11 +140,11 @@ export function TranslateTab() {
   return (
     <div className="space-y-3">
       {/* 总开关 */}
-      <div className="rounded-lg border bg-card p-4">
-        <h3 className="text-sm font-medium mb-3">{t("settings.translate.entryTitle")}</h3>
-        <p className="text-xs text-muted-foreground mb-4">
-          {t("settings.translate.entryDesc")}
-        </p>
+      <SettingsCard>
+        <SettingsCardHeader
+          title={t("settings.translate.entryTitle")}
+          description={t("settings.translate.entryDesc")}
+        />
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
             <Label className="text-xs">{t("settings.translate.enableEntry")}</Label>
@@ -167,13 +168,13 @@ export function TranslateTab() {
             <Switch checked={recordTranslation} onCheckedChange={setRecordTranslation} />
           </div>
         )}
-      </div>
+      </SettingsCard>
 
       {enabled && (
         <>
           {/* 翻译渠道 */}
-          <div className="rounded-lg border bg-card p-4">
-            <h3 className="text-sm font-medium mb-3">{t("settings.translate.providerTitle")}</h3>
+          <SettingsCard>
+            <SettingsCardHeader title={t("settings.translate.providerTitle")} />
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
@@ -329,12 +330,14 @@ export function TranslateTab() {
                 )}
               </div>
             </div>
-          </div>
+          </SettingsCard>
 
           {/* 语言设置 */}
-          <div className="rounded-lg border bg-card p-4">
-            <h3 className="text-sm font-medium mb-3">{t("settings.translate.langTitle")}</h3>
-            <p className="text-xs text-muted-foreground mb-4">{t("settings.translate.langDesc")}</p>
+          <SettingsCard>
+            <SettingsCardHeader
+              title={t("settings.translate.langTitle")}
+              description={t("settings.translate.langDesc")}
+            />
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
@@ -375,12 +378,14 @@ export function TranslateTab() {
                 </div>
               )}
             </div>
-          </div>
+          </SettingsCard>
 
           {/* 翻译选中文字 */}
-          <div className="rounded-lg border bg-card p-4">
-            <h3 className="text-sm font-medium mb-3">{t("settings.translate.selectionActionTitle")}</h3>
-            <p className="text-xs text-muted-foreground mb-4">{t("settings.translate.selectionActionDesc")}</p>
+          <SettingsCard>
+            <SettingsCardHeader
+              title={t("settings.translate.selectionActionTitle")}
+              description={t("settings.translate.selectionActionDesc")}
+            />
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label className="text-xs">{t("settings.translate.selectionActionEnable")}</Label>
@@ -420,7 +425,7 @@ export function TranslateTab() {
                 {tsShortcutError && <p className="text-xs text-destructive">{tsShortcutError}</p>}
               </div>
             )}
-          </div>
+          </SettingsCard>
         </>
       )}
     </div>

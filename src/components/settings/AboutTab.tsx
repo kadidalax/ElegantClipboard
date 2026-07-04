@@ -5,6 +5,7 @@ import {
   Alert16Regular,
 } from "@fluentui/react-icons";
 import { openUrl as tauriOpenUrl } from "@tauri-apps/plugin-opener";
+import { SettingsCard, SettingsCardHeader } from "@/components/settings/SettingSection";
 import { useTranslation } from "@/i18n";
 import { logError } from "@/lib/logger";
 
@@ -37,8 +38,8 @@ export function AboutTab() {
         </div>
       </div>
 
-      <div className="flex-1 rounded-lg border bg-card p-4 flex flex-col overflow-auto">
-        <h3 className="text-sm font-medium mb-3 text-primary">{t("settings.about.authorTitle")}</h3>
+      <SettingsCard className="flex-1 flex flex-col overflow-auto">
+        <SettingsCardHeader title={t("settings.about.authorTitle")} />
         <div className="space-y-2 flex-1 flex flex-col justify-center">
           <div className="flex items-center justify-between py-1.5">
             <div className="flex items-center gap-2">
@@ -90,7 +91,7 @@ export function AboutTab() {
             </button>
           </div>
         </div>
-      </div>
+      </SettingsCard>
     </>
   );
 }

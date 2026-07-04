@@ -4,6 +4,7 @@ import {
   Desktop16Regular,
 } from "@fluentui/react-icons";
 import { invoke } from "@tauri-apps/api/core";
+import { SettingsCard, SettingsCardHeader } from "@/components/settings/SettingSection";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
@@ -157,9 +158,11 @@ export function ThemeTab() {
 
   return (
     <div className="space-y-3">
-      <div className="rounded-lg border bg-card p-4">
-        <h3 className="text-sm font-medium mb-3">{t("settings.theme.colorTitle")}</h3>
-        <p className="text-xs text-muted-foreground mb-4">{t("settings.theme.colorDesc")}</p>
+      <SettingsCard>
+        <SettingsCardHeader
+          title={t("settings.theme.colorTitle")}
+          description={t("settings.theme.colorDesc")}
+        />
 
         <div className="space-y-2">
           {themes.map((theme) => {
@@ -207,12 +210,14 @@ export function ThemeTab() {
             );
           })}
         </div>
-      </div>
+      </SettingsCard>
 
       {/* Dark Mode */}
-      <div className="rounded-lg border bg-card p-4">
-        <h3 className="text-sm font-medium mb-3">{t("settings.theme.darkModeTitle")}</h3>
-        <p className="text-xs text-muted-foreground mb-4">{t("settings.theme.darkModeDesc")}</p>
+      <SettingsCard>
+        <SettingsCardHeader
+          title={t("settings.theme.darkModeTitle")}
+          description={t("settings.theme.darkModeDesc")}
+        />
         <div
           role="radiogroup"
           aria-label={t("settings.theme.darkModeAria")}
@@ -245,11 +250,11 @@ export function ThemeTab() {
             })}
           </div>
         </div>
-      </div>
+      </SettingsCard>
 
       {/* Sharp Corners */}
-      <div className="rounded-lg border bg-card p-4">
-        <h3 className="text-sm font-medium mb-3">{t("settings.theme.cornersTitle")}</h3>
+      <SettingsCard>
+        <SettingsCardHeader title={t("settings.theme.cornersTitle")} />
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
             <Label className="text-xs">{t("settings.theme.sharpCorners")}</Label>
@@ -262,14 +267,14 @@ export function ThemeTab() {
             onCheckedChange={setSharpCorners}
           />
         </div>
-      </div>
+      </SettingsCard>
 
       {/* Window Effect */}
-      <div className="rounded-lg border bg-card p-4">
-        <h3 className="text-sm font-medium mb-3">{t("settings.theme.windowEffectTitle")}</h3>
-        <p className="text-xs text-muted-foreground mb-4">
-          {t("settings.theme.windowEffectDesc")}
-        </p>
+      <SettingsCard>
+        <SettingsCardHeader
+          title={t("settings.theme.windowEffectTitle")}
+          description={t("settings.theme.windowEffectDesc")}
+        />
         <div className="grid grid-cols-2 gap-2">
           {windowEffects.map((opt) => (
             <button
@@ -293,29 +298,30 @@ export function ThemeTab() {
             </button>
           ))}
         </div>
-      </div>
+      </SettingsCard>
       {/* Font Settings */}
-      <div className="rounded-lg border bg-card p-4 space-y-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <h3 className="text-sm font-medium mb-1">{t("settings.theme.fontTitle")}</h3>
-            <p className="text-xs text-muted-foreground">{t("settings.theme.fontDesc")}</p>
-          </div>
-          <button
-            type="button"
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
-            onClick={resetFontSettings}
-          >
-            {t("settings.theme.fontReset")}
-          </button>
-        </div>
+      <SettingsCard className="space-y-5">
+        <SettingsCardHeader
+          className="mb-0"
+          title={t("settings.theme.fontTitle")}
+          description={t("settings.theme.fontDesc")}
+          action={
+            <button
+              type="button"
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
+              onClick={resetFontSettings}
+            >
+              {t("settings.theme.fontReset")}
+            </button>
+          }
+        />
 
         <FontSettingGroup label={fontLabels.ui} fonts={systemFonts} font={customFont} onFontChange={setCustomFont} fontSize={uiFontSize} onFontSizeChange={setUIFontSize} min={12} max={18} defaultFontLabel={fontLabels.defaultFont} fontSizeLabel={fontLabels.fontSize} />
         <hr className="border-border" />
         <FontSettingGroup label={fontLabels.card} fonts={systemFonts} font={cardFont} onFontChange={setCardFont} fontSize={cardFontSize} onFontSizeChange={setCardFontSize} min={12} max={18} defaultFontLabel={fontLabels.defaultFont} fontSizeLabel={fontLabels.fontSize} />
         <hr className="border-border" />
         <FontSettingGroup label={fontLabels.preview} fonts={systemFonts} font={previewFont} onFontChange={setPreviewFont} fontSize={previewFontSize} onFontSizeChange={setPreviewFontSize} min={11} max={18} defaultFontLabel={fontLabels.defaultFont} fontSizeLabel={fontLabels.fontSize} />
-      </div>
+      </SettingsCard>
     </div>
   );
 }

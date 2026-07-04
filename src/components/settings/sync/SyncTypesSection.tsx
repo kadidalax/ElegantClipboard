@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import { useMemo } from "react";
+import { SettingsCard, SettingsCardHeader } from "@/components/settings/SettingSection";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTranslation } from "@/i18n";
@@ -99,11 +100,11 @@ export function SyncTypesSection({
     t("settings.sync.syncOnly", { size, type });
 
   return (
-    <div className="rounded-lg border bg-card p-4">
-      <h3 className="text-sm font-medium mb-3">{t("settings.sync.typesTitle")}</h3>
-      <p className="text-xs text-muted-foreground mb-4">
-        {t("settings.sync.typesDesc")}
-      </p>
+    <SettingsCard>
+      <SettingsCardHeader
+        title={t("settings.sync.typesTitle")}
+        description={t("settings.sync.typesDesc")}
+      />
       <div className="space-y-3">
         <div className="flex flex-wrap gap-2">
           {SYNC_TYPES.map((type) => {
@@ -168,6 +169,6 @@ export function SyncTypesSection({
           />
         )}
       </div>
-    </div>
+    </SettingsCard>
   );
 }

@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { loadUISettingsFromBackend } from "@/stores/ui-settings";
 import { useClipboardStore } from "@/stores/clipboard";
+import { loadUISettingsFromBackend } from "@/stores/ui-settings";
 
 export type SyncStatusType = "success" | "error" | "info";
 

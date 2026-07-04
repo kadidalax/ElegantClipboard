@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { SettingsCard, SettingsCardHeader } from "@/components/settings/SettingSection";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -127,7 +128,7 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
   return (
     <>
       <div className="space-y-3">
-        <div className="rounded-lg border bg-card p-4">
+        <SettingsCard>
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label className="text-xs">{t("language.label")}</Label>
@@ -144,12 +145,14 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
               </SelectContent>
             </Select>
           </div>
-        </div>
+        </SettingsCard>
 
         {/* Startup Card */}
-        <div className="rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-medium mb-3">{t("settings.general.startupTitle")}</h3>
-          <p className="text-xs text-muted-foreground mb-4">{t("settings.general.startupDesc")}</p>
+        <SettingsCard>
+          <SettingsCardHeader
+            title={t("settings.general.startupTitle")}
+            description={t("settings.general.startupDesc")}
+          />
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
@@ -210,12 +213,14 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
               />
             </div>
           </div>
-        </div>
+        </SettingsCard>
 
         {/* Window Behavior Card */}
-        <div className="rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-medium mb-3">{t("settings.general.windowTitle")}</h3>
-          <p className="text-xs text-muted-foreground mb-4">{t("settings.general.windowDesc")}</p>
+        <SettingsCard>
+          <SettingsCardHeader
+            title={t("settings.general.windowTitle")}
+            description={t("settings.general.windowDesc")}
+          />
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
@@ -270,12 +275,14 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
               />
             </div>
           </div>
-        </div>
+        </SettingsCard>
 
         {/* Search Bar Card */}
-        <div className="rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-medium mb-3">{t("settings.general.searchTitle")}</h3>
-          <p className="text-xs text-muted-foreground mb-4">{t("settings.general.searchDesc")}</p>
+        <SettingsCard>
+          <SettingsCardHeader
+            title={t("settings.general.searchTitle")}
+            description={t("settings.general.searchDesc")}
+          />
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
@@ -302,12 +309,14 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
               />
             </div>
           </div>
-        </div>
+        </SettingsCard>
 
         {/* Operation Card */}
-        <div className="rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-medium mb-3">{t("settings.general.operationTitle")}</h3>
-          <p className="text-xs text-muted-foreground mb-4">{t("settings.general.operationDesc")}</p>
+        <SettingsCard>
+          <SettingsCardHeader
+            title={t("settings.general.operationTitle")}
+            description={t("settings.general.operationDesc")}
+          />
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
@@ -328,13 +337,15 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
               <Switch checked={pasteMoveToTop} onCheckedChange={setPasteMoveToTop} />
             </div>
           </div>
-        </div>
+        </SettingsCard>
 
 
         {/* Log Card */}
-        <div className="rounded-lg border bg-card p-4">
-          <h3 className="text-sm font-medium mb-3">{t("settings.general.logTitle")}</h3>
-          <p className="text-xs text-muted-foreground mb-4">{t("settings.general.logDesc")}</p>
+        <SettingsCard>
+          <SettingsCardHeader
+            title={t("settings.general.logTitle")}
+            description={t("settings.general.logDesc")}
+          />
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
@@ -364,7 +375,7 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
               </p>
             )}
           </div>
-        </div>
+        </SettingsCard>
       </div>
 
       {/* Admin Launch Restart Dialog */}
