@@ -5,6 +5,26 @@ use tauri::{Emitter, Manager, State};
 use super::AppState;
 use crate::database;
 
+fn ensure_translate_available(db: &crate::database::Database) -> Result<(), String> {
+    let repo = database::SettingsRepository::new(db);
+    if !repo.get_bool("plugin_translate_enabled", false) {
+        return Err("TRANSLATE:PLUGIN_DISABLED".to_string());
+    }
+    if !repo.get_bool("translate_enabled", false) {
+        return Err("TRANSLATE:FEATURE_DISABLED".to_string());
+    }
+    Ok(())
+}
+
+fn ensure_translate_selection_available(db: &crate::database::Database) -> Result<(), String> {
+    ensure_translate_available(db)?;
+    let repo = database::SettingsRepository::new(db);
+    if !repo.get_bool("translate_selection_enabled", false) {
+        return Err("TRANSLATE:SELECTION_DISABLED".to_string());
+    }
+    Ok(())
+}
+
 /// 通用 HTTP 响应处理：检查状态码、读取文本、解析 JSON。
 fn parse_response(
     resp: reqwest::blocking::Response,
@@ -303,6 +323,7 @@ fn translate_openai(
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn translate_text(
+    state: State<'_, Arc<AppState>>,
     text: String,
     from: String,
     to: String,
@@ -317,6 +338,7 @@ pub async fn translate_text(
     openai_api_key: Option<String>,
     openai_model: Option<String>,
 ) -> Result<String, String> {
+    ensure_translate_available(&state.db)?;
     tokio::task::spawn_blocking(move || {
         let client = build_client(&proxy_mode, &proxy_url)?;
         match provider.as_str() {
@@ -587,6 +609,10 @@ pub async fn open_translate_result_window(
     app: tauri::AppHandle,
     text: String,
 ) -> Result<(), String> {
+    let Some(state) = app.try_state::<Arc<AppState>>() else {
+        return Err("TRANSLATE:APP_STATE_UNAVAILABLE".to_string());
+    };
+    ensure_translate_selection_available(&state.db)?;
     let label = "translate-result";
     tracing::info!(
         "[TRANSLATE] open_translate_result_window called, text len={}",
@@ -667,6 +693,13 @@ pub fn register_translate_selection_shortcut(app: &tauri::AppHandle) {
     };
     let settings_repo = database::SettingsRepository::new(&state.db);
 
+    if !settings_repo.get_bool("plugin_translate_enabled", false) {
+        return;
+    }
+    if !settings_repo.get_bool("translate_enabled", false) {
+        return;
+    }
+
     let enabled = settings_repo
         .get("translate_selection_enabled")
         .ok()
@@ -737,6 +770,10 @@ fn trigger_translate_selection(app: &tauri::AppHandle) {
         tracing::error!("[TRANSLATE] no AppState");
         return;
     };
+    if ensure_translate_selection_available(&state.db).is_err() {
+        tracing::warn!("[TRANSLATE] selection translate unavailable, ignoring shortcut");
+        return;
+    }
     match get_selected_text_from_system(&state) {
         Ok(text) if !text.trim().is_empty() => {
             tracing::info!(
@@ -806,6 +843,12 @@ pub async fn update_translate_selection_shortcut(
     settings_repo
         .set("translate_selection_shortcut", &new_shortcut)
         .map_err(|e| format!("SHORTCUT:SAVE_FAILED:{e}"))?;
+
+    if !settings_repo.get_bool("plugin_translate_enabled", false)
+        || !settings_repo.get_bool("translate_enabled", false)
+    {
+        return Ok(());
+    }
 
     let enabled = settings_repo
         .get("translate_selection_enabled")

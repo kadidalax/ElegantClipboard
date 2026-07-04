@@ -55,13 +55,7 @@ const MAX_EXTRA_FORMAT_BYTES: usize = 64 * 1024;
 
 pub fn staged_paths_from_payload(raw: Option<&str>) -> Vec<String> {
     decode_payload(raw)
-        .map(|payload| {
-            payload
-                .staged
-                .iter()
-                .map(|s| s.staged.clone())
-                .collect()
-        })
+        .map(|payload| payload.staged.iter().map(|s| s.staged.clone()).collect())
         .unwrap_or_default()
 }
 
@@ -71,16 +65,10 @@ pub fn originals_all_exist(paths: &[String]) -> bool {
 
 /// 仅当原始路径均存在时才还原 capture 时的 CF_HDROP blob。
 pub fn should_use_raw_hdrop(original_paths: &[String], payload: Option<&FilePayload>) -> bool {
-    payload
-        .and_then(|p| p.hdrop_b64.as_ref())
-        .is_some()
-        && originals_all_exist(original_paths)
+    payload.and_then(|p| p.hdrop_b64.as_ref()).is_some() && originals_all_exist(original_paths)
 }
 
-pub fn resolve_item_paths(
-    file_paths: Option<&str>,
-    file_payload: Option<&str>,
-) -> Vec<String> {
+pub fn resolve_item_paths(file_paths: Option<&str>, file_payload: Option<&str>) -> Vec<String> {
     let paths = parse_file_paths(file_paths);
     let payload = decode_payload(file_payload);
     resolve_paths(&paths, payload.as_ref())
@@ -137,9 +125,9 @@ pub fn clipboard_has_pending_files(ctx: &ClipboardContext) -> bool {
     if ctx.has(ContentFormat::Files) {
         return true;
     }
-    FILE_EXTRA_FORMATS.iter().any(|name| {
-        name.contains("FileGroupDescriptor") && ctx.get_buffer(name).is_ok()
-    })
+    FILE_EXTRA_FORMATS
+        .iter()
+        .any(|name| name.contains("FileGroupDescriptor") && ctx.get_buffer(name).is_ok())
 }
 
 fn capture_extra_formats(ctx: &ClipboardContext) -> Vec<(String, Vec<u8>)> {
@@ -203,10 +191,7 @@ pub fn build_payload(
             continue;
         }
 
-        let file_name = src
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("file");
+        let file_name = src.file_name().and_then(|n| n.to_str()).unwrap_or("file");
         let path_hash = &blake3::hash(path.as_bytes()).to_hex()[..8];
         let staged_path = staged_dir.join(format!("{path_hash}_{file_name}"));
         if staged_path.exists() {
@@ -366,10 +351,7 @@ mod tests {
     #[test]
     fn merge_paths_dedupes() {
         let items = [
-            (
-                Some(r#"["C:\\a.txt","C:\\b.txt"]"#),
-                None as Option<&str>,
-            ),
+            (Some(r#"["C:\\a.txt","C:\\b.txt"]"#), None as Option<&str>),
             (Some(r#"["C:\\b.txt","C:\\c.txt"]"#), None),
         ];
         let merged = merge_file_paths(&items);
@@ -435,7 +417,10 @@ mod tests {
         let json = encode_payload(&payload);
         assert_eq!(
             staged_paths_from_payload(Some(&json)),
-            vec!["D:\\staged\\a.txt".to_string(), "D:\\staged\\b.txt".to_string()]
+            vec![
+                "D:\\staged\\a.txt".to_string(),
+                "D:\\staged\\b.txt".to_string()
+            ]
         );
     }
 }

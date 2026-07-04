@@ -1,16 +1,14 @@
-use crate::database::ClipboardRepository;
 use crate::clipboard::file_clipboard::{
-    parse_file_paths, resolve_item_paths, item_files_all_exist,
+    item_files_all_exist, parse_file_paths, resolve_item_paths,
 };
+use crate::database::ClipboardRepository;
 use clipboard_rs::Clipboard as ClipboardTrait;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::State;
 use tracing::{debug, info};
 
-use super::{
-    AppState, hide_main_window_if_not_pinned, with_paused_monitor,
-};
+use super::{AppState, hide_main_window_if_not_pinned, with_paused_monitor};
 
 // ============ 文件校验命令 ============
 
@@ -58,7 +56,10 @@ pub async fn check_files_exist(
     Ok(paths
         .into_iter()
         .map(|orig| {
-            let check_path = resolved_by_original.get(&orig).cloned().unwrap_or(orig.clone());
+            let check_path = resolved_by_original
+                .get(&orig)
+                .cloned()
+                .unwrap_or(orig.clone());
             let info = result.get(&check_path).cloned().unwrap_or(FileCheckResult {
                 exists: false,
                 is_dir: false,
@@ -108,10 +109,13 @@ fn build_item_file_status(item: &crate::database::ClipboardItem) -> Result<ItemF
         .enumerate()
         .map(|(i, orig)| {
             let resolved_path = resolved.get(i).cloned().unwrap_or_else(|| orig.clone());
-            let info = resolved_checks.get(&resolved_path).cloned().unwrap_or(FileCheckResult {
-                exists: false,
-                is_dir: false,
-            });
+            let info = resolved_checks
+                .get(&resolved_path)
+                .cloned()
+                .unwrap_or(FileCheckResult {
+                    exists: false,
+                    is_dir: false,
+                });
             (orig, info)
         })
         .collect();

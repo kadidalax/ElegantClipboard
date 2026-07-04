@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { logError } from "@/lib/logger";
+import { notifyWebDAVAvailabilityChanged } from "@/lib/webdav-availability";
 
 export type ProxyMode = "system" | "none" | "custom";
 
@@ -79,6 +80,9 @@ export function useWebDAVSettings() {
   const saveSetting = useCallback(async (key: string, value: string) => {
     try {
       await invoke("set_setting", { key, value });
+      if (key === "webdav_enabled") {
+        notifyWebDAVAvailabilityChanged();
+      }
     } catch (error) {
       logError(`保存 ${key} 失败:`, error);
     }

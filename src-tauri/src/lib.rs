@@ -361,7 +361,8 @@ fn apply_paste_shortcuts(
                                 }
                             } else {
                                 std::thread::sleep(std::time::Duration::from_millis(50));
-                                if let Err(err) = commands::run_simulate_paste_with_sound(&app_handle)
+                                if let Err(err) =
+                                    commands::run_simulate_paste_with_sound(&app_handle)
                                 {
                                     tracing::warn!(
                                         "{} {} repeat paste failed: {}",

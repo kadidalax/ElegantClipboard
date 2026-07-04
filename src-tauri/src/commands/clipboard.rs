@@ -342,10 +342,7 @@ pub async fn delete_clipboard_item(state: State<'_, Arc<AppState>>, id: i64) -> 
 
     if let Ok(Some(item)) = repo.get_by_id(id) {
         repo.delete(id).map_err(|e| e.to_string())?;
-        let payloads: Vec<String> = item
-            .file_payload
-            .map(|p| vec![p])
-            .unwrap_or_default();
+        let payloads: Vec<String> = item.file_payload.map(|p| vec![p]).unwrap_or_default();
         crate::clipboard::cleanup_deleted_assets(
             &item.image_path.map(|p| vec![p]).unwrap_or_default(),
             &payloads,
@@ -369,7 +366,8 @@ pub async fn batch_delete_clipboard_items(
     ids: Vec<i64>,
 ) -> Result<i64, String> {
     let repo = ClipboardRepository::new(&state.db);
-    let (deleted, image_paths, file_payloads) = repo.batch_delete(&ids).map_err(|e| e.to_string())?;
+    let (deleted, image_paths, file_payloads) =
+        repo.batch_delete(&ids).map_err(|e| e.to_string())?;
     crate::clipboard::cleanup_deleted_assets(&image_paths, &file_payloads);
     debug!("Batch deleted {} clipboard items", deleted);
     Ok(deleted)
@@ -451,10 +449,7 @@ pub async fn update_text_content(
         Ok(true)
     } else {
         if let Ok(Some(item)) = repo.get_by_id(id) {
-            let payloads: Vec<String> = item
-                .file_payload
-                .map(|p| vec![p])
-                .unwrap_or_default();
+            let payloads: Vec<String> = item.file_payload.map(|p| vec![p]).unwrap_or_default();
             repo.update_text_content(id, &new_text)
                 .map_err(|e| e.to_string())?;
             if !payloads.is_empty() {

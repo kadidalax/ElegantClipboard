@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import { create } from "zustand";
 import { logError } from "@/lib/logger";
+import { notifyTranslateAvailabilityChanged } from "@/lib/translate-availability";
 
 const SYNC_EVENT = "translate-settings-changed";
 
@@ -131,6 +132,9 @@ function updateAndPersist(
   saveChangedFields(snapshot, changed).catch((error) => {
     logError("Failed to save translate settings:", error);
   });
+  if (changed.some(([field]) => field === "enabled")) {
+    notifyTranslateAvailabilityChanged();
+  }
 }
 
 async function saveChangedFields(

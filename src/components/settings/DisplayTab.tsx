@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
 import {
   DndContext,
   closestCenter,
@@ -27,8 +27,10 @@ import { SettingsCard, SettingsCardHeader } from "@/components/settings/SettingS
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import { useWebDAVAvailable } from "@/hooks/useWebDAVAvailable";
 import { useTranslation } from "@/i18n";
 import { getToolbarButtonRegistry } from "@/lib/constants";
+import { isWebDAVToolbarButton } from "@/lib/webdav-availability";
 import {
   useUISettings,
   DEFAULT_TOOLBAR_BUTTONS,
@@ -45,7 +47,8 @@ const TOOLBAR_BUTTON_ICONS: Record<ToolbarButton, React.ComponentType<{ classNam
   "webdav-download": CloudArrowDown16Regular,
 };
 
-const ALL_TOOLBAR_BUTTONS: ToolbarButton[] = ["clear", "pin", "batch", "settings", "webdav-upload", "webdav-download"];
+const BASE_TOOLBAR_BUTTONS: ToolbarButton[] = ["clear", "pin", "batch", "settings"];
+const WEBDAV_TOOLBAR_BUTTONS: ToolbarButton[] = ["webdav-upload", "webdav-download"];
 
 function SortableToolbarItem({
   id,
@@ -111,7 +114,12 @@ function SortableToolbarItem({
 
 export function DisplayTab() {
   const { t, locale } = useTranslation();
+  const webdavAvailable = useWebDAVAvailable();
   const toolbarButtonRegistry = useMemo(() => getToolbarButtonRegistry(), [locale]);
+  const allToolbarButtons = useMemo(
+    () => (webdavAvailable ? [...BASE_TOOLBAR_BUTTONS, ...WEBDAV_TOOLBAR_BUTTONS] : BASE_TOOLBAR_BUTTONS),
+    [webdavAvailable],
+  );
 
   const positionOptions = useMemo(
     () => [
@@ -168,6 +176,14 @@ export function DisplayTab() {
   } = useUISettings();
   const anyHoverPreviewEnabled = imagePreviewEnabled || textPreviewEnabled;
 
+  useEffect(() => {
+    if (webdavAvailable) return;
+    const current = toolbarButtons.filter((button) => !isWebDAVToolbarButton(button));
+    if (current.length !== toolbarButtons.length) {
+      setToolbarButtons(current);
+    }
+  }, [webdavAvailable, toolbarButtons, setToolbarButtons]);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 3 } })
   );
@@ -197,7 +213,7 @@ export function DisplayTab() {
   // 排序：激活按钮在前（保持顺序），未激活在后
   const orderedButtons: ToolbarButton[] = [
     ...toolbarButtons,
-    ...ALL_TOOLBAR_BUTTONS.filter((b) => !toolbarButtons.includes(b)),
+    ...allToolbarButtons.filter((b) => !toolbarButtons.includes(b)),
   ];
 
   return (

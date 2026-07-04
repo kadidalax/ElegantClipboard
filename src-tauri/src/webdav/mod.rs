@@ -1052,6 +1052,7 @@ pub fn start_auto_sync_task(db: crate::database::Database, data_dir: std::path::
 
             loop {
                 let settings_repo = crate::database::SettingsRepository::new(&db);
+                let plugin_enabled = settings_repo.get_bool("plugin_webdav_enabled", false);
                 let enabled = settings_repo
                     .get("webdav_enabled")
                     .ok()
@@ -1063,7 +1064,7 @@ pub fn start_auto_sync_task(db: crate::database::Database, data_dir: std::path::
                     .flatten()
                     .is_some_and(|v| v == "true");
 
-                if enabled && auto_sync {
+                if plugin_enabled && enabled && auto_sync {
                     let interval_secs: u64 = settings_repo
                         .get("webdav_sync_interval")
                         .ok()

@@ -557,11 +557,9 @@ impl ClipboardHandler {
             ClipboardContent::Html { html, .. } => html.len(),
             ClipboardContent::Rtf { rtf, .. } => rtf.len(),
             ClipboardContent::ImageFile(capture) => capture.byte_size,
-            ClipboardContent::Files(files) => files
-                .paths
-                .iter()
-                .map(std::string::String::len)
-                .sum(),
+            ClipboardContent::Files(files) => {
+                files.paths.iter().map(std::string::String::len).sum()
+            }
         }
     }
 
@@ -824,11 +822,7 @@ impl ClipboardHandler {
             .unwrap_or(&self.images_path)
             .join("staged")
             .join(&hashes.content_hash[..8.min(hashes.content_hash.len())]);
-        let payload = file_clipboard::build_payload(
-            &capture,
-            &staged_dir,
-            max_stage_bytes as u64,
-        );
+        let payload = file_clipboard::build_payload(&capture, &staged_dir, max_stage_bytes as u64);
         let file_payload = Some(file_clipboard::encode_payload(&payload));
 
         Ok(NewClipboardItem {

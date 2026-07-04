@@ -89,6 +89,25 @@ fn get_data_dir() -> std::path::PathBuf {
     config::AppConfig::load().get_data_dir()
 }
 
+/// 检查 WebDAV 插件已启用
+fn ensure_webdav_plugin_enabled(state: &Arc<AppState>) -> Result<(), String> {
+    let repo = SettingsRepository::new(&state.db);
+    if !repo.get_bool("plugin_webdav_enabled", false) {
+        return Err("WebDAV 插件未启用".to_string());
+    }
+    Ok(())
+}
+
+/// 检查 WebDAV 插件与同步开关均已启用
+fn ensure_webdav_available(state: &Arc<AppState>) -> Result<(), String> {
+    ensure_webdav_plugin_enabled(state)?;
+    let repo = SettingsRepository::new(&state.db);
+    if !repo.get_bool("webdav_enabled", false) {
+        return Err("WebDAV 同步未开启".to_string());
+    }
+    Ok(())
+}
+
 /// 运行时启用 WebDAV 插件（启动自动同步后台任务）
 #[tauri::command]
 pub async fn webdav_enable_plugin(state: State<'_, Arc<AppState>>) -> Result<(), String> {
@@ -99,6 +118,7 @@ pub async fn webdav_enable_plugin(state: State<'_, Arc<AppState>>) -> Result<(),
 /// 测试 WebDAV 连接
 #[tauri::command]
 pub async fn webdav_test_connection(state: State<'_, Arc<AppState>>) -> Result<String, String> {
+    ensure_webdav_plugin_enabled(&state)?;
     let config = load_webdav_config(&state)?;
     tokio::task::spawn_blocking(move || webdav::test_connection(&config))
         .await
@@ -111,6 +131,7 @@ pub async fn webdav_upload(
     app: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
 ) -> Result<String, String> {
+    ensure_webdav_available(&state)?;
     let config = load_webdav_config(&state)?;
     let options = load_sync_options(&state);
     let data_dir = get_data_dir();
@@ -151,6 +172,7 @@ pub async fn webdav_download(
     app: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
 ) -> Result<String, String> {
+    ensure_webdav_available(&state)?;
     let config = load_webdav_config(&state)?;
     let options = load_sync_options(&state);
     let data_dir = get_data_dir();

@@ -36,7 +36,9 @@ import { WindowTitleBar } from "@/components/WindowTitleBar";
 import { useTranslation } from "@/i18n";
 import { logError } from "@/lib/logger";
 import { initTheme } from "@/lib/theme-applier";
+import { notifyTranslateAvailabilityChanged } from "@/lib/translate-availability";
 import { cn } from "@/lib/utils";
+import { notifyWebDAVAvailabilityChanged } from "@/lib/webdav-availability";
 import { useTranslateSettings } from "@/stores/translate-settings";
 
 interface AppSettings extends GeneralSettings, ShortcutSettings, DataSettings {}
@@ -102,11 +104,23 @@ export function Settings() {
         if (id === "webdav") {
           await invoke("set_setting", { key: "webdav_enabled", value: "false" });
         } else if (id === "translate") {
-          useTranslateSettings.getState().setEnabled(false);
+          const store = useTranslateSettings.getState();
+          store.setEnabled(false);
+          store.setTranslateSelectionEnabled(false);
+          try {
+            await invoke("update_translate_selection_shortcut", { newShortcut: "" });
+          } catch (error) {
+            logError("Failed to unregister translate shortcut:", error);
+          }
         }
       }
     } catch (e) {
       logError(`保存插件 ${id} 设置失败:`, e);
+    }
+    if (id === "webdav") {
+      notifyWebDAVAvailabilityChanged();
+    } else if (id === "translate") {
+      notifyTranslateAvailabilityChanged();
     }
   }, [activeTab]);
   const navItems = useMemo(

@@ -52,6 +52,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { useSortable, CSS } from "@/hooks/useSortableList";
+import { useTranslateAvailable } from "@/hooks/useTranslateAvailable";
 import { useTranslation } from "@/i18n";
 import {
   contentTypeConfig,
@@ -68,7 +69,6 @@ import { translateText } from "@/lib/translate";
 import { cn } from "@/lib/utils";
 import { useClipboardStore, ClipboardItem } from "@/stores/clipboard";
 import { useGroupStore } from "@/stores/groups";
-import { useTranslateSettings } from "@/stores/translate-settings";
 import { useUISettings } from "@/stores/ui-settings";
 
 // ============ 类型定义 ============
@@ -223,7 +223,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
     pasteAsPlainText,
   } = clipboardActions();
 
-  const translateEnabled = useTranslateSettings((s) => s.enabled);
+  const translateAvailable = useTranslateAvailable();
   const [translateStatus, setTranslateStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [translatedText, setTranslatedText] = useState("");
 
@@ -822,7 +822,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
               onToggleFavorite={handleToggleFavorite}
               onCopy={handleCopy}
               onDelete={handleDelete}
-              onTranslate={translateEnabled && isTextLikeContent ? handleTranslateClick : undefined}
+              onTranslate={translateAvailable && isTextLikeContent ? handleTranslateClick : undefined}
               translateActive={translateStatus !== "idle"}
             />
           )}
@@ -874,7 +874,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
         { icon: ClipboardPaste16Regular, label: t("clipboard.contextMenu.paste"), onClick: () => pasteContent(item.id) },
         { icon: TextDescription16Regular, label: t("clipboard.contextMenu.pastePlainText"), onClick: () => pasteAsPlainText(item.id) },
         { icon: Copy16Regular, label: t("clipboard.contextMenu.copy"), onClick: handleCopyCtxMenu },
-        ...(translateEnabled ? [{ icon: Translate16Regular, label: t("clipboard.contextMenu.translate"), onClick: () => triggerTranslate(true) }] : []),
+        ...(translateAvailable ? [{ icon: Translate16Regular, label: t("clipboard.contextMenu.translate"), onClick: () => triggerTranslate(true) }] : []),
         { icon: Edit16Regular, label: t("clipboard.contextMenu.edit"), onClick: handleEdit },
         { icon: Delete16Regular, label: t("clipboard.contextMenu.delete"), onClick: () => deleteItem(item.id), destructive: true, separator: true },
       ];

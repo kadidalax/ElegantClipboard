@@ -731,7 +731,10 @@ impl ClipboardRepository {
         let mut image_paths = Vec::new();
         let mut file_payloads = Vec::new();
         for row in stmt.query_map(params_ref.as_slice(), |row| {
-            Ok((row.get::<_, Option<String>>(0)?, row.get::<_, Option<String>>(1)?))
+            Ok((
+                row.get::<_, Option<String>>(0)?,
+                row.get::<_, Option<String>>(1)?,
+            ))
         })? {
             let (image_path, file_payload) = row?;
             if let Some(path) = image_path {
@@ -809,9 +812,8 @@ impl ClipboardRepository {
     /// 获取所有条目的 file_payload（含置顶和收藏）
     pub fn get_all_file_payloads(&self) -> Result<Vec<String>, rusqlite::Error> {
         let conn = self.read_conn.lock();
-        let mut stmt = conn.prepare(
-            "SELECT file_payload FROM clipboard_items WHERE file_payload IS NOT NULL",
-        )?;
+        let mut stmt = conn
+            .prepare("SELECT file_payload FROM clipboard_items WHERE file_payload IS NOT NULL")?;
         let payloads = stmt
             .query_map([], |row| row.get::<_, String>(0))?
             .filter_map(std::result::Result::ok)
@@ -833,7 +835,10 @@ impl ClipboardRepository {
         Ok(paths)
     }
 
-    pub fn get_file_payloads_by_group(&self, group_id: i64) -> Result<Vec<String>, rusqlite::Error> {
+    pub fn get_file_payloads_by_group(
+        &self,
+        group_id: i64,
+    ) -> Result<Vec<String>, rusqlite::Error> {
         let conn = self.read_conn.lock();
         let mut stmt = conn.prepare(
             "SELECT file_payload FROM clipboard_items \

@@ -35,11 +35,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useInputFocus, focusWindowImmediately, releaseWebViewFocus } from "@/hooks/useInputFocus";
+import { useWebDAVAvailable } from "@/hooks/useWebDAVAvailable";
 import { useTranslation } from "@/i18n";
 import { GROUP_VALUES, getGroups } from "@/lib/constants";
 import { logError } from "@/lib/logger";
 import { initTheme } from "@/lib/theme-applier";
 import { cn } from "@/lib/utils";
+import { filterToolbarButtonsForWebDAV } from "@/lib/webdav-availability";
 import { useClipboardStore } from "@/stores/clipboard";
 import { useGroupStore } from "@/stores/groups";
 import type { Group } from "@/stores/groups";
@@ -100,6 +102,11 @@ function App() {
   const cardDensity = useUISettings((s) => s.cardDensity);
   const showCategoryFilter = useUISettings((s) => s.showCategoryFilter);
   const toolbarButtons = useUISettings((s) => s.toolbarButtons);
+  const webdavAvailable = useWebDAVAvailable();
+  const visibleToolbarButtons = useMemo(
+    () => filterToolbarButtonsForWebDAV(toolbarButtons, webdavAvailable),
+    [toolbarButtons, webdavAvailable],
+  );
   const windowAnimation = useUISettings((s) => s.windowAnimation);
   const onboardingCompleted = useUISettings((s) => s.onboardingCompleted);
   const setOnboardingCompleted = useUISettings((s) => s.setOnboardingCompleted);
@@ -570,12 +577,12 @@ function App() {
         </div>
 
         {/* 操作按钮 */}
-        {toolbarButtons.length > 0 && (
+        {visibleToolbarButtons.length > 0 && (
           <div 
             className="flex items-center gap-0.5 h-9 px-1 bg-background border rounded-md shadow-sm" 
             style={{ WebkitAppRegion: 'no-drag', pointerEvents: suppressTooltips ? 'none' : undefined } as React.CSSProperties}
           >
-            {toolbarButtons.map((btn) => renderToolbarButton(btn))}
+            {visibleToolbarButtons.map((btn) => renderToolbarButton(btn))}
           </div>
         )}
       </div>

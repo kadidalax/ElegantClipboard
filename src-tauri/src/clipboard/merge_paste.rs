@@ -102,10 +102,7 @@ pub fn merge_items_to_clipboard(
         }
     }
 
-    debug!(
-        "Merged paste: {} item(s), formats={formats}",
-        items.len(),
-    );
+    debug!("Merged paste: {} item(s), formats={formats}", items.len(),);
     Ok(())
 }
 
@@ -120,11 +117,7 @@ fn extract_merge_text(item: &ClipboardItem) -> Option<String> {
         }
     }
     if item.content_type == "image" {
-        return item
-            .image_path
-            .as_ref()
-            .filter(|p| !p.is_empty())
-            .cloned();
+        return item.image_path.as_ref().filter(|p| !p.is_empty()).cloned();
     }
     item_alt_text(item)
 }
