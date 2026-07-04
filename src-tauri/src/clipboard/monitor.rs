@@ -1,3 +1,4 @@
+use super::file_clipboard;
 use super::handler::{cleanup_capture_content, cleanup_stale_capture_files};
 use super::source_app::SourceAppInfo;
 use super::{ClipChangeSettings, ClipboardContent, ClipboardHandler, ImageCapture};
@@ -351,6 +352,11 @@ fn read_clipboard_content_with_retry(
         match read_clipboard_content(max_image_bytes, capture_dir) {
             Some(content) => return Some(content),
             None if attempt + 1 < RETRY_DELAYS_MS.len() => {
+                if let Ok(ctx) = ClipboardContext::new() {
+                    if file_clipboard::clipboard_has_pending_files(&ctx) {
+                        debug!("Clipboard file data pending, will retry");
+                    }
+                }
                 debug!("Clipboard read returned nothing, will retry");
                 continue;
             }
@@ -413,14 +419,15 @@ fn read_clipboard_content_inner(
         }
     };
 
-    // ── 1. 文件：无歧义，直接返回 ──
-    match ctx.get_files() {
-        Ok(files) if !files.is_empty() => {
-            debug!("Got {} files from clipboard", files.len());
-            return Some(ClipboardContent::Files(files));
-        }
-        Ok(_) => {}
-        Err(e) => debug!("Clipboard get_files failed: {}", e),
+    // ── 1. 文件：捕获 CF_HDROP 原始数据 + 伴生格式 ──
+    if let Some(file_capture) = file_clipboard::capture_from_clipboard(&ctx) {
+        debug!(
+            "Got {} file(s) from clipboard (hdrop={}, extras={})",
+            file_capture.paths.len(),
+            file_capture.hdrop_raw.is_some(),
+            file_capture.extra_formats.len()
+        );
+        return Some(ClipboardContent::Files(file_capture));
     }
 
     // ── 2. 探测所有文本格式（不短路） ──

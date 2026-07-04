@@ -56,6 +56,8 @@ interface DataSizeInfo {
   db_size: number;
   images_size: number;
   images_count: number;
+  staged_size?: number;
+  staged_count?: number;
   total_size: number;
 }
 

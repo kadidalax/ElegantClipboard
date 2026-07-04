@@ -83,60 +83,42 @@ interface ClipboardItemCardProps {
 
 const clipboardActions = () => useClipboardStore.getState();
 
-// LRU 缓存：仅缓存已确认失效的非图片文件（false）
-// 图片文件不需要检查，靠预览图加载失败自然反馈
-const FILE_VALIDITY_CACHE_MAX = 500;
-const fileValidityCache = new Map<string, false>();
-function setFileValidityCache(key: string, value: boolean) {
-  if (value) return; // 不缓存有效的，只缓存失效的
-  if (fileValidityCache.size >= FILE_VALIDITY_CACHE_MAX) {
-    const firstKey = fileValidityCache.keys().next().value;
-    if (firstKey !== undefined) fileValidityCache.delete(firstKey);
-  }
-  fileValidityCache.set(key, false);
+// 批量检查队列：按 item id 请求后端解析 staged 路径
+interface ItemFileStatus {
+  all_exist: boolean;
+  resolved_paths: string[];
+  checks: Record<string, { exists: boolean; is_dir: boolean }>;
 }
 
-// 批量检查队列：收集检查请求，批量发送
 interface PendingCheck {
-  paths: string[];
-  resolve: (result: Record<string, { exists: boolean; is_dir: boolean }>) => void;
+  id: number;
+  resolve: (result: ItemFileStatus) => void;
   reject: (error: unknown) => void;
 }
-let pendingChecks: PendingCheck[] = [];
-let batchTimer: ReturnType<typeof setTimeout> | null = null;
-const BATCH_DELAY_MS = 50; // 50ms 内的请求合并为一批
+let pendingItemChecks: PendingCheck[] = [];
+let itemBatchTimer: ReturnType<typeof setTimeout> | null = null;
+const ITEM_BATCH_DELAY_MS = 50;
 
-function flushBatchChecks() {
-  if (pendingChecks.length === 0) return;
-  const batch = pendingChecks;
-  pendingChecks = [];
+function flushItemFileStatusBatch() {
+  if (pendingItemChecks.length === 0) return;
+  const batch = pendingItemChecks;
+  pendingItemChecks = [];
 
-  // 合并所有路径，去重
-  const allPaths = [...new Set(batch.flatMap((c) => c.paths))];
-  invoke<Record<string, { exists: boolean; is_dir: boolean }>>(
-    "check_files_exist",
-    { paths: allPaths },
-  )
-    .then((result) => {
-      for (const check of batch) {
-        check.resolve(result);
-      }
-    })
-    .catch((error) => {
-      logError("Batch check_files_exist failed:", error);
-      for (const check of batch) {
+  for (const check of batch) {
+    invoke<ItemFileStatus>("get_item_file_status", { id: check.id })
+      .then((result) => check.resolve(result))
+      .catch((error) => {
+        logError("get_item_file_status failed:", error);
         check.reject(error);
-      }
-    });
+      });
+  }
 }
 
-function batchCheckFilesExist(
-  paths: string[],
-): Promise<Record<string, { exists: boolean; is_dir: boolean }>> {
+function batchGetItemFileStatus(id: number): Promise<ItemFileStatus> {
   return new Promise((resolve, reject) => {
-    pendingChecks.push({ paths, resolve, reject });
-    if (batchTimer) clearTimeout(batchTimer);
-    batchTimer = setTimeout(flushBatchChecks, BATCH_DELAY_MS);
+    pendingItemChecks.push({ id, resolve, reject });
+    if (itemBatchTimer) clearTimeout(itemBatchTimer);
+    itemBatchTimer = setTimeout(flushItemFileStatusBatch, ITEM_BATCH_DELAY_MS);
   });
 }
 const textPreviewLM = createLeaseManager("allocate_text_preview_lease");
@@ -259,20 +241,24 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
   const [runtimeFilesValid, setRuntimeFilesValid] = useState<
     boolean | undefined
   >(undefined);
+  const [resolvedFilePaths, setResolvedFilePaths] = useState<string[]>([]);
 
   useEffect(() => {
     if (item.content_type !== "files") {
       setRuntimeFilesValid(undefined);
+      setResolvedFilePaths([]);
       return;
     }
 
     if (item.files_valid !== undefined) {
       setRuntimeFilesValid(item.files_valid);
+      setResolvedFilePaths(filePaths);
       return;
     }
 
     if (filePaths.length === 0) {
       setRuntimeFilesValid(false);
+      setResolvedFilePaths([]);
       return;
     }
 
@@ -280,34 +266,33 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
     const isSingleImageFile = filePaths.length === 1 && isImageFile(filePaths[0]);
     if (isSingleImageFile) {
       setRuntimeFilesValid(undefined);
-      return;
-    }
-
-    const cacheKey = item.file_paths ?? filePaths.join("\n");
-    // 检查是否已缓存为失效
-    if (fileValidityCache.has(cacheKey)) {
-      setRuntimeFilesValid(false);
+      setResolvedFilePaths(filePaths);
       return;
     }
 
     let cancelled = false;
-    batchCheckFilesExist(filePaths)
-      .then((checkResult) => {
-        const allExist = filePaths.every((path) => checkResult[path]?.exists);
-        setFileValidityCache(cacheKey, allExist);
-        if (!cancelled) setRuntimeFilesValid(allExist);
+    batchGetItemFileStatus(item.id)
+      .then((status) => {
+        if (!cancelled) {
+          setRuntimeFilesValid(status.all_exist);
+          setResolvedFilePaths(status.resolved_paths);
+        }
       })
       .catch((error) => {
-        logError("Failed to check files exist:", error);
-        if (!cancelled) setRuntimeFilesValid(undefined);
+        logError("Failed to check item file status:", error);
+        if (!cancelled) {
+          setRuntimeFilesValid(undefined);
+          setResolvedFilePaths(filePaths);
+        }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [item.content_type, item.files_valid, item.file_paths, filePaths]);
+  }, [item.content_type, item.files_valid, item.file_paths, item.id, filePaths]);
 
   const effectiveFilesValid = item.files_valid ?? runtimeFilesValid;
+  const effectiveFilePaths = resolvedFilePaths.length > 0 ? resolvedFilePaths : filePaths;
   const filesInvalid =
     item.content_type === "files" && effectiveFilesValid === false;
   const isTextLikeContent =
@@ -613,9 +598,9 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
   };
 
   const handleShowInExplorer = async () => {
-    if (filePaths.length > 0) {
+    if (effectiveFilePaths.length > 0) {
       try {
-        await invoke("show_in_explorer", { path: filePaths[0] });
+        await invoke("show_in_explorer", { path: effectiveFilePaths[0] });
       } catch (error) {
         logError("Failed to show in explorer:", error);
       }
@@ -633,12 +618,10 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
   const handleShowDetails = async () => {
     if (filePaths.length === 0) return;
     try {
-      const checkResult = await invoke<
-        Record<string, { exists: boolean; is_dir: boolean }>
-      >("check_files_exist", { paths: filePaths });
+      const status = await invoke<ItemFileStatus>("get_item_file_status", { id: item.id });
       const items: FileListItem[] = filePaths.map((path) => {
         const name = getFileNameFromPath(path);
-        const info = checkResult[path] ?? { exists: false, is_dir: false };
+        const info = status.checks[path] ?? { exists: false, is_dir: false };
         return { name, path, isDir: info.is_dir, exists: info.exists };
       });
       setFileListItems(items);
@@ -649,9 +632,9 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
   };
 
   const handleSaveAs = async () => {
-    // 图片从 image_path 保存，文件取第一个
+    // 图片从 image_path 保存，文件取第一个 resolved 路径
     const sourcePath =
-      item.content_type === "image" ? item.image_path : filePaths[0];
+      item.content_type === "image" ? item.image_path : effectiveFilePaths[0];
     if (!sourcePath) return;
     try {
       await invoke("save_file_as", { sourcePath });

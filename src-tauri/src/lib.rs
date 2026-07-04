@@ -1147,6 +1147,7 @@ pub fn run() {
             commands::settings::get_system_accent_color,
             commands::settings::get_system_fonts,
             commands::file_ops::check_files_exist,
+            commands::file_ops::get_item_file_status,
             commands::file_ops::show_in_explorer,
             commands::file_ops::paste_as_path,
             commands::file_ops::get_file_details,

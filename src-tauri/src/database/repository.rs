@@ -15,6 +15,8 @@ pub struct ClipboardItem {
     pub rtf_content: Option<String>,
     pub image_path: Option<String>,
     pub file_paths: Option<String>,
+    /// 文件剪贴板 fidelity payload（CF_HDROP + 伴生格式 + staging）
+    pub file_payload: Option<String>,
     pub content_hash: String,
     pub semantic_hash: String,
     pub preview: Option<String>,
@@ -47,6 +49,7 @@ pub struct NewClipboardItem {
     pub rtf_content: Option<String>,
     pub image_path: Option<String>,
     pub file_paths: Option<Vec<String>>,
+    pub file_payload: Option<String>,
     pub content_hash: String,
     pub semantic_hash: String,
     pub preview: Option<String>,
@@ -69,6 +72,7 @@ impl Default for NewClipboardItem {
             rtf_content: None,
             image_path: None,
             file_paths: None,
+            file_payload: None,
             content_hash: String::new(),
             semantic_hash: String::new(),
             preview: None,
@@ -257,7 +261,8 @@ impl ClipboardRepository {
 
         let file_paths_json = item
             .file_paths
-            .map(|paths| serde_json::to_string(&paths).unwrap_or_default());
+            .as_ref()
+            .map(|paths| serde_json::to_string(paths).unwrap_or_default());
 
         let max_sort_order: i64 = conn
             .query_row(
@@ -270,10 +275,10 @@ impl ClipboardRepository {
 
         conn.execute(
             "INSERT INTO clipboard_items
-             (content_type, text_content, html_content, rtf_content, image_path, file_paths,
+             (content_type, text_content, html_content, rtf_content, image_path, file_paths, file_payload,
               content_hash, semantic_hash, preview, byte_size, image_width, image_height, sort_order,
               char_count, source_app_name, source_app_icon, group_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
             params![
                 item.content_type.as_str(),
                 item.text_content,
@@ -281,6 +286,7 @@ impl ClipboardRepository {
                 item.rtf_content,
                 item.image_path,
                 file_paths_json,
+                item.file_payload,
                 item.content_hash,
                 item.semantic_hash,
                 item.preview,
@@ -486,13 +492,13 @@ impl ClipboardRepository {
 
     /// 列表查询列（排除大文本字段以减少 IPC 传输）
     const LIST_COLUMNS: &'static str = "id, content_type, NULL AS text_content, NULL AS html_content, NULL AS rtf_content, \
-         image_path, file_paths, content_hash, semantic_hash, preview, byte_size, image_width, image_height, \
+         image_path, file_paths, NULL AS file_payload, content_hash, semantic_hash, preview, byte_size, image_width, image_height, \
          is_pinned, is_favorite, favorite_order, sort_order, created_at, updated_at, access_count, last_accessed_at, char_count, \
          source_app_name, source_app_icon, group_id";
 
     /// 搜索查询列（含 text_content 用于关键词上下文预览）
     const SEARCH_COLUMNS: &'static str = "id, content_type, text_content, NULL AS html_content, NULL AS rtf_content, \
-         image_path, file_paths, content_hash, semantic_hash, preview, byte_size, image_width, image_height, \
+         image_path, file_paths, NULL AS file_payload, content_hash, semantic_hash, preview, byte_size, image_width, image_height, \
          is_pinned, is_favorite, favorite_order, sort_order, created_at, updated_at, access_count, last_accessed_at, char_count, \
          source_app_name, source_app_icon, group_id";
 
@@ -704,32 +710,44 @@ impl ClipboardRepository {
         Ok(())
     }
 
-    /// 批量删除指定 ID 的条目，返回被删除条目的图片路径（用于文件清理）
-    pub fn batch_delete(&self, ids: &[i64]) -> Result<(i64, Vec<String>), rusqlite::Error> {
+    /// 批量删除指定 ID 的条目，返回 (删除数, 图片路径, file_payload JSON)
+    pub fn batch_delete(
+        &self,
+        ids: &[i64],
+    ) -> Result<(i64, Vec<String>, Vec<String>), rusqlite::Error> {
         if ids.is_empty() {
-            return Ok((0, vec![]));
+            return Ok((0, vec![], vec![]));
         }
         let conn = self.write_conn.lock();
         let placeholders: Vec<String> = ids.iter().map(|_| "?".to_string()).collect();
         let in_clause = placeholders.join(",");
 
         let sql = format!(
-            "SELECT image_path FROM clipboard_items WHERE id IN ({in_clause}) AND image_path IS NOT NULL"
+            "SELECT image_path, file_payload FROM clipboard_items WHERE id IN ({in_clause})"
         );
         let mut stmt = conn.prepare(&sql)?;
         let params_ref: Vec<&dyn rusqlite::ToSql> =
             ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
-        let paths: Vec<String> = stmt
-            .query_map(params_ref.as_slice(), |row| row.get(0))?
-            .filter_map(std::result::Result::ok)
-            .collect();
+        let mut image_paths = Vec::new();
+        let mut file_payloads = Vec::new();
+        for row in stmt.query_map(params_ref.as_slice(), |row| {
+            Ok((row.get::<_, Option<String>>(0)?, row.get::<_, Option<String>>(1)?))
+        })? {
+            let (image_path, file_payload) = row?;
+            if let Some(path) = image_path {
+                image_paths.push(path);
+            }
+            if let Some(payload) = file_payload {
+                file_payloads.push(payload);
+            }
+        }
 
         let del_sql = format!("DELETE FROM clipboard_items WHERE id IN ({in_clause})");
         let params_ref2: Vec<&dyn rusqlite::ToSql> =
             ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
         let deleted = conn.execute(&del_sql, params_ref2.as_slice())? as i64;
         debug!("Batch deleted {} clipboard items", deleted);
-        Ok((deleted, paths))
+        Ok((deleted, image_paths, file_payloads))
     }
 
     /// 获取可清除条目的图片路径（按分组/类型过滤）
@@ -745,6 +763,21 @@ impl ClipboardRepository {
             .content_type(content_type)
             .condition("image_path IS NOT NULL")
             .select_strings(&conn, "SELECT image_path FROM clipboard_items", "")
+    }
+
+    /// 获取可清除条目的 file_payload（按分组/类型过滤）
+    pub fn get_clearable_file_payloads(
+        &self,
+        group_id: Option<i64>,
+        content_type: Option<&str>,
+    ) -> Result<Vec<String>, rusqlite::Error> {
+        let conn = self.read_conn.lock();
+        ConditionBuilder::new()
+            .clearable()
+            .group(group_id)
+            .content_type(content_type)
+            .condition("file_payload IS NOT NULL")
+            .select_strings(&conn, "SELECT file_payload FROM clipboard_items", "")
     }
 
     /// 清空历史（保留置顶和收藏），按分组/类型过滤
@@ -773,6 +806,19 @@ impl ClipboardRepository {
         Ok(paths)
     }
 
+    /// 获取所有条目的 file_payload（含置顶和收藏）
+    pub fn get_all_file_payloads(&self) -> Result<Vec<String>, rusqlite::Error> {
+        let conn = self.read_conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT file_payload FROM clipboard_items WHERE file_payload IS NOT NULL",
+        )?;
+        let payloads = stmt
+            .query_map([], |row| row.get::<_, String>(0))?
+            .filter_map(std::result::Result::ok)
+            .collect();
+        Ok(payloads)
+    }
+
     /// Get all image paths within a specific group (including pinned and favorites).
     pub fn get_image_paths_by_group(&self, group_id: i64) -> Result<Vec<String>, rusqlite::Error> {
         let conn = self.read_conn.lock();
@@ -787,6 +833,19 @@ impl ClipboardRepository {
         Ok(paths)
     }
 
+    pub fn get_file_payloads_by_group(&self, group_id: i64) -> Result<Vec<String>, rusqlite::Error> {
+        let conn = self.read_conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT file_payload FROM clipboard_items \
+             WHERE file_payload IS NOT NULL AND group_id = ?1",
+        )?;
+        let payloads = stmt
+            .query_map(params![group_id], |row| row.get::<_, String>(0))?
+            .filter_map(std::result::Result::ok)
+            .collect();
+        Ok(payloads)
+    }
+
     /// 清空所有历史（包括置顶和收藏）
     pub fn clear_all(&self) -> Result<i64, rusqlite::Error> {
         let conn = self.write_conn.lock();
@@ -794,12 +853,12 @@ impl ClipboardRepository {
         Ok(deleted as i64)
     }
 
-    /// 删除 N 天前的非置顶/非收藏条目（按分组），返回 (删除数, 关联图片路径)
+    /// 删除 N 天前的非置顶/非收藏条目（按分组），返回 (删除数, 图片路径, file_payload)
     pub fn delete_older_than(
         &self,
         days: i64,
         group_id: Option<i64>,
-    ) -> Result<(i64, Vec<String>), rusqlite::Error> {
+    ) -> Result<(i64, Vec<String>, Vec<String>), rusqlite::Error> {
         let conn = self.write_conn.lock();
         let age_cond = "created_at < datetime('now', 'localtime', '-' || ? || ' days')";
 
@@ -809,6 +868,13 @@ impl ClipboardRepository {
             .condition("image_path IS NOT NULL")
             .condition_with_param(age_cond, days)
             .select_strings(&conn, "SELECT image_path FROM clipboard_items", "")?;
+
+        let file_payloads = ConditionBuilder::new()
+            .clearable()
+            .group(group_id)
+            .condition("file_payload IS NOT NULL")
+            .condition_with_param(age_cond, days)
+            .select_strings(&conn, "SELECT file_payload FROM clipboard_items", "")?;
 
         let deleted = ConditionBuilder::new()
             .clearable()
@@ -820,17 +886,17 @@ impl ClipboardRepository {
             "Auto-cleanup: deleted {} items older than {} days (group: {:?})",
             deleted, days, group_id
         );
-        Ok((deleted, image_paths))
+        Ok((deleted, image_paths, file_payloads))
     }
 
-    /// 执行最大数量限制（按分组），返回 (删除数, 图片路径)
+    /// 执行最大数量限制（按分组），返回 (删除数, 图片路径, file_payload)
     pub fn enforce_max_count(
         &self,
         max_count: i64,
         group_id: Option<i64>,
-    ) -> Result<(i64, Vec<String>), rusqlite::Error> {
+    ) -> Result<(i64, Vec<String>, Vec<String>), rusqlite::Error> {
         if max_count <= 0 {
-            return Ok((0, vec![]));
+            return Ok((0, vec![], vec![]));
         }
 
         let conn = self.write_conn.lock();
@@ -840,7 +906,7 @@ impl ClipboardRepository {
             .count_items(&conn)?;
 
         if current_count <= max_count {
-            return Ok((0, vec![]));
+            return Ok((0, vec![], vec![]));
         }
         let to_delete = current_count - max_count;
 
@@ -852,6 +918,17 @@ impl ClipboardRepository {
             .select_strings(
                 &conn,
                 "SELECT image_path FROM clipboard_items",
+                "ORDER BY created_at ASC LIMIT ?",
+            )?;
+
+        let file_payloads = ConditionBuilder::new()
+            .clearable()
+            .group(group_id)
+            .condition("file_payload IS NOT NULL")
+            .param(to_delete)
+            .select_strings(
+                &conn,
+                "SELECT file_payload FROM clipboard_items",
                 "ORDER BY created_at ASC LIMIT ?",
             )?;
 
@@ -872,7 +949,7 @@ impl ClipboardRepository {
             "Enforced max count: deleted {} oldest items (group: {:?})",
             deleted, group_id
         );
-        Ok((deleted, image_paths))
+        Ok((deleted, image_paths, file_payloads))
     }
 
     /// 去重置顶时刷新 HTML/RTF 字段（Word 等同内容重拷会更新 base64 RTF）
@@ -913,11 +990,11 @@ impl ClipboardRepository {
         let semantic_hash =
             semantic_hash_from_text(new_text).unwrap_or_else(|| content_hash.clone());
 
-        // 降级为 text 类型，清除 html/rtf 内容
+        // 降级为 text 类型，清除 html/rtf/文件字段
         conn.execute(
             "UPDATE clipboard_items SET text_content = ?1, preview = ?2, content_hash = ?3, semantic_hash = ?4, \
              byte_size = ?5, char_count = ?6, content_type = 'text', \
-             html_content = NULL, rtf_content = NULL, image_path = NULL, file_paths = NULL WHERE id = ?7",
+             html_content = NULL, rtf_content = NULL, image_path = NULL, file_paths = NULL, file_payload = NULL WHERE id = ?7",
             params![new_text, preview, content_hash, semantic_hash, byte_size, char_count, id],
         )?;
         debug!("Updated text content for item {}", id);
@@ -1042,6 +1119,7 @@ impl ClipboardRepository {
             rtf_content: row.get("rtf_content")?,
             image_path: row.get("image_path")?,
             file_paths: row.get("file_paths")?,
+            file_payload: row.get("file_payload")?,
             content_hash: row.get("content_hash")?,
             semantic_hash: row.get("semantic_hash")?,
             preview: row.get("preview")?,
@@ -1093,11 +1171,11 @@ impl ClipboardRepository {
                 tx.prepare_cached("SELECT 1 FROM clipboard_items WHERE content_hash = ?1 LIMIT 1")?;
             let mut insert_stmt = tx.prepare_cached(
                 "INSERT INTO clipboard_items
-                 (content_type, text_content, html_content, rtf_content, image_path, file_paths,
+                 (content_type, text_content, html_content, rtf_content, image_path, file_paths, file_payload,
                   content_hash, semantic_hash, preview, byte_size, image_width, image_height,
                   is_pinned, is_favorite, sort_order, created_at, updated_at,
                   access_count, last_accessed_at, char_count, source_app_name, source_app_icon, group_id)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)"
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)"
             )?;
             for item in items {
                 let exists = exists_stmt.exists(params![item.content_hash])?;
@@ -1111,6 +1189,7 @@ impl ClipboardRepository {
                     item.rtf_content,
                     item.image_path,
                     item.file_paths,
+                    item.file_payload,
                     item.content_hash,
                     item.semantic_hash,
                     item.preview,
@@ -1587,7 +1666,7 @@ mod tests {
         let id2 = repo.insert(make_text_item("batch2")).unwrap();
         let id3 = repo.insert(make_text_item("batch3")).unwrap();
 
-        let (deleted, _paths) = repo.batch_delete(&[id1, id3]).unwrap();
+        let (deleted, _paths, _payloads) = repo.batch_delete(&[id1, id3]).unwrap();
         assert_eq!(deleted, 2);
         assert!(repo.get_by_id(id1).unwrap().is_none());
         assert!(repo.get_by_id(id2).unwrap().is_some());
@@ -1598,9 +1677,10 @@ mod tests {
     fn batch_delete_empty_ids() {
         let db = temp_db();
         let repo = ClipboardRepository::new(&db);
-        let (deleted, paths) = repo.batch_delete(&[]).unwrap();
+        let (deleted, paths, payloads) = repo.batch_delete(&[]).unwrap();
         assert_eq!(deleted, 0);
         assert!(paths.is_empty());
+        assert!(payloads.is_empty());
     }
 
     #[test]
@@ -1835,7 +1915,7 @@ mod tests {
             repo.insert(make_text_item(&format!("enforce_{i}")))
                 .unwrap();
         }
-        let (deleted, _) = repo.enforce_max_count(3, None).unwrap();
+        let (deleted, _, _) = repo.enforce_max_count(3, None).unwrap();
         assert_eq!(deleted, 2);
         assert_eq!(repo.count(QueryOptions::default()).unwrap(), 3);
     }
@@ -1845,7 +1925,7 @@ mod tests {
         let db = temp_db();
         let repo = ClipboardRepository::new(&db);
         repo.insert(make_text_item("under_limit")).unwrap();
-        let (deleted, _) = repo.enforce_max_count(10, None).unwrap();
+        let (deleted, _, _) = repo.enforce_max_count(10, None).unwrap();
         assert_eq!(deleted, 0);
     }
 

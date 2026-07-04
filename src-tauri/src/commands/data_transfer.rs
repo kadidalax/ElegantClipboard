@@ -267,6 +267,8 @@ pub async fn export_data(
 
     add_dir_to_zip(&mut zip, &data_dir.join("icons"), "icons", options)?;
 
+    add_dir_to_zip(&mut zip, &data_dir.join("staged"), "staged", options)?;
+
     zip.finish().map_err(|e| e.to_string())?;
 
     let size = fs::metadata(&dest_path).map_or(0, |m| m.len());

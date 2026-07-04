@@ -203,8 +203,9 @@ pub async fn reset_all_data(state: State<'_, Arc<AppState>>) -> Result<(), Strin
     // 清空剪贴板数据
     let clipboard_repo = ClipboardRepository::new(&state.db);
     let image_paths = clipboard_repo.get_all_image_paths().unwrap_or_default();
+    let file_payloads = clipboard_repo.get_all_file_payloads().unwrap_or_default();
     clipboard_repo.clear_all().map_err(|e| e.to_string())?;
-    crate::clipboard::cleanup_image_files(&image_paths);
+    crate::clipboard::cleanup_deleted_assets(&image_paths, &file_payloads);
 
     // 清空自定义分组
     let group_repo = GroupRepository::new(&state.db);
@@ -217,7 +218,7 @@ pub async fn reset_all_data(state: State<'_, Arc<AppState>>) -> Result<(), Strin
     // 删除图片/图标目录（清理残留文件）
     let config = crate::config::AppConfig::load();
     let data_dir = config.get_data_dir();
-    for dir_name in &["images", "icons"] {
+    for dir_name in &["images", "icons", "staged"] {
         let dir = data_dir.join(dir_name);
         if dir.exists() {
             let _ = fs::remove_dir_all(&dir);

@@ -529,6 +529,31 @@ impl Clipboard for ClipboardContext {
 	}
 }
 
+impl ClipboardContext {
+	/// Read raw CF_HDROP bytes for lossless file clipboard round-trips.
+	pub fn get_hdrop_raw(&self) -> Result<Vec<u8>> {
+		let _clip = ClipboardWin::new_attempts(10)
+			.map_err(|code| format!("Open clipboard error, code = {code}"));
+		get_clipboard(formats::RawData(formats::CF_HDROP))
+			.map_err(|e| format!("Get CF_HDROP error, code = {e}").into())
+	}
+
+	/// Write raw CF_HDROP bytes without clearing the clipboard.
+	pub fn set_hdrop_raw(&self, data: &[u8]) -> Result<()> {
+		set_without_clear(formats::CF_HDROP, data)
+			.map_err(|e| format!("Set CF_HDROP error, code = {e}").into())
+	}
+
+	/// Write a registered or standard format without clearing the clipboard.
+	pub fn set_raw_no_clear(&self, format: &str, data: &[u8]) -> Result<()> {
+		let format_uint = clipboard_win::register_format(format)
+			.ok_or_else(|| "register format error".to_string())?
+			.get();
+		set_without_clear(format_uint, data)
+			.map_err(|e| format!("Set raw format error, code = {e}").into())
+	}
+}
+
 impl<T: ClipboardHandler> ClipboardWatcher<T> for ClipboardWatcherContext<T> {
 	fn add_handler(&mut self, f: T) -> &mut Self {
 		self.handlers.push(f);

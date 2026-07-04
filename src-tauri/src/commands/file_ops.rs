@@ -1,4 +1,7 @@
 use crate::database::ClipboardRepository;
+use crate::clipboard::file_clipboard::{
+    parse_file_paths, resolve_item_paths, item_files_all_exist,
+};
 use clipboard_rs::Clipboard as ClipboardTrait;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -12,21 +15,36 @@ use super::{
 // ============ 文件校验命令 ============
 
 /// 文件检查结果（存在性与是否为目录）
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone)]
 pub struct FileCheckResult {
     pub exists: bool,
     pub is_dir: bool,
 }
 
 /// 并行检查文件是否存在，返回路径→结果映射。
+/// 若提供 `file_payload`，会先解析 staged 回退路径再检查。
 #[tauri::command]
 pub async fn check_files_exist(
     paths: Vec<String>,
+    file_payload: Option<String>,
 ) -> Result<HashMap<String, FileCheckResult>, String> {
     use rayon::prelude::*;
     use std::path::Path;
 
-    let result: HashMap<String, FileCheckResult> = paths
+    let resolved = if file_payload.is_some() {
+        let paths_json = serde_json::to_string(&paths).unwrap_or_default();
+        resolve_item_paths(Some(&paths_json), file_payload.as_deref())
+    } else {
+        paths.clone()
+    };
+
+    let resolved_by_original: HashMap<String, String> = paths
+        .iter()
+        .cloned()
+        .zip(resolved.iter().cloned())
+        .collect();
+
+    let result: HashMap<String, FileCheckResult> = resolved
         .par_iter()
         .map(|path| {
             let p = Path::new(path);
@@ -36,7 +54,83 @@ pub async fn check_files_exist(
         })
         .collect();
 
-    Ok(result)
+    // 以原始路径为 key 返回，便于 UI 展示
+    Ok(paths
+        .into_iter()
+        .map(|orig| {
+            let check_path = resolved_by_original.get(&orig).cloned().unwrap_or(orig.clone());
+            let info = result.get(&check_path).cloned().unwrap_or(FileCheckResult {
+                exists: false,
+                is_dir: false,
+            });
+            (orig, info)
+        })
+        .collect())
+}
+
+/// 解析条目文件路径（含 staged 回退）并检查有效性
+#[derive(serde::Serialize)]
+pub struct ItemFileStatus {
+    pub all_exist: bool,
+    pub resolved_paths: Vec<String>,
+    pub checks: HashMap<String, FileCheckResult>,
+}
+
+#[tauri::command]
+pub async fn get_item_file_status(
+    state: State<'_, Arc<AppState>>,
+    id: i64,
+) -> Result<ItemFileStatus, String> {
+    use rayon::prelude::*;
+    use std::path::Path;
+
+    let repo = ClipboardRepository::new(&state.db);
+    let item = repo
+        .get_by_id(id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Item not found".to_string())?;
+
+    if item.content_type != "files" {
+        return Err("Item is not a file type".to_string());
+    }
+
+    let originals = parse_file_paths(item.file_paths.as_deref());
+    let resolved = resolve_item_paths(item.file_paths.as_deref(), item.file_payload.as_deref());
+    let all_exist = item_files_all_exist(item.file_paths.as_deref(), item.file_payload.as_deref());
+
+    let resolved_checks: HashMap<String, FileCheckResult> = resolved
+        .par_iter()
+        .map(|path| {
+            let p = Path::new(path);
+            let exists = p.exists();
+            (
+                path.clone(),
+                FileCheckResult {
+                    exists,
+                    is_dir: exists && p.is_dir(),
+                },
+            )
+        })
+        .collect();
+
+    let checks: HashMap<String, FileCheckResult> = originals
+        .into_iter()
+        .enumerate()
+        .map(|(i, orig)| {
+            let resolved_path = resolved.get(i).cloned().unwrap_or_else(|| orig.clone());
+            let info = resolved_checks.get(&resolved_path).cloned().unwrap_or(FileCheckResult {
+                exists: false,
+                is_dir: false,
+            });
+            (orig, info)
+        })
+        .collect();
+
+    Ok(ItemFileStatus {
+        all_exist,
+        resolved_paths: resolved,
+        checks,
+    })
 }
 
 // ============ 文件操作命令 ============
@@ -97,13 +191,11 @@ pub async fn paste_as_path(
         .ok_or_else(|| "Item not found".to_string())?;
 
     let paths_text = if item.content_type == "files" {
-        if let Some(ref paths_json) = item.file_paths {
-            let paths: Vec<String> = serde_json::from_str(paths_json)
-                .map_err(|e| format!("Failed to parse file paths: {e}"))?;
-            paths.join("\n")
-        } else {
+        let resolved = resolve_item_paths(item.file_paths.as_deref(), item.file_payload.as_deref());
+        if resolved.is_empty() {
             return Err("No file paths found".to_string());
         }
+        resolved.join("\n")
     } else {
         return Err("Item is not a file type".to_string());
     };
@@ -170,28 +262,42 @@ pub async fn get_data_size() -> Result<DataSizeInfo, String> {
         .sum::<u64>();
 
     let images_dir = data_dir.join("images");
-    let (images_size, images_count) = if images_dir.is_dir() {
-        let mut size = 0u64;
-        let mut count = 0u64;
-        if let Ok(entries) = std::fs::read_dir(&images_dir) {
-            for entry in entries.flatten() {
-                if entry.path().is_file() {
-                    size += entry.metadata().map_or(0, |m| m.len());
-                    count += 1;
-                }
-            }
-        }
-        (size, count)
-    } else {
-        (0, 0)
-    };
+    let (images_size, images_count) = dir_size_and_count(&images_dir);
+    let staged_dir = data_dir.join("staged");
+    let (staged_size, staged_count) = dir_size_and_count(&staged_dir);
 
     Ok(DataSizeInfo {
         db_size,
         images_size,
         images_count,
-        total_size: db_size + images_size,
+        staged_size,
+        staged_count,
+        total_size: db_size + images_size + staged_size,
     })
+}
+
+fn dir_size_and_count(dir: &std::path::Path) -> (u64, u64) {
+    if !dir.is_dir() {
+        return (0, 0);
+    }
+    let mut size = 0u64;
+    let mut count = 0u64;
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&current) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.is_file() {
+                size += entry.metadata().map_or(0, |m| m.len());
+                count += 1;
+            }
+        }
+    }
+    (size, count)
 }
 
 #[derive(serde::Serialize)]
@@ -199,6 +305,8 @@ pub struct DataSizeInfo {
     pub db_size: u64,
     pub images_size: u64,
     pub images_count: u64,
+    pub staged_size: u64,
+    pub staged_count: u64,
     pub total_size: u64,
 }
 

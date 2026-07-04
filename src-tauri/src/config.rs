@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tracing::{debug, error, info, warn};
 
 /// 日志文件大小上限：10 MB
@@ -184,11 +184,46 @@ pub fn migrate_data(old_path: &PathBuf, new_path: &PathBuf) -> Result<MigrationR
         result.images_migrated = new_images.exists();
     }
 
+    // 迁移 staging 目录（递归）
+    let old_staged = old_path.join("staged");
+    let new_staged = new_path.join("staged");
+    if old_staged.exists() && old_staged.is_dir() {
+        copy_dir_recursive(&old_staged, &new_staged, &mut result);
+    }
+
     info!(
         "Migration complete: {} files, {} bytes",
         result.files_copied, result.bytes_copied
     );
     Ok(result)
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path, result: &mut MigrationResult) {
+    if fs::create_dir_all(dst).is_err() {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(src) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let old_file = entry.path();
+        let new_file = dst.join(entry.file_name());
+        if old_file.is_dir() {
+            copy_dir_recursive(&old_file, &new_file, result);
+        } else if old_file.is_file() {
+            match fs::copy(&old_file, &new_file) {
+                Ok(bytes) => {
+                    result.files_copied += 1;
+                    result.bytes_copied += bytes;
+                }
+                Err(e) => {
+                    result
+                        .errors
+                        .push(format!("Failed to copy {:?}: {e}", entry.file_name()));
+                }
+            }
+        }
+    }
 }
 
 /// 数据迁移结果

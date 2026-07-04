@@ -54,14 +54,18 @@ pub async fn delete_group(state: State<'_, Arc<AppState>>, id: i64) -> Result<()
     let image_paths = clipboard_repo
         .get_image_paths_by_group(id)
         .map_err(|e| e.to_string())?;
+    let file_payloads = clipboard_repo
+        .get_file_payloads_by_group(id)
+        .map_err(|e| e.to_string())?;
 
     let repo = GroupRepository::new(&state.db);
     repo.delete(id).map_err(|e| e.to_string())?;
 
-    let deleted_files = crate::clipboard::cleanup_image_files(&image_paths);
+    crate::clipboard::cleanup_deleted_assets(&image_paths, &file_payloads);
     debug!(
-        "Deleted group {} with {} image files cleaned",
-        id, deleted_files
+        "Deleted group {} ({} image files)",
+        id,
+        image_paths.len()
     );
     Ok(())
 }

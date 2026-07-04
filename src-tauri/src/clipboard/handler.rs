@@ -1,3 +1,4 @@
+use super::file_clipboard::{self, FileCaptureData};
 use super::source_app::{self, SourceAppInfo};
 use super::{canonical_url_text, compute_semantic_hash, is_url, semantic_hash_from_text};
 use crate::database::{
@@ -106,7 +107,7 @@ pub enum ClipboardContent {
         text: Option<String>,
     },
     ImageFile(ImageCapture),
-    Files(Vec<String>),
+    Files(FileCaptureData),
 }
 pub(crate) fn cleanup_capture_content(content: &ClipboardContent) {
     if let ClipboardContent::ImageFile(capture) = content {
@@ -489,7 +490,8 @@ impl ClipboardHandler {
                 }
                 ClipboardContent::Files(files) => {
                     let files = std::mem::take(files);
-                    self.process_files(files, &hashes)?
+                    // staging 使用 file_clipboard 内置 50MB 上限，与文本长度限制无关
+                    self.process_files(files, &hashes, 0)?
                 }
             }
         };
@@ -517,8 +519,8 @@ impl ClipboardHandler {
                 .repository
                 .enforce_max_count(settings.max_history_count, group_id)
             {
-                Ok((deleted, image_paths)) => {
-                    super::cleanup_image_files(&image_paths);
+                Ok((deleted, image_paths, file_payloads)) => {
+                    super::cleanup_deleted_assets(&image_paths, &file_payloads);
                     if deleted > 0 {
                         debug!("Enforced max count: removed {} old items", deleted);
                     }
@@ -533,8 +535,8 @@ impl ClipboardHandler {
                 .repository
                 .delete_older_than(settings.auto_cleanup_days, group_id)
             {
-                Ok((deleted, image_paths)) => {
-                    super::cleanup_image_files(&image_paths);
+                Ok((deleted, image_paths, file_payloads)) => {
+                    super::cleanup_deleted_assets(&image_paths, &file_payloads);
                     if deleted > 0 {
                         info!(
                             "Auto-cleanup: removed {} items older than {} days",
@@ -555,7 +557,11 @@ impl ClipboardHandler {
             ClipboardContent::Html { html, .. } => html.len(),
             ClipboardContent::Rtf { rtf, .. } => rtf.len(),
             ClipboardContent::ImageFile(capture) => capture.byte_size,
-            ClipboardContent::Files(files) => files.iter().map(std::string::String::len).sum(),
+            ClipboardContent::Files(files) => files
+                .paths
+                .iter()
+                .map(std::string::String::len)
+                .sum(),
         }
     }
 
@@ -621,9 +627,13 @@ impl ClipboardHandler {
             }
             ClipboardContent::Files(files) => {
                 hasher.update(b"files:");
-                for file in files {
+                for file in &files.paths {
                     hasher.update(file.as_bytes());
                     hasher.update(b"|");
+                }
+                if let Some(ref raw) = files.hdrop_raw {
+                    hasher.update(b"hdrop:");
+                    hasher.update(raw);
                 }
             }
         }
@@ -780,34 +790,51 @@ impl ClipboardHandler {
 
     fn process_files(
         &self,
-        files: Vec<String>,
+        capture: FileCaptureData,
         hashes: &ContentHashes,
+        max_stage_bytes: usize,
     ) -> Result<NewClipboardItem, String> {
         use std::path::Path;
-        debug!("Processing {} file(s)", files.len());
+        debug!("Processing {} file(s)", capture.paths.len());
 
-        // 仅计算普通文件大小（目录开销大且意义有限）
-        let byte_size: i64 = files
+        let byte_size: i64 = capture
+            .paths
             .iter()
             .filter_map(|f| {
                 let path = Path::new(f);
                 if path.is_file() {
                     std::fs::metadata(path).ok().map(|m| m.len() as i64)
                 } else {
-                    None // 跳过目录
+                    None
                 }
             })
             .sum();
 
-        let preview = if files.len() == 1 {
-            files[0].clone()
+        let preview = if capture.paths.len() == 1 {
+            capture.paths[0].clone()
+        } else if capture.paths.is_empty() {
+            "[文件]".to_string()
         } else {
-            format!("{} files", files.len())
+            format!("{} files", capture.paths.len())
         };
+
+        let staged_dir = self
+            .images_path
+            .parent()
+            .unwrap_or(&self.images_path)
+            .join("staged")
+            .join(&hashes.content_hash[..8.min(hashes.content_hash.len())]);
+        let payload = file_clipboard::build_payload(
+            &capture,
+            &staged_dir,
+            max_stage_bytes as u64,
+        );
+        let file_payload = Some(file_clipboard::encode_payload(&payload));
 
         Ok(NewClipboardItem {
             content_type: ContentType::Files,
-            file_paths: Some(files),
+            file_paths: Some(capture.paths),
+            file_payload,
             content_hash: hashes.content_hash.clone(),
             semantic_hash: hashes.semantic_hash.clone(),
             preview: Some(preview),

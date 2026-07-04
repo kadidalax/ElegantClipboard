@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS clipboard_items (
     rtf_content TEXT,
     image_path TEXT,
     file_paths TEXT,
+    file_payload TEXT,
     content_hash TEXT NOT NULL,
     semantic_hash TEXT NOT NULL,
     preview TEXT,

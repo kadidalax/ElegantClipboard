@@ -342,9 +342,14 @@ pub async fn delete_clipboard_item(state: State<'_, Arc<AppState>>, id: i64) -> 
 
     if let Ok(Some(item)) = repo.get_by_id(id) {
         repo.delete(id).map_err(|e| e.to_string())?;
-        if let Some(ref image_path) = item.image_path {
-            crate::clipboard::cleanup_image_files(std::slice::from_ref(image_path));
-        }
+        let payloads: Vec<String> = item
+            .file_payload
+            .map(|p| vec![p])
+            .unwrap_or_default();
+        crate::clipboard::cleanup_deleted_assets(
+            &item.image_path.map(|p| vec![p]).unwrap_or_default(),
+            &payloads,
+        );
         debug!(
             "Deleted clipboard item: id={}, type={}",
             id, item.content_type
@@ -364,10 +369,8 @@ pub async fn batch_delete_clipboard_items(
     ids: Vec<i64>,
 ) -> Result<i64, String> {
     let repo = ClipboardRepository::new(&state.db);
-    let (deleted, image_paths) = repo.batch_delete(&ids).map_err(|e| e.to_string())?;
-    if !image_paths.is_empty() {
-        crate::clipboard::cleanup_image_files(&image_paths);
-    }
+    let (deleted, image_paths, file_payloads) = repo.batch_delete(&ids).map_err(|e| e.to_string())?;
+    crate::clipboard::cleanup_deleted_assets(&image_paths, &file_payloads);
     debug!("Batch deleted {} clipboard items", deleted);
     Ok(deleted)
 }
@@ -379,13 +382,15 @@ pub async fn clear_all_history(state: State<'_, Arc<AppState>>) -> Result<i64, S
 
     let repo = ClipboardRepository::new(&state.db);
     let image_paths = repo.get_all_image_paths().unwrap_or_default();
+    let file_payloads = repo.get_all_file_payloads().unwrap_or_default();
     let deleted = repo.clear_all().map_err(|e| e.to_string())?;
-    let deleted_files = crate::clipboard::cleanup_image_files(&image_paths);
+    crate::clipboard::cleanup_deleted_assets(&image_paths, &file_payloads);
     state.db.vacuum().ok();
 
     info!(
-        "Cleared all {} clipboard items and {} image files",
-        deleted, deleted_files
+        "Cleared all {} clipboard items ({} image files)",
+        deleted,
+        image_paths.len()
     );
     Ok(deleted)
 }
@@ -403,14 +408,20 @@ pub async fn clear_history(
     let image_paths = repo
         .get_clearable_image_paths(group_id, content_type.as_deref())
         .unwrap_or_default();
+    let file_payloads = repo
+        .get_clearable_file_payloads(group_id, content_type.as_deref())
+        .unwrap_or_default();
     let deleted = repo
         .clear_history(group_id, content_type.as_deref())
         .map_err(|e| e.to_string())?;
-    let deleted_files = crate::clipboard::cleanup_image_files(&image_paths);
+    crate::clipboard::cleanup_deleted_assets(&image_paths, &file_payloads);
 
     info!(
-        "Cleared {} clipboard items and {} image files (group: {:?}, content_type: {:?})",
-        deleted, deleted_files, group_id, content_type
+        "Cleared {} clipboard items ({} image files) (group: {:?}, content_type: {:?})",
+        deleted,
+        image_paths.len(),
+        group_id,
+        content_type
     );
     Ok(deleted)
 }
@@ -439,8 +450,20 @@ pub async fn update_text_content(
         debug!("Deleted empty item {}", id);
         Ok(true)
     } else {
-        repo.update_text_content(id, &new_text)
-            .map_err(|e| e.to_string())?;
+        if let Ok(Some(item)) = repo.get_by_id(id) {
+            let payloads: Vec<String> = item
+                .file_payload
+                .map(|p| vec![p])
+                .unwrap_or_default();
+            repo.update_text_content(id, &new_text)
+                .map_err(|e| e.to_string())?;
+            if !payloads.is_empty() {
+                crate::clipboard::cleanup_deleted_assets(&[], &payloads);
+            }
+        } else {
+            repo.update_text_content(id, &new_text)
+                .map_err(|e| e.to_string())?;
+        }
         debug!("Updated text content for item {}", id);
         Ok(false)
     }
@@ -535,29 +558,30 @@ pub async fn merge_paste_content(
     let repo = ClipboardRepository::new(&state.db);
     let sep = separator.as_deref().unwrap_or("\n");
 
-    let mut texts: Vec<String> = Vec::new();
+    let mut items: Vec<ClipboardItem> = Vec::with_capacity(ids.len());
     for id in &ids {
         let item = repo
             .get_by_id(*id)
             .map_err(|e| e.to_string())?
             .ok_or_else(|| format!("Item {id} not found"))?;
-
-        // 提取文本内容：text_content > preview > file_paths
-        if let Some(text) = item.text_content.filter(|t| !t.is_empty()) {
-            texts.push(text);
-        } else if let Some(preview) = item.preview.filter(|p| !p.is_empty()) {
-            texts.push(preview);
-        }
+        items.push(item);
     }
 
-    if texts.is_empty() {
-        return Err("选中的项目没有可合并的文本内容".to_string());
-    }
+    with_paused_monitor(&state, || {
+        let mut clipboard = clipboard_rs::ClipboardContext::new()
+            .map_err(|e| format!("Failed to access clipboard: {e}"))?;
+        crate::clipboard::merge_paste::merge_items_to_clipboard(&items, sep, &mut clipboard)?;
 
-    let merged = texts.join(sep);
-    paste_plain_text_to_active_window(&state, &app, &merged, true)?;
-    debug!("Merge pasted {} items ({} chars)", ids.len(), merged.len());
-    Ok(())
+        super::hide_preview_windows(&app);
+        hide_main_window_if_not_pinned(&app);
+
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        simulate_paste()?;
+        super::hide_preview_windows(&app);
+
+        debug!("Merge pasted {} items", items.len());
+        Ok(())
+    })
 }
 
 /// 粘贴快速槽位（1-9）对应条目到活动窗口。

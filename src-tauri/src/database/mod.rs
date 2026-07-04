@@ -361,6 +361,19 @@ impl Database {
         // 迁移 10: 新增 url 内容类型，并将存量单行链接从 text 归类为 url
         Self::migrate_url_content_type(conn)?;
 
+        // 迁移 11: 文件剪贴板 fidelity payload（CF_HDROP + 伴生格式 + staging）
+        let has_file_payload: bool = conn.query_row(
+            "SELECT COUNT(*) > 0 FROM pragma_table_info('clipboard_items') WHERE name = 'file_payload'",
+            [],
+            |row| row.get(0),
+        ).unwrap_or(false);
+
+        if !has_file_payload {
+            info!("Migrating database: adding file_payload column");
+            conn.execute_batch("ALTER TABLE clipboard_items ADD COLUMN file_payload TEXT;")?;
+            info!("Migration complete: file_payload column added");
+        }
+
         Ok(())
     }
 

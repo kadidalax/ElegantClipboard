@@ -23,15 +23,11 @@ pub fn write_item_to_clipboard(
                 Err("Item has no image path".to_string())
             }
         }
-        "files" => {
-            if let Some(ref paths_json) = item.file_paths {
-                let paths: Vec<String> = serde_json::from_str(paths_json)
-                    .map_err(|e| format!("Failed to parse file paths: {e}"))?;
-                set_clipboard_files(&paths, ctx)
-            } else {
-                Err("Item has no file paths".to_string())
-            }
-        }
+        "files" => super::file_clipboard::write_files_to_clipboard(
+            item.file_paths.as_deref(),
+            item.file_payload.as_deref(),
+            ctx,
+        ),
         other => Err(format!("Unsupported content type: {other}")),
     }
 }
@@ -144,7 +140,7 @@ fn rich_write_meta(item: &ClipboardItem) -> (bool, usize, usize, usize) {
     )
 }
 
-fn rich_contents_summary(contents: &[RsClipboardContent]) -> String {
+pub(crate) fn rich_contents_summary(contents: &[RsClipboardContent]) -> String {
     contents
         .iter()
         .map(|c| match c {
@@ -239,7 +235,7 @@ fn write_rich_item(item: &ClipboardItem, ctx: &mut ClipboardContext) -> Result<(
 }
 
 /// 提取条目可用的纯文本 fallback（HTML/RTF 写剪贴板时的 Unicode 伴生格式）
-fn item_alt_text(item: &ClipboardItem) -> Option<String> {
+pub(crate) fn item_alt_text(item: &ClipboardItem) -> Option<String> {
     item.text_content
         .clone()
         .filter(|t| !t.is_empty())
@@ -307,19 +303,6 @@ fn set_clipboard_image(path: &str, ctx: &mut ClipboardContext) -> Result<(), Str
         Err(e) => {
             warn!(path, w, h, error = %e, "set_clipboard_image: failed");
             Err(format!("Failed to set clipboard image: {e}"))
-        }
-    }
-}
-
-fn set_clipboard_files(paths: &[String], ctx: &mut ClipboardContext) -> Result<(), String> {
-    match ctx.set_files(paths.to_vec()) {
-        Ok(()) => {
-            debug!(count = paths.len(), "set_clipboard_files: ok");
-            Ok(())
-        }
-        Err(e) => {
-            warn!(count = paths.len(), error = %e, "set_clipboard_files: failed");
-            Err(format!("Failed to set clipboard files: {e}"))
         }
     }
 }
