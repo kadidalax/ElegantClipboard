@@ -208,7 +208,7 @@ impl Database {
             tx.execute_batch(
                 "CREATE TABLE clipboard_items_new (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    content_type TEXT NOT NULL CHECK(content_type IN ('text', 'image', 'html', 'rtf', 'files', 'url')),
+                    content_type TEXT NOT NULL,
                     text_content TEXT,
                     html_content TEXT,
                     rtf_content TEXT,
@@ -232,7 +232,7 @@ impl Database {
                     source_app_name TEXT,
                     source_app_icon TEXT,
                     group_id INTEGER REFERENCES groups(id) ON DELETE CASCADE
-                );"
+                );",
             )?;
 
             // 复制数据：若 item_groups 存在则从中取 MIN(group_id)，否则全部设为 NULL（默认分组）
@@ -401,70 +401,187 @@ impl Database {
         Ok(())
     }
 
-    fn migrate_url_content_type(conn: &Connection) -> Result<(), rusqlite::Error> {
-        let table_sql: Option<String> = conn
+    fn url_content_type_migration_done(conn: &Connection) -> Result<bool, rusqlite::Error> {
+        let settings_exist: bool = conn
             .query_row(
-                "SELECT sql FROM sqlite_master WHERE type='table' AND name='clipboard_items'",
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='settings'",
                 [],
                 |row| row.get(0),
             )
-            .ok();
-        let Some(table_sql) = table_sql else {
+            .unwrap_or(false);
+        if !settings_exist {
+            return Ok(false);
+        }
+        conn.query_row(
+            "SELECT COALESCE((SELECT value FROM settings WHERE key = '_migration_url_content_type' LIMIT 1), '') = 'done'",
+            [],
+            |row| row.get(0),
+        )
+    }
+
+    fn mark_url_content_type_migration_done(conn: &Connection) -> Result<(), rusqlite::Error> {
+        let settings_exist: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='settings'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if settings_exist {
+            conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES ('_migration_url_content_type', 'done')",
+                [],
+            )?;
+        }
+        Ok(())
+    }
+
+    fn migrate_url_content_type(conn: &Connection) -> Result<(), rusqlite::Error> {
+        let table_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='clipboard_items'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if !table_exists {
             return Ok(());
-        };
-        if table_sql.contains("'url'") {
+        }
+
+        // 旧库：迁移 10 曾通过重建表把 'url' 写进 CHECK 约束
+        let legacy_done: bool = conn
+            .query_row(
+                "SELECT COALESCE((SELECT sql FROM sqlite_master WHERE type='table' AND name='clipboard_items'), '') LIKE '%''url''%'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if legacy_done || Self::url_content_type_migration_done(conn)? {
+            Self::mark_url_content_type_migration_done(conn)?;
             return Ok(());
         }
 
         info!("Migrating database: adding url content_type");
-        // 迁移 8 可能留下 NULL semantic_hash；重建表要求 NOT NULL，先补齐
         conn.execute_batch(
             "UPDATE clipboard_items
              SET semantic_hash = content_hash
              WHERE semantic_hash IS NULL OR semantic_hash = '';",
         )?;
 
+        Self::strip_content_type_check_if_present(conn)?;
+        Self::backfill_url_content_types(conn)?;
+        Self::mark_url_content_type_migration_done(conn)?;
+        info!("Migration complete: url content_type added");
+        Ok(())
+    }
+
+    /// 旧表若仍带 content_type CHECK，回填 url 前先去约束（重建表）
+    fn strip_content_type_check_if_present(conn: &Connection) -> Result<(), rusqlite::Error> {
+        let has_check: bool = conn
+            .query_row(
+                "SELECT COALESCE((SELECT sql FROM sqlite_master WHERE type='table' AND name='clipboard_items'), '') LIKE '%CHECK(content_type%'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if !has_check {
+            return Ok(());
+        }
+
+        let has_file_payload: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('clipboard_items') WHERE name = 'file_payload'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+
+        info!("Migrating database: removing content_type CHECK constraint");
         let tx = conn.unchecked_transaction()?;
-        tx.execute_batch(
-            "CREATE TABLE clipboard_items_new (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                content_type TEXT NOT NULL CHECK(content_type IN ('text', 'image', 'html', 'rtf', 'files', 'url')),
-                text_content TEXT,
-                html_content TEXT,
-                rtf_content TEXT,
-                image_path TEXT,
-                file_paths TEXT,
-                content_hash TEXT NOT NULL,
-                semantic_hash TEXT NOT NULL,
-                preview TEXT,
-                byte_size INTEGER DEFAULT 0,
-                image_width INTEGER,
-                image_height INTEGER,
-                is_pinned INTEGER DEFAULT 0,
-                is_favorite INTEGER DEFAULT 0,
-                favorite_order INTEGER DEFAULT 0,
-                sort_order INTEGER DEFAULT 0,
-                created_at TEXT DEFAULT (datetime('now', 'localtime')),
-                updated_at TEXT DEFAULT (datetime('now', 'localtime')),
-                access_count INTEGER DEFAULT 0,
-                last_accessed_at TEXT,
-                char_count INTEGER,
-                source_app_name TEXT,
-                source_app_icon TEXT,
-                group_id INTEGER REFERENCES groups(id) ON DELETE CASCADE
-            );
-            INSERT INTO clipboard_items_new
-            SELECT id, content_type, text_content, html_content, rtf_content,
-                   image_path, file_paths, content_hash,
-                   COALESCE(NULLIF(semantic_hash, ''), content_hash),
-                   preview, byte_size, image_width, image_height,
-                   is_pinned, is_favorite, favorite_order, sort_order,
-                   created_at, updated_at, access_count, last_accessed_at,
-                   char_count, source_app_name, source_app_icon, group_id
-            FROM clipboard_items;
-            DROP TABLE clipboard_items;
-            ALTER TABLE clipboard_items_new RENAME TO clipboard_items;",
-        )?;
+        if has_file_payload {
+            tx.execute_batch(
+                "CREATE TABLE clipboard_items_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    content_type TEXT NOT NULL,
+                    text_content TEXT,
+                    html_content TEXT,
+                    rtf_content TEXT,
+                    image_path TEXT,
+                    file_paths TEXT,
+                    file_payload TEXT,
+                    content_hash TEXT NOT NULL,
+                    semantic_hash TEXT NOT NULL,
+                    preview TEXT,
+                    byte_size INTEGER DEFAULT 0,
+                    image_width INTEGER,
+                    image_height INTEGER,
+                    is_pinned INTEGER DEFAULT 0,
+                    is_favorite INTEGER DEFAULT 0,
+                    favorite_order INTEGER DEFAULT 0,
+                    sort_order INTEGER DEFAULT 0,
+                    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+                    updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+                    access_count INTEGER DEFAULT 0,
+                    last_accessed_at TEXT,
+                    char_count INTEGER,
+                    source_app_name TEXT,
+                    source_app_icon TEXT,
+                    group_id INTEGER REFERENCES groups(id) ON DELETE CASCADE
+                );
+                INSERT INTO clipboard_items_new
+                SELECT id, content_type, text_content, html_content, rtf_content,
+                       image_path, file_paths, file_payload, content_hash,
+                       COALESCE(NULLIF(semantic_hash, ''), content_hash),
+                       preview, byte_size, image_width, image_height,
+                       is_pinned, is_favorite, favorite_order, sort_order,
+                       created_at, updated_at, access_count, last_accessed_at,
+                       char_count, source_app_name, source_app_icon, group_id
+                FROM clipboard_items;
+                DROP TABLE clipboard_items;
+                ALTER TABLE clipboard_items_new RENAME TO clipboard_items;",
+            )?;
+        } else {
+            tx.execute_batch(
+                "CREATE TABLE clipboard_items_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    content_type TEXT NOT NULL,
+                    text_content TEXT,
+                    html_content TEXT,
+                    rtf_content TEXT,
+                    image_path TEXT,
+                    file_paths TEXT,
+                    content_hash TEXT NOT NULL,
+                    semantic_hash TEXT NOT NULL,
+                    preview TEXT,
+                    byte_size INTEGER DEFAULT 0,
+                    image_width INTEGER,
+                    image_height INTEGER,
+                    is_pinned INTEGER DEFAULT 0,
+                    is_favorite INTEGER DEFAULT 0,
+                    favorite_order INTEGER DEFAULT 0,
+                    sort_order INTEGER DEFAULT 0,
+                    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+                    updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+                    access_count INTEGER DEFAULT 0,
+                    last_accessed_at TEXT,
+                    char_count INTEGER,
+                    source_app_name TEXT,
+                    source_app_icon TEXT,
+                    group_id INTEGER REFERENCES groups(id) ON DELETE CASCADE
+                );
+                INSERT INTO clipboard_items_new
+                SELECT id, content_type, text_content, html_content, rtf_content,
+                       image_path, file_paths, content_hash,
+                       COALESCE(NULLIF(semantic_hash, ''), content_hash),
+                       preview, byte_size, image_width, image_height,
+                       is_pinned, is_favorite, favorite_order, sort_order,
+                       created_at, updated_at, access_count, last_accessed_at,
+                       char_count, source_app_name, source_app_icon, group_id
+                FROM clipboard_items;
+                DROP TABLE clipboard_items;
+                ALTER TABLE clipboard_items_new RENAME TO clipboard_items;",
+            )?;
+        }
         tx.execute_batch(
             "CREATE INDEX IF NOT EXISTS idx_clipboard_created_at ON clipboard_items(created_at DESC);
              CREATE INDEX IF NOT EXISTS idx_clipboard_pinned ON clipboard_items(is_pinned) WHERE is_pinned = 1;
@@ -486,9 +603,6 @@ impl Database {
              END;",
         )?;
         tx.commit()?;
-
-        Self::backfill_url_content_types(conn)?;
-        info!("Migration complete: url content_type added");
         Ok(())
     }
 
@@ -877,15 +991,6 @@ mod tests {
         let conn = db.read_connection();
         let conn = conn.lock();
 
-        let table_sql: String = conn
-            .query_row(
-                "SELECT sql FROM sqlite_master WHERE type='table' AND name='clipboard_items'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert!(table_sql.contains("'url'"));
-
         let url_count: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM clipboard_items WHERE content_type = 'url'",
@@ -903,5 +1008,79 @@ mod tests {
             )
             .unwrap();
         assert_eq!(null_semantic, 0);
+    }
+
+    #[test]
+    fn migration_6_accepts_legacy_url_content_type_without_group_id() {
+        let dir = std::env::temp_dir().join(format!("ec_mig6_{}", uuid_simple()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("legacy.db");
+
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE clipboard_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    content_type TEXT NOT NULL,
+                    text_content TEXT,
+                    html_content TEXT,
+                    rtf_content TEXT,
+                    image_path TEXT,
+                    file_paths TEXT,
+                    content_hash TEXT NOT NULL,
+                    preview TEXT,
+                    byte_size INTEGER DEFAULT 0,
+                    image_width INTEGER,
+                    image_height INTEGER,
+                    is_pinned INTEGER DEFAULT 0,
+                    is_favorite INTEGER DEFAULT 0,
+                    sort_order INTEGER DEFAULT 0,
+                    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+                    updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+                    access_count INTEGER DEFAULT 0,
+                    last_accessed_at TEXT,
+                    char_count INTEGER,
+                    source_app_name TEXT,
+                    source_app_icon TEXT
+                );
+                INSERT INTO clipboard_items (
+                    content_type, text_content, content_hash, preview
+                ) VALUES
+                    ('url', 'https://example.com', 'hash_url', 'https://example.com'),
+                    ('video', 'legacy', 'hash_video', 'legacy');",
+            )
+            .unwrap();
+        }
+
+        let db = Database::new(path).unwrap();
+        let conn = db.read_connection();
+        let conn = conn.lock();
+
+        let has_group_id: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('clipboard_items') WHERE name = 'group_id'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(has_group_id);
+
+        let url_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM clipboard_items WHERE content_type = 'url'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(url_count, 1);
+
+        let video_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM clipboard_items WHERE content_type = 'video'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(video_count, 1);
     }
 }

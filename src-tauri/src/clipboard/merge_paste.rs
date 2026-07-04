@@ -45,10 +45,7 @@ pub fn merge_items_to_clipboard(
         contents.push(RsClipboardContent::Files(merged_paths));
     }
 
-    let text_parts: Vec<String> = items
-        .iter()
-        .filter_map(extract_merge_text)
-        .collect();
+    let text_parts: Vec<String> = items.iter().filter_map(extract_merge_text).collect();
     if !text_parts.is_empty() {
         contents.push(RsClipboardContent::Text(text_parts.join(separator)));
     }

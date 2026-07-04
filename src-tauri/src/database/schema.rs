@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS groups (
 -- group_id = <id>  => belongs to that custom group
 CREATE TABLE IF NOT EXISTS clipboard_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    content_type TEXT NOT NULL CHECK(content_type IN ('text', 'image', 'html', 'rtf', 'files', 'url')),
+    content_type TEXT NOT NULL,
     text_content TEXT,
     html_content TEXT,
     rtf_content TEXT,
