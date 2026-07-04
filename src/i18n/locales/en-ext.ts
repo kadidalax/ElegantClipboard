@@ -290,10 +290,11 @@ export const extended = {
       copyTitle: "Copy sound",
       copyDesc: "Play sound when new clipboard content is captured",
       pasteTitle: "Paste sound",
-      pasteDesc: "Play sound when pasting from a card",
+      pasteDesc: "Play sound when pasting (card, merge, hotkey, paste-as-path, etc.)",
       timing: "When to play",
       timingImmediate: "Immediately",
       timingAfterSuccess: "After success",
+      preview: "Preview",
     },
     shortcuts: {
       navTitle: "Keyboard navigation",

@@ -9,7 +9,7 @@ use tauri::State;
 use tracing::{debug, info};
 
 use super::{
-    AppState, clipboard::simulate_paste, hide_main_window_if_not_pinned, with_paused_monitor,
+    AppState, hide_main_window_if_not_pinned, with_paused_monitor,
 };
 
 // ============ 文件校验命令 ============
@@ -69,26 +69,16 @@ pub async fn check_files_exist(
 }
 
 /// 解析条目文件路径（含 staged 回退）并检查有效性
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone)]
 pub struct ItemFileStatus {
     pub all_exist: bool,
     pub resolved_paths: Vec<String>,
     pub checks: HashMap<String, FileCheckResult>,
 }
 
-#[tauri::command]
-pub async fn get_item_file_status(
-    state: State<'_, Arc<AppState>>,
-    id: i64,
-) -> Result<ItemFileStatus, String> {
+fn build_item_file_status(item: &crate::database::ClipboardItem) -> Result<ItemFileStatus, String> {
     use rayon::prelude::*;
     use std::path::Path;
-
-    let repo = ClipboardRepository::new(&state.db);
-    let item = repo
-        .get_by_id(id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "Item not found".to_string())?;
 
     if item.content_type != "files" {
         return Err("Item is not a file type".to_string());
@@ -131,6 +121,36 @@ pub async fn get_item_file_status(
         resolved_paths: resolved,
         checks,
     })
+}
+
+#[tauri::command]
+pub async fn get_item_file_status(
+    state: State<'_, Arc<AppState>>,
+    id: i64,
+) -> Result<ItemFileStatus, String> {
+    let repo = ClipboardRepository::new(&state.db);
+    let item = repo
+        .get_by_id(id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Item not found".to_string())?;
+    build_item_file_status(&item)
+}
+
+#[tauri::command]
+pub async fn batch_get_item_file_status(
+    state: State<'_, Arc<AppState>>,
+    ids: Vec<i64>,
+) -> Result<HashMap<i64, ItemFileStatus>, String> {
+    let repo = ClipboardRepository::new(&state.db);
+    let mut out = HashMap::new();
+    for id in ids {
+        if let Ok(Some(item)) = repo.get_by_id(id) {
+            if let Ok(status) = build_item_file_status(&item) {
+                out.insert(id, status);
+            }
+        }
+    }
+    Ok(out)
 }
 
 // ============ 文件操作命令 ============
@@ -200,7 +220,7 @@ pub async fn paste_as_path(
         return Err("Item is not a file type".to_string());
     };
 
-    with_paused_monitor(&state, || {
+    let result = with_paused_monitor(&state, || {
         let clipboard = clipboard_rs::ClipboardContext::new()
             .map_err(|e| format!("Failed to access clipboard: {e}"))?;
         clipboard
@@ -210,11 +230,12 @@ pub async fn paste_as_path(
         hide_main_window_if_not_pinned(&app);
 
         std::thread::sleep(std::time::Duration::from_millis(50));
-        simulate_paste()?;
+        super::run_simulate_paste_with_sound(&app)?;
 
         debug!("Pasted file path as text for item {}", id);
         Ok(())
-    })
+    });
+    result
 }
 
 /// 通过系统另存为对话框保存文件

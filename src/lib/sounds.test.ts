@@ -21,7 +21,7 @@ vi.mock("@/stores/ui-settings", () => ({
   },
 }));
 
-const { playCopySound, playPasteSound } = await import("./sounds");
+const { playCopySound, playPasteSound, previewCopySound, previewPasteSound } = await import("./sounds");
 
 beforeEach(() => {
   mockGetState.mockReturnValue({
@@ -74,6 +74,16 @@ describe("sounds", () => {
         pasteSoundTiming: "immediate",
       });
       expect(() => playPasteSound("immediate")).not.toThrow();
+    });
+  });
+
+  describe("preview", () => {
+    it("previewCopySound plays without enabled setting", () => {
+      expect(() => previewCopySound()).not.toThrow();
+    });
+
+    it("previewPasteSound plays without enabled setting", () => {
+      expect(() => previewPasteSound()).not.toThrow();
     });
   });
 });

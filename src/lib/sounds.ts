@@ -1,11 +1,12 @@
 // 轻量级音效反馈（Web Audio 合成音，无需外部音频文件）
 
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { logError } from "@/lib/logger";
-import { useUISettings } from "@/stores/ui-settings";
+import { useUISettings, type SoundTiming } from "@/stores/ui-settings";
 
-// 立即创建并预热 AudioContext（WebView2 无 autoplay 限制）
 let _ctx: AudioContext | null = null;
 let _audioFailureLogged = false;
+let _pasteSoundUnlisten: Promise<UnlistenFn> | null = null;
 
 function logAudioFailureOnce(message: string, error: unknown): void {
   if (_audioFailureLogged) return;
@@ -16,54 +17,109 @@ function logAudioFailureOnce(message: string, error: unknown): void {
 function getCtx(): AudioContext {
   if (!_ctx) {
     _ctx = new AudioContext();
-    // 预热：播放静音音调，激活音频管线
-    if (_ctx.state === "suspended") {
-      _ctx.resume().catch((error) => {
-        logAudioFailureOnce("Failed to resume AudioContext:", error);
-      });
-    }
-    const osc = _ctx.createOscillator();
-    const gain = _ctx.createGain();
-    gain.gain.value = 0;
-    osc.connect(gain);
-    gain.connect(_ctx.destination);
-    osc.start();
-    osc.stop(_ctx.currentTime + 0.01);
+  }
+  if (_ctx.state === "suspended") {
+    void _ctx.resume().catch((error) => {
+      logAudioFailureOnce("Failed to resume AudioContext:", error);
+    });
   }
   return _ctx;
 }
 
-// 模块加载时立即初始化
-if (typeof window !== "undefined") getCtx();
+function warmUpCtx(ac: AudioContext) {
+  const osc = ac.createOscillator();
+  const gain = ac.createGain();
+  gain.gain.value = 0;
+  osc.connect(gain);
+  gain.connect(ac.destination);
+  osc.start();
+  osc.stop(ac.currentTime + 0.005);
+}
 
-function playTone(freq: number, duration: number, volume = 0.15) {
+if (typeof window !== "undefined") {
+  warmUpCtx(getCtx());
+}
+
+function playToneAt(
+  ac: AudioContext,
+  freq: number,
+  duration: number,
+  volume: number,
+  when: number,
+) {
+  const osc = ac.createOscillator();
+  const gain = ac.createGain();
+  osc.type = "sine";
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(volume, when);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + duration);
+  osc.connect(gain);
+  gain.connect(ac.destination);
+  osc.start(when);
+  osc.stop(when + duration);
+}
+
+function playCopyTones() {
   try {
     const ac = getCtx();
-    const osc = ac.createOscillator();
-    const gain = ac.createGain();
-    osc.type = "sine";
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(volume, ac.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + duration);
-    osc.connect(gain);
-    gain.connect(ac.destination);
-    osc.start();
-    osc.stop(ac.currentTime + duration);
+    const t0 = ac.currentTime;
+    playToneAt(ac, 880, 0.06, 0.15, t0);
+    playToneAt(ac, 1100, 0.06, 0.15, t0 + 0.04);
   } catch (error) {
-    // 运行环境不支持音频时仅记录一次，避免高频音效路径刷屏。
-    logAudioFailureOnce("Audio unavailable, skip sound effect:", error);
+    logAudioFailureOnce("Audio unavailable, skip copy sound:", error);
   }
 }
 
-export function playCopySound(timing: "immediate" | "after_success") {
-  const s = useUISettings.getState();
-  if (!s.copySound || s.copySoundTiming !== timing) return;
-  playTone(880, 0.08);
-  setTimeout(() => playTone(1100, 0.08), 60);
+function playPasteTones() {
+  try {
+    const ac = getCtx();
+    playToneAt(ac, 660, 0.08, 0.15, ac.currentTime);
+  } catch (error) {
+    logAudioFailureOnce("Audio unavailable, skip paste sound:", error);
+  }
 }
 
-export function playPasteSound(timing: "immediate" | "after_success") {
+/** 设置页试听：不受开关限制 */
+export function previewCopySound() {
+  playCopyTones();
+}
+
+/** 设置页试听：不受开关限制 */
+export function previewPasteSound() {
+  playPasteTones();
+}
+
+export function playCopySound(timing: SoundTiming) {
+  const s = useUISettings.getState();
+  if (!s.copySound || s.copySoundTiming !== timing) return;
+  playCopyTones();
+}
+
+export function playPasteSound(timing: SoundTiming) {
   const s = useUISettings.getState();
   if (!s.pasteSound || s.pasteSoundTiming !== timing) return;
-  playTone(660, 0.1);
+  playPasteTones();
+}
+
+/** 监听后端粘贴事件（覆盖快捷键粘贴、合并粘贴、粘贴为路径等） */
+export function setupPasteSoundListeners(): Promise<UnlistenFn> {
+  if (_pasteSoundUnlisten) {
+    return _pasteSoundUnlisten;
+  }
+
+  _pasteSoundUnlisten = (async () => {
+    const unlistenImmediate = await listen("paste-sound-immediate", () => {
+      playPasteSound("immediate");
+    });
+    const unlistenSuccess = await listen("paste-sound-success", () => {
+      playPasteSound("after_success");
+    });
+    return () => {
+      void unlistenImmediate();
+      void unlistenSuccess();
+      _pasteSoundUnlisten = null;
+    };
+  })();
+
+  return _pasteSoundUnlisten;
 }

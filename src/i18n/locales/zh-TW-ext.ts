@@ -290,10 +290,11 @@ export const extended = {
       copyTitle: "複製音效",
       copyDesc: "監聽到新內容複製時播放提示音",
       pasteTitle: "貼上音效",
-      pasteDesc: "點擊卡片貼上時播放提示音",
+      pasteDesc: "貼上內容時播放提示音（卡片貼上、合併貼上、快捷鍵貼上、貼上路徑等）",
       timing: "播放時機",
       timingImmediate: "立即播放",
       timingAfterSuccess: "成功後播放",
+      preview: "試聽",
     },
     shortcuts: {
       navTitle: "快捷導航",

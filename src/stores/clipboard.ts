@@ -4,7 +4,7 @@ import debounce from "lodash.debounce";
 import { create } from "zustand";
 import { cancelPendingFocusRestore } from "@/hooks/useInputFocus";
 import { logError } from "@/lib/logger";
-import { playCopySound, playPasteSound } from "@/lib/sounds";
+import { playCopySound, setupPasteSoundListeners } from "@/lib/sounds";
 import { mergeCaptureItem, matchesListFilter } from "@/stores/clipboard-merge";
 import { useUISettings } from "@/stores/ui-settings";
 
@@ -97,10 +97,8 @@ async function doPaste(
 ) {
   try {
     cancelPendingFocusRestore();
-    playPasteSound("immediate");
     const { pasteCloseWindow, pasteMoveToTop } = useUISettings.getState();
     await invoke(command, { id, closeWindow: pasteCloseWindow });
-    playPasteSound("after_success");
     if (pasteMoveToTop) {
       invoke("bump_item_to_top", { id }).then(() => get().refresh()).catch((e) => logError("Failed to bump item to top:", e));
     }
@@ -298,17 +296,26 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
   },
 
   setupListener: async () => {
+    const unlistenPasteSound = await setupPasteSoundListeners();
+
     // 防抖合并快速连续的剪贴板变化事件，避免 IPC 风暴
     const debouncedCaptureUpdate = debounce(async (id: number) => {
       await get().applyCaptureUpdate(id);
       playCopySound("after_success");
-    }, 150, { leading: true, trailing: true });
+    }, 50, { leading: false, trailing: true });
 
     const unlisten = await listen<number>("clipboard-updated", (event) => {
+      const id = event.payload;
+      if (typeof id !== "number" || !Number.isFinite(id)) {
+        return;
+      }
       playCopySound("immediate");
-      void debouncedCaptureUpdate(event.payload);
+      void debouncedCaptureUpdate(id);
     });
-    return unlisten;
+    return () => {
+      unlistenPasteSound();
+      unlisten();
+    };
   },
 
   // 批量选择

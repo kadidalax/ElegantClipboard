@@ -13,6 +13,7 @@ use crate::clipboard::ClipboardMonitor;
 use crate::database::Database;
 use parking_lot::Mutex;
 use std::sync::Arc;
+use tauri::Emitter;
 
 /// 缓存窗口定位相关设置，避免每次 show 时读 DB
 pub struct PositionCache {
@@ -32,6 +33,26 @@ pub struct AppState {
     pub active_group_id: Arc<Mutex<Option<i64>>>,
     /// 窗口定位设置缓存
     pub position_cache: Arc<Mutex<PositionCache>>,
+}
+
+/// 粘贴音效：操作开始时通知前端
+pub(crate) fn emit_paste_sound_immediate(app: &tauri::AppHandle) {
+    let _ = app.emit("paste-sound-immediate", ());
+}
+
+/// 粘贴音效：操作成功结束时通知前端
+pub(crate) fn emit_paste_sound_success(app: &tauri::AppHandle) {
+    let _ = app.emit("paste-sound-success", ());
+}
+
+/// 模拟 Ctrl+V 并按设置触发粘贴音效（仅成功时播放）
+pub(crate) fn run_simulate_paste_with_sound(app: &tauri::AppHandle) -> Result<(), String> {
+    let result = clipboard::simulate_paste();
+    if result.is_ok() {
+        emit_paste_sound_immediate(app);
+        emit_paste_sound_success(app);
+    }
+    result
 }
 
 /// 多屏/高 DPI 下隐藏窗口后系统可能不自动还原前台窗口，导致 Ctrl+V 无接收者。

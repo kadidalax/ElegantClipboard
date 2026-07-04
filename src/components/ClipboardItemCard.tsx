@@ -104,14 +104,24 @@ function flushItemFileStatusBatch() {
   const batch = pendingItemChecks;
   pendingItemChecks = [];
 
-  for (const check of batch) {
-    invoke<ItemFileStatus>("get_item_file_status", { id: check.id })
-      .then((result) => check.resolve(result))
-      .catch((error) => {
-        logError("get_item_file_status failed:", error);
+  const ids = [...new Set(batch.map((c) => c.id))];
+  invoke<Record<string, ItemFileStatus>>("batch_get_item_file_status", { ids })
+    .then((results) => {
+      for (const check of batch) {
+        const status = results[String(check.id)] ?? results[check.id as unknown as keyof typeof results];
+        if (status) {
+          check.resolve(status);
+        } else {
+          check.reject(new Error(`No file status for item ${check.id}`));
+        }
+      }
+    })
+    .catch((error) => {
+      logError("batch_get_item_file_status failed:", error);
+      for (const check of batch) {
         check.reject(error);
-      });
-  }
+      }
+    });
 }
 
 function batchGetItemFileStatus(id: number): Promise<ItemFileStatus> {

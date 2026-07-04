@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { emit } from "@tauri-apps/api/event";
 import { loadUISettingsFromBackend } from "@/stores/ui-settings";
+import { useClipboardStore } from "@/stores/clipboard";
 
 export type SyncStatusType = "success" | "error" | "info";
 
@@ -49,7 +49,7 @@ export function useWebDAVActions() {
       setStatusMsg(msg);
       setStatusType("success");
       await loadUISettingsFromBackend();
-      emit("clipboard-updated").catch(() => {});
+      await useClipboardStore.getState().refresh();
     } catch (error) {
       setStatusMsg(String(error));
       setStatusType("error");

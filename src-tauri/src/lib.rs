@@ -361,7 +361,8 @@ fn apply_paste_shortcuts(
                                 }
                             } else {
                                 std::thread::sleep(std::time::Duration::from_millis(50));
-                                if let Err(err) = commands::clipboard::simulate_paste() {
+                                if let Err(err) = commands::run_simulate_paste_with_sound(&app_handle)
+                                {
                                     tracing::warn!(
                                         "{} {} repeat paste failed: {}",
                                         kind.label(),
@@ -1148,6 +1149,7 @@ pub fn run() {
             commands::settings::get_system_fonts,
             commands::file_ops::check_files_exist,
             commands::file_ops::get_item_file_status,
+            commands::file_ops::batch_get_item_file_status,
             commands::file_ops::show_in_explorer,
             commands::file_ops::paste_as_path,
             commands::file_ops::get_file_details,
