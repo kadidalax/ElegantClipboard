@@ -1,5 +1,17 @@
 # ElegantClipboard 更新日志
 
+## v1.2.3
+**发布日期：** 2026年7月5日
+
+- feat: 列表布局新增瀑布流模式，支持虚拟滚动与高度缓存 https://github.com/Y-ASLant/ElegantClipboard/issues/126
+- feat: 文本/图片预览窗口实时同步主窗口主题、圆角与字体设置
+- feat: 设置窗口独立构建入口，缩短打开设置页时的加载时间
+- perf: 优化应用启动——路由懒加载、并行初始化、延后非关键配置加载
+- fix: 修复文本预览面板背景与主窗口卡片颜色不一致
+- refactor: 重构 Design Token 体系（`surface-tokens.css`），统一圆角、阴影、语义色与 `.transition-surface` / `.elevation-*` 工具类
+- style: 全应用组件样式迁移至 Token；优化卡片悬停过渡
+- chore: 调整悬停预览延迟与粘贴后置顶默认值；更新依赖并完善 `cargo audit` 忽略配置
+
 ## v1.2.0
 **发布日期：** 2026年7月4日
 

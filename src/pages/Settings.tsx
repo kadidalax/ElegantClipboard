@@ -328,9 +328,11 @@ export function Settings() {
 
   // settings-main 已在 render 前 initTheme；首帧即 show，避免 hidden 窗口内长时间无样式
   useLayoutEffect(() => {
-    const win = getCurrentWindow();
-    void win.show();
-    void win.setFocus();
+    if ("__TAURI_INTERNALS__" in window) {
+      const win = getCurrentWindow();
+      void win.show();
+      void win.setFocus();
+    }
     void loadSettings();
   }, [loadSettings]);
 

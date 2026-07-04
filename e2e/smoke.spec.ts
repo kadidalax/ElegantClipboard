@@ -51,14 +51,14 @@ test.describe("Settings page smoke tests", () => {
       if (isNonTauriError(err.message)) errors.push(err.message);
     });
 
-    await page.goto("/settings");
+    await page.goto("/settings.html");
     await page.waitForTimeout(2000);
 
     expect(errors).toEqual([]);
   });
 
   test("settings navigation is visible", async ({ page }) => {
-    await page.goto("/settings");
+    await page.goto("/settings.html");
     await page.waitForTimeout(1000);
 
     // Check for navigation items
