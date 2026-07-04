@@ -72,14 +72,18 @@
     --shadow-elevation-flat: none;
 
     /* ========== Motion ========== */
+    /*
+     * Duration — monotonic scale (avoid medium/moderate, slow/slower overlap):
+     *   instant → fast → normal → moderate → relaxed → extended → long
+     * Tailwind duration-150/200/300 map via @theme inline in index.css
+     */
     --motion-instant: 0.08s;
     --motion-fast: 0.12s;
     --motion-normal: 0.15s;
     --motion-moderate: 0.2s;
-    --motion-slow: 0.28s;
-    --motion-slower: 0.3s;
+    --motion-relaxed: 0.3s;
+    --motion-extended: 0.5s;
     --motion-long: 0.6s;
-    --motion-medium: 0.5s;
     --motion-ease: ease;
     --motion-ease-out: ease-out;
     --motion-ease-emphasis: cubic-bezier(0.16, 1, 0.3, 1);

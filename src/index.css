@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import url("/surface-tokens.css");
+/* surface-tokens.css — 见 index.html 直链，避免 @import 二次串行请求 */
 
 /* Custom Font */
 @font-face {
@@ -43,7 +43,7 @@
     --text-body-sm: var(--text-body-sm);
     --duration-150: var(--motion-normal);
     --duration-200: var(--motion-moderate);
-    --duration-300: var(--motion-slower);
+    --duration-300: var(--motion-relaxed);
     --ease-out: var(--motion-ease-out);
     --ease-in-out: var(--motion-ease);
 }
@@ -62,7 +62,9 @@
  *   .elevation-control   — inputs, buttons, toolbars
  *   .elevation-floating  — popovers, dialogs, toasts, dropdowns
  *   .elevation-overlay   — drag overlay, lifted elements
- *   duration-150/200/300 — wired to --motion-* tokens via @theme inline
+ *   duration-150 → --motion-normal (0.15s)
+ *   duration-200 → --motion-moderate (0.2s)
+ *   duration-300 → --motion-relaxed (0.3s)
  */
 
 /* Semantic elevation utilities */
@@ -271,8 +273,8 @@ html {
     -moz-osx-font-smoothing: grayscale;
     color-scheme: light dark;
     transition:
-        background-color var(--motion-slower) var(--motion-ease),
-        color var(--motion-slower) var(--motion-ease);
+        background-color var(--motion-relaxed) var(--motion-ease),
+        color var(--motion-relaxed) var(--motion-ease);
 }
 
 /* Disable text selection except for inputs */
@@ -328,7 +330,7 @@ textarea,
 
 /* Scrollbar always visible during scroll, auto-hide after delay */
 .os-theme-custom > .os-scrollbar {
-    transition: opacity var(--motion-slower) var(--motion-ease);
+    transition: opacity var(--motion-relaxed) var(--motion-ease);
 }
 
 /* Ensure scrollbar is overlay (floating above content) */
@@ -432,9 +434,9 @@ textarea,
     backface-visibility: hidden;
     -webkit-backface-visibility: hidden;
     transition:
-        transform var(--motion-slow) var(--motion-ease-nav),
-        width var(--motion-slow) var(--motion-ease-nav),
-        height var(--motion-slow) var(--motion-ease-nav),
+        transform var(--motion-relaxed) var(--motion-ease-nav),
+        width var(--motion-relaxed) var(--motion-ease-nav),
+        height var(--motion-relaxed) var(--motion-ease-nav),
         opacity var(--motion-normal) var(--motion-ease-out);
 }
 
@@ -492,7 +494,7 @@ textarea,
 }
 
 .animate-paste-flash .paste-flash-overlay {
-    animation: paste-flash var(--motion-slower) var(--motion-ease-out) forwards;
+    animation: paste-flash var(--motion-relaxed) var(--motion-ease-out) forwards;
 }
 
 /* Dragging cursor - 使用系统 move 光标，避免与自定义 Windows 指针主题不一致 */
@@ -570,7 +572,7 @@ body.dragging-cursor * {
 }
 
 .copy-success-icon {
-    animation: copy-icon-pop var(--motion-medium) var(--motion-ease-spring) forwards;
+    animation: copy-icon-pop var(--motion-extended) var(--motion-ease-spring) forwards;
 }
 
 @keyframes copy-flash {

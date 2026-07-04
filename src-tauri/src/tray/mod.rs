@@ -239,7 +239,7 @@ fn open_settings_window_inner(app: &AppHandle) -> Result<(), String> {
     let mut builder = tauri::WebviewWindowBuilder::new(
         app,
         "settings",
-        tauri::WebviewUrl::App("/settings".into()),
+        tauri::WebviewUrl::App("/settings.html".into()),
     )
     .title("设置")
     .inner_size(800.0, 560.0)

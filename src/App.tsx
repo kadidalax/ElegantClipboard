@@ -39,7 +39,6 @@ import { useWebDAVAvailable } from "@/hooks/useWebDAVAvailable";
 import { useTranslation } from "@/i18n";
 import { GROUP_VALUES, getGroups } from "@/lib/constants";
 import { logError } from "@/lib/logger";
-import { initTheme } from "@/lib/theme-applier";
 import { cn } from "@/lib/utils";
 import { filterToolbarButtonsForWebDAV } from "@/lib/webdav-availability";
 import { useClipboardStore } from "@/stores/clipboard";
@@ -124,10 +123,6 @@ function App() {
   // 分组对话框输入框 ref（Tauri WebView 中 autoFocus 不稳定）
   const createInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    void initTheme();
-  }, []);
 
   // 初次加载时获取自定义分组
   useEffect(() => {

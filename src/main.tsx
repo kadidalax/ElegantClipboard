@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { Toaster } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { initLocale } from "@/i18n";
+import { initTheme } from "@/lib/theme-applier";
 import { initPluginAvailability } from "@/stores/plugin-availability";
 import { useTranslateSettings } from "@/stores/translate-settings";
 import { initUISettingsStore } from "@/stores/ui-settings";
@@ -10,9 +11,6 @@ import App from "./App";
 import "overlayscrollbars/overlayscrollbars.css";
 import "./index.css";
 
-const Settings = lazy(() =>
-  import("./pages/Settings").then((m) => ({ default: m.Settings })),
-);
 const TextEditor = lazy(() =>
   import("./pages/TextEditor").then((m) => ({ default: m.TextEditor })),
 );
@@ -52,13 +50,6 @@ function RouteFallback() {
 function Router() {
   const path = window.location.pathname;
 
-  if (path === "/settings" || path === "/settings.html") {
-    return (
-      <Suspense fallback={<RouteFallback />}>
-        <Settings />
-      </Suspense>
-    );
-  }
   if (path === "/editor" || path === "/editor.html") {
     return (
       <Suspense fallback={<RouteFallback />}>
@@ -89,12 +80,13 @@ function deferSecondaryInit() {
   })();
 }
 
-async function bootstrap() {
-  try {
-    await Promise.all([initLocale(), initUISettingsStore()]);
-  } catch (error) {
+function bootstrap() {
+  // 同步应用 dark/圆角等，不等待 IPC；避免高 CPU 时整页卡在「无样式」
+  void initTheme();
+
+  void Promise.all([initLocale(), initUISettingsStore()]).catch((error) => {
     console.error("Bootstrap init failed:", error);
-  }
+  });
 
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>
@@ -108,4 +100,4 @@ async function bootstrap() {
   deferSecondaryInit();
 }
 
-void bootstrap();
+bootstrap();

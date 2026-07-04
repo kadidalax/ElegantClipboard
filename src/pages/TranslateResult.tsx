@@ -33,13 +33,8 @@ export function TranslateResult() {
   }, [translateLoaded]);
 
   useEffect(() => {
-    initTheme().catch((error) => {
-      logError("initTheme failed:", error);
-    }).finally(() => {
-      setThemeReady(true);
-    });
-    // 注意：窗口 show 由 Rust 端在创建时立即执行，前端不重复调用
-    // translate_window_ready 由 Rust 端 translate_window_shown() 处理
+    void initTheme();
+    setThemeReady(true);
   }, []);
 
   const doTranslate = useCallback(async (sourceText: string) => {

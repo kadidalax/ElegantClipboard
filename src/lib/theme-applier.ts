@@ -25,11 +25,18 @@ const THEME_CLASSES = ["theme-emerald", "theme-cyan", "theme-system"];
 
 let _initialized = false;
 let _accentColor: string | null = null;
+let _readyResolved = false;
 let _readyResolve: (() => void) | null = null;
 let _lastPreviewPresentation: ReturnType<typeof getPreviewPresentation> | null = null;
 const _readyPromise = new Promise<void>((resolve) => {
   _readyResolve = resolve;
 });
+
+function resolveThemeReady() {
+  if (_readyResolved) return;
+  _readyResolved = true;
+  _readyResolve?.();
+}
 
 // 强调色变更订阅者（主题预览用）
 const _accentSubscribers = new Set<(color: string | null) => void>();
@@ -254,8 +261,13 @@ export function initTheme(): Promise<void> {
   void whenUISettingsReady().then(() => {
     applyWindowEffect();
     applyFontSettings();
+    apply();
   });
-  // 始终获取强调色以供主题预览使用
+
+  // 先用 store 默认值上色，系统强调色异步补齐，不阻塞首屏
+  apply();
+  resolveThemeReady();
+
   invoke<string | null>("get_system_accent_color")
     .then((color) => {
       _accentColor = color;
@@ -264,9 +276,7 @@ export function initTheme(): Promise<void> {
     })
     .catch((error) => {
       logError("Failed to fetch initial system accent color:", error);
-      apply();
-    })
-    .finally(() => _readyResolve?.());
+    });
 
   return _readyPromise;
 }

@@ -24,14 +24,13 @@ export function TextEditor() {
 
   // 加载主题后显示窗口
   useEffect(() => {
-    initTheme().then(async () => {
+    void initTheme().then(() => {
       const win = getCurrentWindow();
-      document.body.getBoundingClientRect();
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-      win.show();
-      win.setFocus();
-      await new Promise((r) => requestAnimationFrame(r));
-      setThemeReady(true);
+      requestAnimationFrame(() => {
+        void win.show();
+        void win.setFocus();
+        setThemeReady(true);
+      });
     });
   }, []);
 

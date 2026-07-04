@@ -35,7 +35,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { WindowTitleBar } from "@/components/WindowTitleBar";
 import { useTranslation } from "@/i18n";
 import { logError } from "@/lib/logger";
-import { initTheme } from "@/lib/theme-applier";
 import { notifyTranslateAvailabilityChanged } from "@/lib/translate-availability";
 import { cn } from "@/lib/utils";
 import { notifyWebDAVAvailabilityChanged } from "@/lib/webdav-availability";
@@ -217,7 +216,6 @@ export function Settings() {
     log_file_path: "",
   });
   const settingsLoadedRef = useRef(false);
-  const [themeReady, setThemeReady] = useState(false);
   const [appVersion, setAppVersion] = useState("0.0.0");
   const [buildTime, setBuildTime] = useState("—");
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
@@ -225,24 +223,6 @@ export function Settings() {
   useEffect(() => {
     invoke<string>("get_app_version").then(setAppVersion).catch(console.error);
     invoke<string>("get_build_time").then(setBuildTime).catch(console.error);
-  }, []);
-
-  // 主题加载完成后显示窗口（此时过渡被禁用，主题色瞬间就位）
-  // 启用过渡后再加载设置，开关会有完整的状态切换动画
-  useEffect(() => {
-    initTheme().then(async () => {
-      const win = getCurrentWindow();
-      document.body.getBoundingClientRect();
-      await new Promise((r) =>
-        requestAnimationFrame(() => requestAnimationFrame(r)),
-      );
-      await new Promise((r) => setTimeout(r, 30));
-      win.show();
-      win.setFocus();
-      await new Promise((r) => requestAnimationFrame(r));
-      setThemeReady(true);
-      loadSettings();
-    });
   }, []);
 
   // 加载插件启用状态
@@ -285,7 +265,7 @@ export function Settings() {
     settings.admin_launch,
   ]);
 
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     try {
       const [
         dataPath,
@@ -335,18 +315,24 @@ export function Settings() {
         log_to_file: logToFile,
         log_file_path: logFilePath || "",
       });
-      // 延迟设置 loaded 标志，确保 setSettings 触发的 effect 先执行（此时 loaded 仍为 false，被跳过）
       requestAnimationFrame(() => {
         settingsLoadedRef.current = true;
       });
     } catch (error) {
       logError("Failed to load settings:", error);
-      // 加载失败也要标记 loaded，否则后续用户修改设置不会触发 auto-save
       requestAnimationFrame(() => {
         settingsLoadedRef.current = true;
       });
     }
-  };
+  }, []);
+
+  // settings-main 已在 render 前 initTheme；首帧即 show，避免 hidden 窗口内长时间无样式
+  useLayoutEffect(() => {
+    const win = getCurrentWindow();
+    void win.show();
+    void win.setFocus();
+    void loadSettings();
+  }, [loadSettings]);
 
   const saveSettings = async () => {
     try {
@@ -386,12 +372,7 @@ export function Settings() {
   };
 
   return (
-    <div
-      className={cn(
-        "h-screen flex flex-col bg-page-shell overflow-hidden p-3 gap-3",
-        !themeReady && "**:transition-none!",
-      )}
-    >
+    <div className="h-screen flex flex-col bg-page-shell overflow-hidden p-3 gap-3">
       <WindowTitleBar
         icon={<Settings16Regular className="w-5 h-5 text-muted-foreground" />}
         title={t("settings.title")}

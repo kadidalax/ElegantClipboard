@@ -21,6 +21,10 @@ export default defineConfig(async () => ({
     // WebView2 is Chromium-based — target esnext to skip all transpilation
     target: 'esnext',
     rolldownOptions: {
+      input: {
+        main: path.resolve(__dirname, "index.html"),
+        settings: path.resolve(__dirname, "settings.html"),
+      },
       output: {
         codeSplitting: {
           groups: [
