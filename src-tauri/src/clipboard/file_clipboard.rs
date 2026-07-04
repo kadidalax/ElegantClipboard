@@ -136,10 +136,11 @@ fn capture_extra_formats(ctx: &ClipboardContext) -> Vec<(String, Vec<u8>)> {
         if *name == "FileContents" {
             continue;
         }
-        if let Ok(bytes) = ctx.get_buffer(name) {
-            if !bytes.is_empty() && bytes.len() <= MAX_EXTRA_FORMAT_BYTES {
-                out.push(((*name).to_string(), bytes));
-            }
+        if let Ok(bytes) = ctx.get_buffer(name)
+            && !bytes.is_empty()
+            && bytes.len() <= MAX_EXTRA_FORMAT_BYTES
+        {
+            out.push(((*name).to_string(), bytes));
         }
     }
     out
@@ -262,18 +263,18 @@ pub fn write_files_to_clipboard(
     ctx.clear()
         .map_err(|e| format!("Failed to clear clipboard: {e}"))?;
 
-    if should_use_raw_hdrop(&paths, payload.as_ref()) {
-        if let Some(raw) = decode_b64(payload.as_ref().and_then(|p| p.hdrop_b64.as_ref())) {
-            if ctx.set_hdrop_raw(&raw).is_ok() {
-                write_extra_formats(ctx, payload.as_ref())?;
-                debug!(
-                    "Restored file clipboard from raw CF_HDROP ({} paths)",
-                    resolved.len()
-                );
-                return Ok(());
-            }
-            warn!("Raw CF_HDROP restore failed, falling back to path list");
+    if should_use_raw_hdrop(&paths, payload.as_ref())
+        && let Some(raw) = decode_b64(payload.as_ref().and_then(|p| p.hdrop_b64.as_ref()))
+    {
+        if ctx.set_hdrop_raw(&raw).is_ok() {
+            write_extra_formats(ctx, payload.as_ref())?;
+            debug!(
+                "Restored file clipboard from raw CF_HDROP ({} paths)",
+                resolved.len()
+            );
+            return Ok(());
         }
+        warn!("Raw CF_HDROP restore failed, falling back to path list");
     }
 
     if !resolved.is_empty() {

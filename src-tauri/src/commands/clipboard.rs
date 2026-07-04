@@ -562,7 +562,7 @@ pub async fn merge_paste_content(
         items.push(item);
     }
 
-    let result = with_paused_monitor(&state, || {
+    with_paused_monitor(&state, || {
         let mut clipboard = clipboard_rs::ClipboardContext::new()
             .map_err(|e| format!("Failed to access clipboard: {e}"))?;
         crate::clipboard::merge_paste::merge_items_to_clipboard(&items, sep, &mut clipboard)?;
@@ -576,8 +576,7 @@ pub async fn merge_paste_content(
 
         debug!("Merge pasted {} items", items.len());
         Ok(())
-    });
-    result
+    })
 }
 
 /// 粘贴快速槽位（1-9）对应条目到活动窗口。
@@ -632,7 +631,7 @@ fn paste_item_to_active_window(
     close_window: bool,
 ) -> Result<(), String> {
     info!("paste_item: id={}, close_window={}", item.id, close_window);
-    let result = with_paused_monitor(state, || {
+    with_paused_monitor(state, || {
         let mut clipboard = clipboard_rs::ClipboardContext::new()
             .map_err(|e| format!("Failed to access clipboard: {e}"))?;
         set_clipboard_content(item, &mut clipboard)?;
@@ -653,8 +652,7 @@ fn paste_item_to_active_window(
 
         debug!("paste_item: simulate_paste ok");
         Ok(())
-    });
-    result
+    })
 }
 
 /// 纯文本粘贴：写剪贴板 → 隐藏窗口 → 模拟 Ctrl+V
@@ -669,7 +667,7 @@ fn paste_plain_text_to_active_window(
         text.len(),
         close_window
     );
-    let result = with_paused_monitor(state, || {
+    with_paused_monitor(state, || {
         let clipboard = clipboard_rs::ClipboardContext::new()
             .map_err(|e| format!("Failed to access clipboard: {e}"))?;
         clipboard
@@ -692,8 +690,7 @@ fn paste_plain_text_to_active_window(
 
         debug!("paste_plain_text: simulate_paste ok");
         Ok(())
-    });
-    result
+    })
 }
 
 #[cfg(test)]

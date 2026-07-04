@@ -32,12 +32,12 @@ pub fn merge_items_to_clipboard(
 
     // 图片条目：将缓存图片路径并入文件列表（便于粘贴到接受文件的 target）
     for item in items {
-        if item.content_type == "image" {
-            if let Some(ref path) = item.image_path {
-                if Path::new(path).exists() && !merged_paths.iter().any(|p| p == path) {
-                    merged_paths.push(path.clone());
-                }
-            }
+        if item.content_type == "image"
+            && let Some(ref path) = item.image_path
+            && Path::new(path).exists()
+            && !merged_paths.iter().any(|p| p == path)
+        {
+            merged_paths.push(path.clone());
         }
     }
 
@@ -47,7 +47,7 @@ pub fn merge_items_to_clipboard(
 
     let text_parts: Vec<String> = items
         .iter()
-        .filter_map(|item| extract_merge_text(item))
+        .filter_map(extract_merge_text)
         .collect();
     if !text_parts.is_empty() {
         contents.push(RsClipboardContent::Text(text_parts.join(separator)));
@@ -95,11 +95,11 @@ pub fn merge_items_to_clipboard(
         .map_err(|e| format!("Failed to set merged clipboard: {e}"))?;
 
     // 合并文件时写入首个文件条目的伴生格式（不含 raw HDROP，路径已合并重建）
-    if !file_inputs.is_empty() {
-        if let Some((_, payload_raw)) = file_inputs.first() {
-            let payload = decode_payload(*payload_raw);
-            write_payload_extras(ctx, payload.as_ref())?;
-        }
+    if !file_inputs.is_empty()
+        && let Some((_, payload_raw)) = file_inputs.first()
+    {
+        let payload = decode_payload(*payload_raw);
+        write_payload_extras(ctx, payload.as_ref())?;
     }
 
     debug!("Merged paste: {} item(s), formats={formats}", items.len(),);

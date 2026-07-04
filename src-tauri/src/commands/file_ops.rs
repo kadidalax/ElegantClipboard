@@ -148,10 +148,10 @@ pub async fn batch_get_item_file_status(
     let repo = ClipboardRepository::new(&state.db);
     let mut out = HashMap::new();
     for id in ids {
-        if let Ok(Some(item)) = repo.get_by_id(id) {
-            if let Ok(status) = build_item_file_status(&item) {
-                out.insert(id, status);
-            }
+        if let Ok(Some(item)) = repo.get_by_id(id)
+            && let Ok(status) = build_item_file_status(&item)
+        {
+            out.insert(id, status);
         }
     }
     Ok(out)
@@ -224,7 +224,7 @@ pub async fn paste_as_path(
         return Err("Item is not a file type".to_string());
     };
 
-    let result = with_paused_monitor(&state, || {
+    with_paused_monitor(&state, || {
         let clipboard = clipboard_rs::ClipboardContext::new()
             .map_err(|e| format!("Failed to access clipboard: {e}"))?;
         clipboard
@@ -238,8 +238,7 @@ pub async fn paste_as_path(
 
         debug!("Pasted file path as text for item {}", id);
         Ok(())
-    });
-    result
+    })
 }
 
 /// 通过系统另存为对话框保存文件

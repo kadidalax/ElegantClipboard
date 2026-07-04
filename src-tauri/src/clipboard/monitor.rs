@@ -352,10 +352,10 @@ fn read_clipboard_content_with_retry(
         match read_clipboard_content(max_image_bytes, capture_dir) {
             Some(content) => return Some(content),
             None if attempt + 1 < RETRY_DELAYS_MS.len() => {
-                if let Ok(ctx) = ClipboardContext::new() {
-                    if file_clipboard::clipboard_has_pending_files(&ctx) {
-                        debug!("Clipboard file data pending, will retry");
-                    }
+                if let Ok(ctx) = ClipboardContext::new()
+                    && file_clipboard::clipboard_has_pending_files(&ctx)
+                {
+                    debug!("Clipboard file data pending, will retry");
                 }
                 debug!("Clipboard read returned nothing, will retry");
                 continue;
@@ -464,10 +464,10 @@ fn read_clipboard_content_inner(
     }
 
     // ── 5. 纯图片（无文本格式） ──
-    if let Some((img, dib_bytes)) = image_result {
-        if let Some(content) = write_image_capture(img, dib_bytes, max_image_bytes, capture_dir) {
-            return Some(content);
-        }
+    if let Some((img, dib_bytes)) = image_result
+        && let Some(content) = write_image_capture(img, dib_bytes, max_image_bytes, capture_dir)
+    {
+        return Some(content);
     }
 
     debug!("No recognizable content in clipboard");
