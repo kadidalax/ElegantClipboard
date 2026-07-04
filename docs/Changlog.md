@@ -10,8 +10,6 @@
 - feat: 粘贴音效改由后端统一触发，覆盖卡片粘贴、合并粘贴、快捷键粘贴、粘贴为路径等场景；设置页支持音效试听
 - feat: 新增 `batch_get_item_file_status` 批量检查文件有效性，减少 IPC 调用
 - feat: 插件可用性检查——WebDAV / 翻译插件启用状态统一管理，UI 动态响应
-- feat: 剪贴板内存去重与 30ms 防抖，减少快速连续复制时的重复入库
-- feat: URL 类型条目支持文本编辑
 - fix: **修复升级后无法启动（#125）**——移除 `content_type` 数据库 CHECK 约束，迁移时不再因历史脏数据导致整表重建失败
 - fix: RTF 剪贴板备份/恢复改用原始 buffer 读写，避免格式丢失
 - fix: URL 类型检测——未启用 URL 监听时不误匹配 text 类型
@@ -20,19 +18,7 @@
 - refactor: 设置页卡片统一为 `SettingsCard` 组件；优化 Tab 切换动画与间距
 - refactor: 重定义圆角 CSS 变量，新增 `interactive-surface` 交互样式类
 - style: 同步图标改为云箭头；工具栏按钮圆角统一为 `rounded-md`
-- chore: 更新 Rust 依赖至最新版本
-
----
-
-## v1.1.6
-**发布日期：** 2026年7月2日
-
-- fix: 数据库迁移 6 的 `content_type` CHECK 约束补充 `url` 类型（部分缓解 #125 升级后无法启动）
-- feat: 剪贴板内存去重——`last_content_hash` 防止快速连续事件绕过数据库去重
-- feat: 监控线程 30ms 防抖，合并快速连续剪贴板事件
-- feat: URL 类型条目纳入文本类内容，支持双击/右键编辑
-
----
+- chore: 更新 Rust 依赖至最新版本；添加 cargo 审计配置
 
 ## v1.1.5
 **发布日期：** 2026年7月1日
