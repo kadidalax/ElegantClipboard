@@ -98,6 +98,10 @@ export const extended = {
         densityCompact: "緊湊",
         densityStandard: "標準",
         densitySpacious: "寬鬆",
+        layout: "列表版面",
+        layoutDesc: "單欄列表或雙欄瀑布流，瀑布流更適合圖片與混合內容瀏覽",
+        layoutList: "列表",
+        layoutMasonry: "瀑布流",
       },
       hoverPreview: {
         title: "懸浮預覽",

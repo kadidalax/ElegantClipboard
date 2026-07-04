@@ -6,6 +6,7 @@ import { logError } from "@/lib/logger";
 export type ColorTheme = "default" | "emerald" | "cyan" | "system";
 export type DarkMode = "light" | "dark" | "auto";
 export type CardDensity = "compact" | "standard" | "spacious";
+export type ListLayout = "list" | "masonry";
 export type TimeFormat = "relative" | "absolute";
 export type WindowEffect = "none" | "mica" | "acrylic" | "tabbed";
 export type SoundTiming = "immediate" | "after_success";
@@ -41,6 +42,7 @@ interface UISettingsData {
   searchAutoClear: boolean;
   darkMode: DarkMode;
   cardDensity: CardDensity;
+  listLayout: ListLayout;
   timeFormat: TimeFormat;
   hoverPreviewDelay: number;
   copySound: boolean;
@@ -86,6 +88,7 @@ const DEFAULT_UI_SETTINGS: UISettingsData = {
   searchAutoClear: true,
   darkMode: "auto",
   cardDensity: "standard",
+  listLayout: "list",
   timeFormat: "absolute",
   hoverPreviewDelay: 150,
   copySound: false,
@@ -131,6 +134,7 @@ interface UISettings extends UISettingsData {
   setSearchAutoClear: (enabled: boolean) => void;
   setDarkMode: (mode: DarkMode) => void;
   setCardDensity: (density: CardDensity) => void;
+  setListLayout: (layout: ListLayout) => void;
   setTimeFormat: (format: TimeFormat) => void;
   setHoverPreviewDelay: (delay: number) => void;
   setCopySound: (enabled: boolean) => void;
@@ -276,6 +280,7 @@ export const useUISettings = create<UISettings>()((set, get) => {
     setSearchAutoClear: makeSetter("searchAutoClear"),
     setDarkMode: makeSetter("darkMode"),
     setCardDensity: makeSetter("cardDensity"),
+    setListLayout: makeSetter("listLayout"),
     setTimeFormat: makeSetter("timeFormat"),
     setHoverPreviewDelay: makeSetter("hoverPreviewDelay"),
     setCopySound: makeSetter("copySound"),

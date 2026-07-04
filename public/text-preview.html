@@ -3,6 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <style>
+    @font-face {
+      font-family: "CustomFont";
+      src: url("/fonts.woff2") format("woff2");
+      font-weight: 100 900;
+      font-style: normal;
+      font-display: swap;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
       width: 100vw;
@@ -61,7 +68,7 @@
       height: 100%;
       padding: 12px 13px;
       color: var(--content-color);
-      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-family: "CustomFont", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
       font-size: 13px;
       line-height: 1.56;
       white-space: pre-wrap;
@@ -114,9 +121,9 @@
         setSharpCorners(Boolean(sharpCorners));
         document.body.dataset.align = align === 'right' ? 'right' : 'left';
         if (fontFamily) {
-          content.style.fontFamily = '"' + fontFamily + '", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif';
+          content.style.fontFamily = fontFamily;
         } else {
-          content.style.fontFamily = '';
+          content.style.removeProperty("font-family");
         }
         if (fontSize && typeof fontSize === 'number') {
           content.style.fontSize = fontSize + 'px';

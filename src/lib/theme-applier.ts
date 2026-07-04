@@ -12,6 +12,11 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 import { emitTo, listen } from "@tauri-apps/api/event";
+import {
+  DEFAULT_FONT_STACK,
+  resolveCardFontFamilyCss,
+  resolveUiFontFamilyCss,
+} from "@/lib/fonts";
 import { logError } from "@/lib/logger";
 import { isUISettingsInitialized, useUISettings, whenUISettingsReady } from "@/stores/ui-settings";
 
@@ -68,15 +73,15 @@ function applyWindowEffect() {
   }
 }
 
-const DEFAULT_FONT_STACK = '"CustomFont", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
-const DEFAULT_CONTENT_FONT_STACK = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
-
 function applyFontSettings() {
-  const { customFont, uiFontSize, cardFont, cardFontSize } = useUISettings.getState();
+  const { customFont, uiFontSize, cardFont, cardFontSize, previewFont, previewFontSize } =
+    useUISettings.getState();
   const root = document.documentElement;
-  const uiFontFamily = customFont
-    ? `"${customFont}", ${DEFAULT_FONT_STACK}`
-    : DEFAULT_FONT_STACK;
+  const uiFontFamily = resolveUiFontFamilyCss(customFont);
+  const cardFontFamily = resolveCardFontFamilyCss(cardFont, customFont);
+  const previewFontFamily = previewFont
+    ? `"${previewFont}", ${DEFAULT_FONT_STACK}`
+    : cardFontFamily;
 
   // --- UI 字体 ---
   root.style.setProperty("--ui-font-family", uiFontFamily);
@@ -94,17 +99,20 @@ function applyFontSettings() {
     root.style.fontSize = `${rootPx}px`;
   }
 
-  // --- 卡片字体（始终设置变量，确保 inline style 引用有效） ---
-  root.style.setProperty(
-    "--card-font-family",
-    cardFont ? `"${cardFont}", ${DEFAULT_CONTENT_FONT_STACK}` : DEFAULT_CONTENT_FONT_STACK,
-  );
+  // --- 卡片 / 预览字体（CSS 变量供 .clipboard-content 与悬浮预览 IPC 使用） ---
+  root.style.setProperty("--card-font-family", cardFontFamily);
+  root.style.setProperty("--preview-font-family", previewFontFamily);
 
-  // --- 卡片字号（固定 px，不受根字号缩放） ---
   if (cardFontSize !== 14) {
     root.style.setProperty("--card-font-size", `${cardFontSize}px`);
   } else {
     root.style.removeProperty("--card-font-size");
+  }
+
+  if (previewFontSize !== 13) {
+    root.style.setProperty("--preview-font-size", `${previewFontSize}px`);
+  } else {
+    root.style.removeProperty("--preview-font-size");
   }
 }
 
@@ -183,7 +191,9 @@ export function initTheme(): Promise<void> {
       state.customFont !== prev.customFont ||
       state.uiFontSize !== prev.uiFontSize ||
       state.cardFont !== prev.cardFont ||
-      state.cardFontSize !== prev.cardFontSize
+      state.cardFontSize !== prev.cardFontSize ||
+      state.previewFont !== prev.previewFont ||
+      state.previewFontSize !== prev.previewFontSize
     ) {
       applyFontSettings();
     }

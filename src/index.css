@@ -412,7 +412,21 @@ textarea,
     -webkit-app-region: no-drag;
 }
 
-/* Clipboard content font: controlled via inline style + CSS variables --card-font-family / --card-font-size */
+/* Clipboard content font: --card-font-family / --card-font-size from theme-applier */
+.clipboard-content {
+    font-family: var(
+        --card-font-family,
+        "CustomFont",
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        Roboto,
+        "Helvetica Neue",
+        Arial,
+        sans-serif
+    );
+    font-size: var(--card-font-size, 14px);
+}
 
 /* 界面字体（设置 → 外观 → 界面字体），与 theme-applier 同步 */
 .ui-font {

@@ -54,6 +54,7 @@ import {
 import { useSortable, CSS } from "@/hooks/useSortableList";
 import { useTranslateAvailable } from "@/hooks/useTranslateAvailable";
 import { useTranslation } from "@/i18n";
+import { resolvePreviewFontFamilyCss } from "@/lib/fonts";
 import {
   contentTypeConfig,
   formatTime,
@@ -459,7 +460,11 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
         theme,
         sharpCorners,
         windowEffect: uiState.windowEffect,
-        fontFamily: uiState.previewFont || null,
+        fontFamily: resolvePreviewFontFamilyCss(
+          uiState.previewFont,
+          uiState.cardFont,
+          uiState.customFont,
+        ),
         fontSize: uiState.previewFontSize,
         token: lease,
       });
@@ -792,11 +797,9 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
               onMouseLeave={handleTextMouseLeave}
               onWheel={handleTextWheel}
             >
-              <pre
+              <div
                 className="clipboard-content leading-relaxed text-foreground/90 whitespace-pre-wrap break-all m-0"
                 style={{
-                  fontFamily: "var(--card-font-family)",
-                  fontSize: "var(--card-font-size, 14px)",
                   display: "-webkit-box",
                   WebkitLineClamp: cardMaxLines,
                   WebkitBoxOrient: "vertical",
@@ -804,7 +807,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
                 }}
               >
                 <HighlightText text={item.preview || item.text_content || `[${config.label}]`} />
-              </pre>
+              </div>
               <CardFooter
                 metaItems={metaItems}
                 index={index}

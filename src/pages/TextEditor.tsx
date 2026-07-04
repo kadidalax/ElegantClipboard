@@ -122,7 +122,7 @@ export function TextEditor() {
             ref={textareaRef}
             value={text}
             onChange={(e) => setText(e.target.value)}
-            className="flex-1 w-full resize-none border-0 bg-transparent p-4 text-sm leading-relaxed font-mono focus:outline-none placeholder:text-muted-foreground"
+            className="clipboard-content flex-1 w-full resize-none border-0 bg-transparent p-4 leading-relaxed focus:outline-none placeholder:text-muted-foreground"
             placeholder={t("textEditor.noContent")}
             spellCheck={false}
             autoFocus

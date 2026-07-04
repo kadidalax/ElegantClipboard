@@ -98,6 +98,10 @@ export const extended = {
         densityCompact: "Compact",
         densityStandard: "Standard",
         densitySpacious: "Spacious",
+        layout: "List layout",
+        layoutDesc: "Single column or two-column masonry; masonry suits images and mixed content",
+        layoutList: "List",
+        layoutMasonry: "Masonry",
       },
       hoverPreview: {
         title: "Hover preview",

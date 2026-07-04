@@ -26,6 +26,7 @@ beforeEach(() => {
     searchAutoClear: true,
     darkMode: "auto",
     cardDensity: "standard",
+    listLayout: "list",
     timeFormat: "absolute",
     hoverPreviewDelay: 150,
     copySound: false,
@@ -79,6 +80,11 @@ describe("ui-settings store", () => {
     it("setCardDensity updates enum", () => {
       useUISettings.getState().setCardDensity("compact");
       expect(useUISettings.getState().cardDensity).toBe("compact");
+    });
+
+    it("setListLayout updates enum", () => {
+      useUISettings.getState().setListLayout("masonry");
+      expect(useUISettings.getState().listLayout).toBe("masonry");
     });
 
     it("setHoverPreviewDelay updates number", () => {

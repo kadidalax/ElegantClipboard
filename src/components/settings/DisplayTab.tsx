@@ -145,6 +145,13 @@ export function DisplayTab() {
     ],
     [t],
   );
+  const layoutOptions = useMemo(
+    () => [
+      { value: "list" as const, label: t("settings.display.preview.layoutList") },
+      { value: "masonry" as const, label: t("settings.display.preview.layoutMasonry") },
+    ],
+    [t],
+  );
   const timeFormatOptions = useMemo(
     () => [
       { value: "absolute" as const, label: t("settings.display.info.timeAbsolute") },
@@ -169,6 +176,7 @@ export function DisplayTab() {
     showSourceApp, setShowSourceApp,
     sourceAppDisplay, setSourceAppDisplay,
     cardDensity, setCardDensity,
+    listLayout, setListLayout,
     timeFormat, setTimeFormat,
     toolbarButtons, setToolbarButtons,
     showCategoryFilter, setShowCategoryFilter,
@@ -307,6 +315,28 @@ export function DisplayTab() {
                   onClick={() => setCardDensity(opt.value)}
                   className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
                     cardDensity === opt.value
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background text-foreground border-input hover:bg-accent"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label className="text-xs">{t("settings.display.preview.layout")}</Label>
+              <p className="text-xs text-muted-foreground">{t("settings.display.preview.layoutDesc")}</p>
+            </div>
+            <div className="flex gap-1">
+              {layoutOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setListLayout(opt.value)}
+                  className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
+                    listLayout === opt.value
                       ? "bg-primary text-primary-foreground border-primary"
                       : "bg-background text-foreground border-input hover:bg-accent"
                   }`}

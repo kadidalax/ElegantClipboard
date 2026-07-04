@@ -18,6 +18,10 @@ import { logError } from "@/lib/logger";
 import { useClipboardStore, ClipboardItem } from "@/stores/clipboard";
 import { useUISettings } from "@/stores/ui-settings";
 import { ClipboardItemCard } from "./ClipboardItemCard";
+import {
+  MasonryVirtualView,
+  type MasonryVirtualViewHandle,
+} from "./MasonryVirtualView";
 import type { OverlayScrollbars } from "overlayscrollbars";
 
 interface SortableClipboardItem extends ClipboardItem {
@@ -73,6 +77,7 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
   const listenerRef = useRef<(() => void) | null>(null);
   const scrollerRef = useRef<HTMLElement | null>(null);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const masonryRef = useRef<MasonryVirtualViewHandle>(null);
   const osInstanceRef = useRef<OverlayScrollbars | null>(null);
   const focusSearchInFlightRef = useRef<Promise<void> | null>(null);
   const [customScrollParent, setCustomScrollParent] =
@@ -115,6 +120,10 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
   );
   const cardMaxLines = useUISettings((s) => s.cardMaxLines);
   const cardDensity = useUISettings((s) => s.cardDensity);
+  const listLayout = useUISettings((s) => s.listLayout);
+  const imageMaxHeight = useUISettings((s) => s.imageMaxHeight);
+  const imageAutoHeight = useUISettings((s) => s.imageAutoHeight);
+  const isMasonry = listLayout === "masonry";
 
   useEffect(() => {
     // 组件挂载时加载数据
@@ -214,7 +223,19 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
   } = useSortableList({
     items: renderedItems,
     onDragEnd: handleDragEnd,
+    layout: listLayout,
   });
+
+  const scrollToClipboardIndex = useCallback(
+    (index: number, behavior: "auto" | "smooth" = "auto") => {
+      if (isMasonry) {
+        masonryRef.current?.scrollToIndex(index, behavior);
+        return;
+      }
+      virtuosoRef.current?.scrollToIndex({ index, align: "center", behavior });
+    },
+    [isMasonry],
+  );
 
   // 拖拽时接管滚轮事件 - QuickClipboard 优化
   useEffect(() => {
@@ -258,6 +279,27 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
 
   // 回到顶部（使用 Virtuoso scrollToIndex API）
   const scrollToTop = useCallback((smooth = false) => {
+    if (isMasonry) {
+      const el = customScrollParent;
+      if (!el) return;
+      if (!smooth) {
+        el.scrollTop = 0;
+        return;
+      }
+      const start = el.scrollTop;
+      if (start <= 0) return;
+      const duration = Math.min(300, start / 10);
+      const startTime = performance.now();
+      const easeOut = (t: number) => 1 - (1 - t) * (1 - t);
+      const tick = (now: number) => {
+        const elapsed = now - startTime;
+        const progress = Math.min(1, elapsed / duration);
+        el.scrollTop = start * (1 - easeOut(progress));
+        if (progress < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+      return;
+    }
     if (!smooth) {
       virtuosoRef.current?.scrollToIndex({ index: 0, align: "start", behavior: "auto" });
       return;
@@ -277,7 +319,7 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
       if (progress < 1) requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
-  }, [customScrollParent]);
+  }, [customScrollParent, isMasonry]);
 
   // 窗口重新打开时重置滚动位置
   useEffect(() => {
@@ -362,7 +404,7 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
           else if (cur === -1) next = 0;
           if (next !== cur) {
             setActiveIndex(next);
-            virtuosoRef.current?.scrollToIndex({ index: next, align: "center", behavior: "auto" });
+            scrollToClipboardIndex(next);
           }
           break;
         }
@@ -373,7 +415,7 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
           if (cur < downItems.length - 1) {
             const next = cur + 1;
             setActiveIndex(next);
-            virtuosoRef.current?.scrollToIndex({ index: next, align: "center", behavior: "auto" });
+            scrollToClipboardIndex(next);
           }
           break;
         }
@@ -399,7 +441,7 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
         }
       }
     },
-    [setActiveIndex, pasteContent, pasteAsPlainText, deleteItem, focusSearchInput],
+    [setActiveIndex, pasteContent, pasteAsPlainText, deleteItem, focusSearchInput, scrollToClipboardIndex],
   );
 
   // DOM keydown（窗口聚焦时）
@@ -487,6 +529,18 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
     [renderedItems],
   );
 
+  const renderMasonryCard = useCallback(
+    (item: SortableClipboardItem, index: number) => (
+      <ClipboardItemCard
+        item={item}
+        index={index}
+        showBadge={showSlotBadges}
+        sortId={item._sortId}
+      />
+    ),
+    [showSlotBadges],
+  );
+
   if (isLoading && renderedItems.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center h-full">
@@ -560,6 +614,7 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
               osInstanceRef.current = instance;
               const viewport = instance.elements().viewport;
               setCustomScrollParent(viewport);
+              scrollerRef.current = viewport;
             },
           }}
           style={{ height: "100%" }}
@@ -569,6 +624,19 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
             strategy={strategy}
           >
             {customScrollParent && (
+              isMasonry ? (
+                <MasonryVirtualView
+                  ref={masonryRef}
+                  items={renderedItems}
+                  pinnedCount={pinnedCount}
+                  cardDensity={cardDensity}
+                  cardMaxLines={cardMaxLines}
+                  imageMaxHeight={imageMaxHeight}
+                  imageAutoHeight={imageAutoHeight}
+                  scrollParent={customScrollParent}
+                  renderCard={renderMasonryCard}
+                />
+              ) : (
               <Virtuoso
                 ref={virtuosoRef}
                 totalCount={renderedItems.length}
@@ -585,6 +653,7 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
                   }
                 }}
               />
+              )
             )}
           </SortableContext>
         </OverlayScrollbarsComponent>

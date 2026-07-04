@@ -17,6 +17,8 @@ import {
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
+  rectSortingStrategy,
+  type SortingStrategy,
 } from "@dnd-kit/sortable";
 
 export interface SortableItem {
@@ -28,6 +30,7 @@ export interface SortableItem {
 interface UseSortableListOptions<T extends SortableItem> {
   items: T[];
   onDragEnd: (oldIndex: number, newIndex: number) => void;
+  layout?: "list" | "masonry";
 }
 
 // 仅从拖拽手柄启动拖拽，确保点击/粘贴路径确定
@@ -80,6 +83,7 @@ const measuringConfig: MeasuringConfiguration = {
 export function useSortableList<T extends SortableItem>({
   items,
   onDragEnd,
+  layout = "list",
 }: UseSortableListOptions<T>) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const itemsRef = useRef(items);
@@ -143,6 +147,9 @@ export function useSortableList<T extends SortableItem>({
       )
     : null;
 
+  const sortingStrategy: SortingStrategy =
+    layout === "masonry" ? rectSortingStrategy : verticalListSortingStrategy;
+
   return {
     DndContext,
     SortableContext,
@@ -153,7 +160,7 @@ export function useSortableList<T extends SortableItem>({
     handleDragCancel,
     activeId,
     activeItem,
-    strategy: verticalListSortingStrategy,
+    strategy: sortingStrategy,
     modifiers: [],
     collisionDetection: customCollisionDetection,
     measuring: measuringConfig,

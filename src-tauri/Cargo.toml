@@ -71,6 +71,9 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 # ZIP archive for data export/import
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
+# Force plist ≥1.10 → quick-xml ≥0.41 (fixes RUSTSEC-2026-0194/0195 via tauri-utils)
+plist = "1.10"
+
 
 # Clipboard: unified read/write/listen (local fork with CF_DIB support)
 clipboard-rs = { path = "../clipboard-rs" }
