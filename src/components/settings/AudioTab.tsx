@@ -36,24 +36,24 @@ function SoundCard({
         </div>
         <div className="flex items-center justify-between gap-2">
           <Label className="text-xs shrink-0">{t("settings.audio.timing")}</Label>
-          <Select value={timing} onValueChange={(v) => onTimingChange(v as SoundTiming)} disabled={!enabled}>
-            <SelectTrigger className="w-[120px] h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="immediate">{t("settings.audio.timingImmediate")}</SelectItem>
-              <SelectItem value="after_success">{t("settings.audio.timingAfterSuccess")}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex justify-end">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs"
-            onClick={onPreview}
-          >
-            {t("settings.audio.preview")}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Select value={timing} onValueChange={(v) => onTimingChange(v as SoundTiming)} disabled={!enabled}>
+              <SelectTrigger className="w-[120px] h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="immediate">{t("settings.audio.timingImmediate")}</SelectItem>
+                <SelectItem value="after_success">{t("settings.audio.timingAfterSuccess")}</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 shrink-0 text-xs"
+              onClick={onPreview}
+            >
+              {t("settings.audio.preview")}
+            </Button>
+          </div>
         </div>
       </div>
     </SettingsCard>

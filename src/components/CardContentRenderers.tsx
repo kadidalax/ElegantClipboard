@@ -253,6 +253,9 @@ const ImagePreview = memo(function ImagePreview({
   const previewUnboundedMode = useUISettings((s) => s.previewUnboundedMode);
   const previewZoomStep = useUISettings((s) => s.previewZoomStep);
   const previewPosition = useUISettings((s) => s.previewPosition);
+  const sharpCorners = useUISettings((s) => s.sharpCorners);
+  const windowEffect = useUISettings((s) => s.windowEffect);
+  const hoverPreviewDelay = useUISettings((s) => s.hoverPreviewDelay);
   const imageAutoHeight = useUISettings((s) => s.imageAutoHeight);
   const cardMaxLines = useUISettings((s) => s.cardMaxLines);
   const imageMaxHeight = useUISettings((s) => s.imageMaxHeight);
@@ -350,6 +353,7 @@ const ImagePreview = memo(function ImagePreview({
     ps.current.bounds = bounds;
     ps.current.windowCss = { w: windowCssW, h: windowCssH };
     const align = bounds.side === "left" ? "right" : "left";
+    const theme = document.documentElement.classList.contains("dark") ? "dark" : "light";
     try {
       await invoke("show_image_preview", {
         imagePath: path,
@@ -361,6 +365,9 @@ const ImagePreview = memo(function ImagePreview({
         winWidth: winW,
         winHeight: winH,
         align,
+        theme,
+        sharpCorners,
+        windowEffect,
         token: lease,
       });
       if (!previewHoveringRef.current || reqId !== previewReqIdRef.current || !imagePreviewLM.isCurrent(lease)) {
@@ -380,9 +387,7 @@ const ImagePreview = memo(function ImagePreview({
       ps.current.bounds = null;
       ps.current.windowCss = null;
     }
-  }, [previewPosition, previewUnboundedMode]);
-
-  const hoverPreviewDelay = useUISettings((s) => s.hoverPreviewDelay);
+  }, [previewPosition, previewUnboundedMode, sharpCorners, windowEffect]);
 
   const batchMode = useClipboardStore((s) => s.batchMode);
 
@@ -481,13 +486,18 @@ const ImagePreview = memo(function ImagePreview({
           const payload = pendingZoomPayloadRef.current;
           if (!payload) return;
           pendingZoomPayloadRef.current = null;
-          emitTo("image-preview", "image-preview-zoom", payload).catch((err) =>
+          const theme = document.documentElement.classList.contains("dark") ? "dark" : "light";
+          emitTo("image-preview", "image-preview-zoom", {
+            ...payload,
+            theme,
+            sharpCorners: useUISettings.getState().sharpCorners,
+          }).catch((err) =>
             logError("Failed to emit zoom:", err),
           );
         });
       }
     },
-    [previewZoomStep, previewUnboundedMode],
+    [previewZoomStep, previewUnboundedMode, sharpCorners],
   );
 
   const handleImgLoad = useCallback(

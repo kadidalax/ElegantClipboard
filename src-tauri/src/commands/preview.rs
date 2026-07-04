@@ -92,6 +92,9 @@ pub async fn show_image_preview(
     win_width: f64,
     win_height: f64,
     align: Option<String>,
+    theme: Option<String>,
+    sharp_corners: Option<bool>,
+    window_effect: Option<String>,
     token: Option<u64>,
 ) -> Result<(), String> {
     let token = token.unwrap_or(0);
@@ -116,7 +119,7 @@ pub async fn show_image_preview(
         w
     } else {
         newly_created = true;
-        tauri::WebviewWindowBuilder::new(
+        let w = tauri::WebviewWindowBuilder::new(
             &app,
             "image-preview",
             tauri::WebviewUrl::App("/image-preview.html".into()),
@@ -131,7 +134,11 @@ pub async fn show_image_preview(
         .focused(false)
         .visible(false)
         .build()
-        .map_err(|e| format!("创建预览窗口失败: {e}"))?
+        .map_err(|e| format!("创建预览窗口失败: {e}"))?;
+
+        apply_preview_window_effect(&w, window_effect.as_deref());
+
+        w
     };
 
     if token != 0 && !is_preview_token_current(&IMAGE_PREVIEW_TOKEN, token) {
@@ -166,6 +173,8 @@ pub async fn show_image_preview(
             "height": img_height,
             "offsetY": offset_y,
             "align": align.as_deref().unwrap_or("left"),
+            "theme": theme.as_deref().unwrap_or("light"),
+            "sharpCorners": sharp_corners.unwrap_or(false),
         }),
     );
 

@@ -25,7 +25,8 @@ const THEME_CLASSES = ["theme-emerald", "theme-cyan", "theme-system"];
 let _initialized = false;
 let _accentColor: string | null = null;
 let _readyResolve: (() => void) | null = null;
-let _lastTextPreviewTheme: "dark" | "light" | null = null;
+let _lastPreviewPresentation: { theme: "dark" | "light"; sharpCorners: boolean } | null =
+  null;
 const _readyPromise = new Promise<void>((resolve) => {
   _readyResolve = resolve;
 });
@@ -141,12 +142,16 @@ function isMainThemeWindow(): boolean {
   return path === "/" || path === "/index.html" || path.endsWith("/index.html");
 }
 
-function syncTextPreviewTheme(theme: "dark" | "light") {
+function syncPreviewPresentation() {
   if (!useUISettings.getState().textPreviewEnabled || !isMainThemeWindow()) {
     return;
   }
-  // 文本预览窗口未打开时 emitTo 会失败，属正常情况
-  void emitTo("text-preview", "text-preview-theme", { theme }).catch(() => {});
+  const theme = getIsDark() ? "dark" : "light";
+  const { sharpCorners } = useUISettings.getState();
+  const payload = { theme, sharpCorners };
+  // 预览窗口未打开时 emitTo 会失败，属正常情况
+  void emitTo("text-preview", "text-preview-theme", payload).catch(() => {});
+  void emitTo("image-preview", "image-preview-theme", payload).catch(() => {});
 }
 
 /** 初始化主题系统，可安全多次调用，每个窗口仅执行一次 */
@@ -162,10 +167,16 @@ export function initTheme(): Promise<void> {
     const isDark =
       darkMode === "dark" ? true : darkMode === "light" ? false : mq.matches;
     document.documentElement.classList.toggle("dark", isDark);
-    const nextTextPreviewTheme = isDark ? "dark" : "light";
-    if (nextTextPreviewTheme !== _lastTextPreviewTheme) {
-      _lastTextPreviewTheme = nextTextPreviewTheme;
-      syncTextPreviewTheme(nextTextPreviewTheme);
+    const nextPresentation = {
+      theme: (isDark ? "dark" : "light") as "dark" | "light",
+      sharpCorners: useUISettings.getState().sharpCorners,
+    };
+    if (
+      nextPresentation.theme !== _lastPreviewPresentation?.theme ||
+      nextPresentation.sharpCorners !== _lastPreviewPresentation?.sharpCorners
+    ) {
+      _lastPreviewPresentation = nextPresentation;
+      syncPreviewPresentation();
     }
   }
 
@@ -176,6 +187,11 @@ export function initTheme(): Promise<void> {
   useUISettings.subscribe((state, prev) => {
     if (state.sharpCorners !== prev.sharpCorners) {
       applySharpCorners();
+      _lastPreviewPresentation = {
+        theme: getIsDark() ? "dark" : "light",
+        sharpCorners: state.sharpCorners,
+      };
+      syncPreviewPresentation();
     }
     if (state.windowEffect !== prev.windowEffect) {
       applyWindowEffect();
