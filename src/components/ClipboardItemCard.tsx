@@ -693,7 +693,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
               data-drag-handle="true"
               onClick={(e) => e.stopPropagation()}
               className={cn(
-                "absolute inset-y-0 left-0 z-10 flex items-center justify-center rounded-l-lg cursor-move",
+                "absolute inset-y-0 left-0 z-10 flex items-center justify-center rounded-l-md cursor-move",
                 showDragAreaIndicator
                   ? "border-r border-dashed border-primary/40 bg-primary/15 text-primary opacity-0 group-hover:opacity-90 transition-[opacity,colors] duration-150 hover:bg-primary/25 hover:text-primary"
                   : "border-r border-transparent bg-transparent text-transparent opacity-0",
@@ -717,7 +717,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
               data-drag-handle="true"
               onClick={(e) => e.stopPropagation()}
               className={cn(
-                "absolute inset-y-0 right-0 z-10 flex items-center justify-center rounded-r-lg cursor-move",
+                "absolute inset-y-0 right-0 z-10 flex items-center justify-center rounded-r-md cursor-move",
                 showDragAreaIndicator
                   ? "border-l border-dashed border-primary/40 bg-primary/15 text-primary opacity-0 group-hover:opacity-90 transition-[opacity,colors] duration-150 hover:bg-primary/25 hover:text-primary"
                   : "border-l border-transparent bg-transparent text-transparent opacity-0",

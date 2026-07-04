@@ -425,7 +425,8 @@ impl Clipboard for ClipboardContext {
 					};
 					let decoder = BmpDecoder::new_without_file_header(Cursor::new(data.as_slice()))
 						.map_err(|e| format!("{e}"))?;
-					let dynamic_image = DynamicImage::from_decoder(decoder).map_err(|e| format!("{e}"))?;
+					let dynamic_image =
+						DynamicImage::from_decoder(decoder).map_err(|e| format!("{e}"))?;
 					Ok((RustImageData::from_dynamic_image(dynamic_image), dib))
 				}
 				Err(e) => Err(format!("Get image error, code = {e}").into()),
