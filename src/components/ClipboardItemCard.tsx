@@ -669,6 +669,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
       <Card
         className={cn(
           "group relative cursor-pointer overflow-hidden border shadow-none hover:border-primary/40",
+          !showDragAreaIndicator && "transition-colors duration-150 hover:bg-accent/50",
           isDragOverlay && "shadow-md border-primary cursor-move",
           justPasted && "animate-paste-flash",
           isActive && "bg-accent border-primary/30",

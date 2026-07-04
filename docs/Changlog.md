@@ -10,7 +10,7 @@
 - feat: 粘贴音效改由后端统一触发，覆盖卡片粘贴、合并粘贴、快捷键粘贴、粘贴为路径等场景；设置页支持音效试听
 - feat: 新增 `batch_get_item_file_status` 批量检查文件有效性，减少 IPC 调用
 - feat: 插件可用性检查——WebDAV / 翻译插件启用状态统一管理，UI 动态响应
-- fix: **修复升级后无法启动（#125）**——移除 `content_type` 数据库 CHECK 约束，迁移时不再因历史脏数据导致整表重建失败
+- fix: 移除 `content_type` 数据库 CHECK 约束，迁移时不再因历史脏数据导致整表重建失败 https://github.com/Y-ASLant/ElegantClipboard/issues/125
 - fix: RTF 剪贴板备份/恢复改用原始 buffer 读写，避免格式丢失
 - fix: URL 类型检测——未启用 URL 监听时不误匹配 text 类型
 - fix: 图片哈希长度由 16 位扩展至 32 位；更新文本内容时清空图片/文件路径；upsert 不再覆盖 `created_at`
