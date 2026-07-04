@@ -484,9 +484,9 @@ export function DisplayTab() {
               <Slider
                 value={[hoverPreviewDelay]}
                 onValueChange={(value) => setHoverPreviewDelay(value[0])}
-                min={100}
+                min={128}
                 max={1000}
-                step={50}
+                step={1}
               />
               <p className="text-xs text-muted-foreground">
                 {t("settings.display.hoverPreview.delayDesc")}
