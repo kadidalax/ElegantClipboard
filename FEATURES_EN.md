@@ -12,6 +12,7 @@ For UI screenshots, see [README_EN.md](README_EN.md) (captured on v0.5.0 and may
 ## Clipboard Management
 
 - **Multi-type support** - Text, Image, File, URL (link), HTML, RTF
+- **Custom groups** - Per-item `group_id` assignment; in-group time ordering; group view filters to owned items; move to group via context menu
 - **Unlimited history** - Auto record all copied content, always accessible
 - **Smart search** - Real-time search with optimized LIKE queries (CJK text optimized)
 - **Content deduplication** - BLAKE3 hash auto-deduplication, no duplicate storage
@@ -74,7 +75,9 @@ For UI screenshots, see [README_EN.md](README_EN.md) (captured on v0.5.0 and may
 
 ## File Management
 
-- **File validity check** - Parallel check file existence (rayon), invalid files show red warning
+- **High-fidelity file restore** - Captures Windows CF_HDROP companion formats into `file_payload`; paste restores original file clipboard context when possible (incl. staging)
+- **Merge paste** - Merge multi-selected items to clipboard (text join + file path merge)
+- **File validity check** - Parallel check file existence (rayon), invalid files show red warning; batch status query reduces IPC
 - **Right-click menu** - Paste, paste as path, show in explorer, view details
 - **File details dialog** - View full file info, mark invalid files
 
@@ -100,7 +103,7 @@ For UI screenshots, see [README_EN.md](README_EN.md) (captured on v0.5.0 and may
 ## Customization
 
 - **Interface language** - Simplified Chinese / English / Traditional Chinese
-- **Toolbar customization** - Configure toolbar button visibility and order
+- **Toolbar customization** - Configure toolbar button visibility and order (incl. WebDAV sync shortcut)
 - **Custom storage path** - Support data migration and custom path
 - **History limit** - Set max records (0 for unlimited)
 - **Auto cleanup** - Configurable cleanup age (default 30 days, 0 to disable), expired records auto-deleted

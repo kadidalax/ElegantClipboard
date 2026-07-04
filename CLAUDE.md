@@ -66,6 +66,14 @@ make format  # eslint:fix + rustfmt
 
 ### 最近更新
 
+**v1.2.0 新功能 / 修复**：
+- **条目级自定义分组**：`group_id` 字段、组内排序、分组视图过滤；数据导入/导出含分组
+- **文件剪贴板高保真**：CF_HDROP 伴生格式捕获与还原，`file_payload` 字段、合并粘贴（`merge_paste`）
+- **升级修复 #125**：移除 `content_type` 数据库 CHECK 约束，避免旧库迁移时启动失败
+- **粘贴音效后端化**：卡片/合并/快捷键/路径粘贴统一触发；批量文件状态检查减少 IPC
+- **工具栏 WebDAV 同步按钮**；插件可用性 store 动态响应 WebDAV/翻译启用状态
+- **clipboard-rs v0.3.5 本地分叉**：CF_DIB 支持；URL 类型可编辑；RTF buffer 读写修复
+
 **v0.x 新功能**：
 - **界面国际化（i18n）**：默认简体中文，支持 English、繁體中文；设置 → 常规 → 界面语言；文案模块见 `src/i18n/`
 - **链接类型识别**：「其它」分类下新增 URL 类型，自动识别 http(s) 链接
@@ -312,11 +320,12 @@ Windows 的注册表 `Run` 键会静默跳过需要 UAC 提权的程序，因此
 位置：`src-tauri/src/database/schema.rs`
 
 **表结构**：
-- `clipboard_items` - 剪贴板历史
+- `clipboard_items` - 剪贴板历史（含 `group_id` 分组归属、`file_payload` 文件高保真数据）
+- `groups` - 自定义分组
 - `settings` - 键值对配置
 
 **特性**：
-- 内容哈希去重（`content_hash` UNIQUE 约束）
+- 内容哈希去重（`content_hash`；`content_type` 由应用层 `ContentType` 枚举约束，数据库无 CHECK）
 - 自动时间戳更新触发器
 - 性能索引：`created_at`、`is_pinned`、`is_favorite`、`content_type`、`sort_order`、`access_count`
 - 图片元数据：`image_width`、`image_height` 字段
