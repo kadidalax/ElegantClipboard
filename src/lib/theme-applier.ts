@@ -18,6 +18,7 @@ import {
   resolveUiFontFamilyCss,
 } from "@/lib/fonts";
 import { logError } from "@/lib/logger";
+import { getPreviewPresentation, previewPresentationChanged } from "@/lib/preview-presentation";
 import { isUISettingsInitialized, useUISettings, whenUISettingsReady } from "@/stores/ui-settings";
 
 const THEME_CLASSES = ["theme-emerald", "theme-cyan", "theme-system"];
@@ -25,8 +26,7 @@ const THEME_CLASSES = ["theme-emerald", "theme-cyan", "theme-system"];
 let _initialized = false;
 let _accentColor: string | null = null;
 let _readyResolve: (() => void) | null = null;
-let _lastPreviewPresentation: { theme: "dark" | "light"; sharpCorners: boolean } | null =
-  null;
+let _lastPreviewPresentation: ReturnType<typeof getPreviewPresentation> | null = null;
 const _readyPromise = new Promise<void>((resolve) => {
   _readyResolve = resolve;
 });
@@ -143,15 +143,17 @@ function isMainThemeWindow(): boolean {
 }
 
 function syncPreviewPresentation() {
-  if (!useUISettings.getState().textPreviewEnabled || !isMainThemeWindow()) {
-    return;
-  }
-  const theme = getIsDark() ? "dark" : "light";
-  const { sharpCorners } = useUISettings.getState();
-  const payload = { theme, sharpCorners };
-  // 预览窗口未打开时 emitTo 会失败，属正常情况
+  if (!isMainThemeWindow()) return;
+  const payload = getPreviewPresentation();
   void emitTo("text-preview", "text-preview-theme", payload).catch(() => {});
   void emitTo("image-preview", "image-preview-theme", payload).catch(() => {});
+}
+
+function syncPreviewWindowEffects(windowEffect: string) {
+  if (!isMainThemeWindow()) return;
+  void invoke("sync_preview_window_effects", { windowEffect }).catch((error) => {
+    logError("Failed to sync preview window effects:", error);
+  });
 }
 
 /** 初始化主题系统，可安全多次调用，每个窗口仅执行一次 */
@@ -167,14 +169,8 @@ export function initTheme(): Promise<void> {
     const isDark =
       darkMode === "dark" ? true : darkMode === "light" ? false : mq.matches;
     document.documentElement.classList.toggle("dark", isDark);
-    const nextPresentation = {
-      theme: (isDark ? "dark" : "light") as "dark" | "light",
-      sharpCorners: useUISettings.getState().sharpCorners,
-    };
-    if (
-      nextPresentation.theme !== _lastPreviewPresentation?.theme ||
-      nextPresentation.sharpCorners !== _lastPreviewPresentation?.sharpCorners
-    ) {
+    const nextPresentation = getPreviewPresentation();
+    if (previewPresentationChanged(_lastPreviewPresentation, nextPresentation)) {
       _lastPreviewPresentation = nextPresentation;
       syncPreviewPresentation();
     }
@@ -187,14 +183,34 @@ export function initTheme(): Promise<void> {
   useUISettings.subscribe((state, prev) => {
     if (state.sharpCorners !== prev.sharpCorners) {
       applySharpCorners();
-      _lastPreviewPresentation = {
-        theme: getIsDark() ? "dark" : "light",
-        sharpCorners: state.sharpCorners,
-      };
+      _lastPreviewPresentation = getPreviewPresentation();
       syncPreviewPresentation();
+    }
+    if (state.colorTheme !== prev.colorTheme) {
+      if (state.colorTheme === "system" && !_accentColor) {
+        // 切换到系统主题但还未获取强调色
+        invoke<string | null>("get_system_accent_color").then((color) => {
+          _accentColor = color;
+          apply();
+          _lastPreviewPresentation = getPreviewPresentation();
+          syncPreviewPresentation();
+        }).catch((error) => {
+          logError("Failed to fetch system accent color on theme switch:", error);
+          apply();
+          _lastPreviewPresentation = getPreviewPresentation();
+          syncPreviewPresentation();
+        });
+      } else {
+        apply();
+        _lastPreviewPresentation = getPreviewPresentation();
+        syncPreviewPresentation();
+      }
     }
     if (state.windowEffect !== prev.windowEffect) {
       applyWindowEffect();
+      _lastPreviewPresentation = getPreviewPresentation();
+      syncPreviewWindowEffects(state.windowEffect);
+      syncPreviewPresentation();
     }
     if (state.darkMode !== prev.darkMode) {
       applyDarkMode();
@@ -212,20 +228,8 @@ export function initTheme(): Promise<void> {
       state.previewFontSize !== prev.previewFontSize
     ) {
       applyFontSettings();
-    }
-    if (state.colorTheme !== prev.colorTheme) {
-      if (state.colorTheme === "system" && !_accentColor) {
-        // 切换到系统主题但还未获取强调色
-        invoke<string | null>("get_system_accent_color").then((color) => {
-          _accentColor = color;
-          apply();
-        }).catch((error) => {
-          logError("Failed to fetch system accent color on theme switch:", error);
-          apply();
-        });
-      } else {
-        apply();
-      }
+      _lastPreviewPresentation = getPreviewPresentation();
+      syncPreviewPresentation();
     }
   });
 
@@ -234,6 +238,10 @@ export function initTheme(): Promise<void> {
     _accentColor = event.payload;
     notifyAccentSubscribers();
     apply();
+    if (useUISettings.getState().colorTheme === "system") {
+      _lastPreviewPresentation = getPreviewPresentation();
+      syncPreviewPresentation();
+    }
   });
 
   // --- 初始化应用 ---

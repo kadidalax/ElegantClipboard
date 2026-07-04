@@ -112,7 +112,7 @@ function DedupStrategyCard({ strategy, onChange }: DedupStrategyCardProps) {
         <div className="relative grid grid-cols-3">
           <div
             aria-hidden
-            className="absolute inset-y-0 left-0 w-1/3 rounded-md bg-primary shadow-sm will-change-transform transition-transform duration-200 ease-out"
+            className="absolute inset-y-0 left-0 w-1/3 rounded-md bg-primary elevation-control will-change-transform transition-transform duration-200 ease-out"
             style={{ transform: `translateX(${activeDedupIndex * 100}%)` }}
           />
           {dedupOptions.map((opt) => {
@@ -191,7 +191,7 @@ function TextDedupModeCard({ dedupStrategy }: { dedupStrategy: DedupStrategy }) 
         <div className="relative grid grid-cols-2">
           <div
             aria-hidden
-            className={`absolute inset-y-0 left-0 w-1/2 rounded-md shadow-sm will-change-transform transition-transform duration-200 ease-out ${dedupEnabled ? "bg-primary" : "bg-muted-foreground/25"}`}
+            className={`absolute inset-y-0 left-0 w-1/2 rounded-md elevation-control will-change-transform transition-transform duration-200 ease-out ${dedupEnabled ? "bg-primary" : "bg-muted-foreground/25"}`}
             style={{ transform: `translateX(${activeIndex * 100}%)` }}
           />
           {textDedupModeOptions.map((opt) => {

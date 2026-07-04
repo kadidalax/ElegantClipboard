@@ -66,6 +66,7 @@ import {
 } from "@/lib/format";
 import { createLeaseManager } from "@/lib/lease-manager";
 import { logError } from "@/lib/logger";
+import { getPreviewPresentation } from "@/lib/preview-presentation";
 import { translateText } from "@/lib/translate";
 import { cn } from "@/lib/utils";
 import { useClipboardStore, ClipboardItem } from "@/stores/clipboard";
@@ -445,8 +446,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
     const centeredY = Math.round(bounds.cardCenterY - winH / 2);
     const winY = Math.max(bounds.monY, Math.min(centeredY, bounds.monBottom - winH));
     const align = bounds.side === "left" ? "right" : "left";
-    const theme =
-      document.documentElement.classList.contains("dark") ? "dark" : "light";
+    const presentation = getPreviewPresentation();
 
     try {
       const uiState = useUISettings.getState();
@@ -457,9 +457,12 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
         winWidth: winW,
         winHeight: winH,
         align,
-        theme,
-        sharpCorners,
-        windowEffect: uiState.windowEffect,
+        theme: presentation.theme,
+        sharpCorners: presentation.sharpCorners,
+        colorTheme: presentation.colorTheme,
+        systemAccent: presentation.systemAccent,
+        windowEffect: presentation.windowEffect,
+        uiFontFamily: presentation.uiFontFamily,
         fontFamily: resolvePreviewFontFamilyCss(
           uiState.previewFont,
           uiState.cardFont,
@@ -673,9 +676,9 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
     <div ref={setNodeRef} style={style}>
       <Card
         className={cn(
-          "group relative cursor-pointer overflow-hidden border shadow-none hover:border-primary/40",
+          "group relative cursor-pointer overflow-hidden border elevation-flat hover:border-primary/40",
           !showDragAreaIndicator && "transition-colors duration-150 hover:bg-accent/50",
-          isDragOverlay && "shadow-md border-primary cursor-move",
+          isDragOverlay && "elevation-floating border-primary cursor-move",
           justPasted && "animate-paste-flash",
           isActive && "bg-accent border-primary/30",
           batchMode && isSelected && "bg-primary/5",
@@ -743,13 +746,13 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
             {showDragAreaIndicator && (
               <div
                 aria-hidden
-                className="pointer-events-none absolute inset-y-0 z-6 flex items-center justify-center bg-amber-500/12 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                className="pointer-events-none absolute inset-y-0 z-6 flex items-center justify-center bg-status-warning-subtle opacity-0 group-hover:opacity-100 transition-opacity duration-150"
                 style={{ left: dragHandleWidth, right: dragHandleWidth }}
               >
                 <div className="text-center">
-                  <div className="text-[10px] leading-none text-amber-700/80 dark:text-amber-300/80">{t("clipboard.card.pasteZoneHint")}</div>
-                  <div className="mt-0.5 text-[10px] leading-none text-amber-700/80 dark:text-amber-300/80">{t("clipboard.card.clickToPaste")}</div>
-                  <div className="mt-0.5 text-[10px] leading-none text-amber-700/80 dark:text-amber-300/80">{t("clipboard.card.disableInSettings")}</div>
+                  <div className="text-[10px] leading-none text-status-warning">{t("clipboard.card.pasteZoneHint")}</div>
+                  <div className="mt-0.5 text-[10px] leading-none text-status-warning">{t("clipboard.card.clickToPaste")}</div>
+                  <div className="mt-0.5 text-[10px] leading-none text-status-warning">{t("clipboard.card.disableInSettings")}</div>
                 </div>
               </div>
             )}
@@ -757,7 +760,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
         )}
         <div className="flex">
           <div className={cn(
-            "flex items-center justify-center shrink-0 overflow-hidden border-r transition-all duration-200 ease-out",
+            "flex items-center justify-center shrink-0 overflow-hidden border-r transition-surface ease-out",
             batchMode ? "w-8 border-border/30" : "w-0 border-transparent"
           )}>
             {isSelected

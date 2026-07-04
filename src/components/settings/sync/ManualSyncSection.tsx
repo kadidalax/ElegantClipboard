@@ -79,7 +79,7 @@ export function ManualSyncSection({
             ref={statusMsgRef}
             className={`text-xs px-3 py-2 rounded-md whitespace-pre-line ${
               statusType === "success"
-                ? "bg-green-500/10 text-green-600 dark:text-green-400"
+                ? "bg-status-success-subtle text-status-success"
                 : statusType === "error"
                   ? "bg-destructive/10 text-destructive"
                   : "bg-muted text-muted-foreground"

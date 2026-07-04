@@ -231,7 +231,7 @@ export function UpdateDialog({ open, onOpenChange }: UpdateDialogProps) {
                 v{updateInfo.current_version} → v{updateInfo.latest_version}
               </span>
               {outdatedVersionCount > 0 && (
-                <span className="text-amber-600 dark:text-amber-400">
+                <span className="text-status-warning">
                   {t("settings.update.outdated", { count: outdatedVersionCount })}
                 </span>
               )}
@@ -318,7 +318,7 @@ export function UpdateDialog({ open, onOpenChange }: UpdateDialogProps) {
           <div className="space-y-3 py-4">
             <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
               <div
-                className="h-full bg-primary rounded-full transition-all duration-200"
+                className="h-full bg-primary rounded-full transition-surface"
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
@@ -562,12 +562,12 @@ function renderReleaseImage(
 
 function getPrefixTagClass(prefix: string): string {
   const key = prefix.toLowerCase();
-  if (key === "fix") return "bg-rose-500/12 text-rose-600 dark:text-rose-300 border border-rose-500/25";
-  if (key === "feat") return "bg-emerald-500/12 text-emerald-600 dark:text-emerald-300 border border-emerald-500/25";
-  if (key === "chore") return "bg-slate-500/12 text-slate-600 dark:text-slate-300 border border-slate-500/25";
-  if (key === "perf") return "bg-amber-500/12 text-amber-700 dark:text-amber-300 border border-amber-500/25";
-  if (key === "refactor") return "bg-violet-500/12 text-violet-600 dark:text-violet-300 border border-violet-500/25";
-  return "bg-primary/10 text-primary border border-primary/25";
+  if (key === "fix") return "changelog-tag-fix";
+  if (key === "feat") return "changelog-tag-feat";
+  if (key === "chore") return "changelog-tag-chore";
+  if (key === "perf") return "changelog-tag-perf";
+  if (key === "refactor") return "changelog-tag-refactor";
+  return "changelog-tag-default";
 }
 
 function parseCommitPrefix(text: string): {
@@ -658,7 +658,7 @@ export function SimpleMarkdown({ content }: { content: string }) {
           {commit ? (
             <div className="flex items-start gap-1.5">
               <span
-                className={`inline-flex h-5 shrink-0 items-center self-start rounded px-1.5 text-[10px] font-semibold uppercase tracking-wide ${getPrefixTagClass(commit.kind)}`}
+                className={`inline-flex h-5 shrink-0 items-center self-start rounded border px-1.5 text-[10px] font-semibold uppercase tracking-wide ${getPrefixTagClass(commit.kind)}`}
               >
                 {commit.label}
               </span>

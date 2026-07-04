@@ -14,6 +14,7 @@ import { useTranslation } from "@/i18n";
 import { getFileNameFromPath, isImageFile } from "@/lib/format";
 import { createLeaseManager } from "@/lib/lease-manager";
 import { logError } from "@/lib/logger";
+import { getPreviewPresentation } from "@/lib/preview-presentation";
 import { cn } from "@/lib/utils";
 import { useClipboardStore } from "@/stores/clipboard";
 import { useUISettings } from "@/stores/ui-settings";
@@ -353,7 +354,7 @@ const ImagePreview = memo(function ImagePreview({
     ps.current.bounds = bounds;
     ps.current.windowCss = { w: windowCssW, h: windowCssH };
     const align = bounds.side === "left" ? "right" : "left";
-    const theme = document.documentElement.classList.contains("dark") ? "dark" : "light";
+    const presentation = getPreviewPresentation();
     try {
       await invoke("show_image_preview", {
         imagePath: path,
@@ -365,9 +366,12 @@ const ImagePreview = memo(function ImagePreview({
         winWidth: winW,
         winHeight: winH,
         align,
-        theme,
-        sharpCorners,
-        windowEffect,
+        theme: presentation.theme,
+        sharpCorners: presentation.sharpCorners,
+        colorTheme: presentation.colorTheme,
+        systemAccent: presentation.systemAccent,
+        windowEffect: presentation.windowEffect,
+        uiFontFamily: presentation.uiFontFamily,
         token: lease,
       });
       if (!previewHoveringRef.current || reqId !== previewReqIdRef.current || !imagePreviewLM.isCurrent(lease)) {
@@ -486,11 +490,10 @@ const ImagePreview = memo(function ImagePreview({
           const payload = pendingZoomPayloadRef.current;
           if (!payload) return;
           pendingZoomPayloadRef.current = null;
-          const theme = document.documentElement.classList.contains("dark") ? "dark" : "light";
+          const presentation = getPreviewPresentation();
           emitTo("image-preview", "image-preview-zoom", {
             ...payload,
-            theme,
-            sharpCorners: useUISettings.getState().sharpCorners,
+            ...presentation,
           }).catch((err) =>
             logError("Failed to emit zoom:", err),
           );
@@ -672,15 +675,15 @@ const FileImagePreview = memo(function FileImagePreview({
     return (
       <div className="flex-1 min-w-0 px-3 py-2.5">
         <div className="flex items-start gap-2.5">
-          <div className="shrink-0 w-10 h-10 rounded-lg flex items-center justify-center bg-red-50 dark:bg-red-950">
-            <Warning16Regular className="w-5 h-5 text-red-500" />
+          <div className="shrink-0 w-10 h-10 rounded-lg flex items-center justify-center bg-destructive/10">
+            <Warning16Regular className="w-5 h-5 text-destructive" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate text-red-500">
+            <p className="text-sm font-medium truncate text-destructive">
               <HighlightText text={fileName} />
               <span className="ml-1.5 text-xs font-normal">{t("cardContent.invalid")}</span>
             </p>
-            <p className="text-xs truncate mt-0.5 text-red-400 line-through">
+            <p className="text-xs truncate mt-0.5 text-destructive/70 line-through">
               <HighlightText text={filePath} />
             </p>
           </div>
@@ -778,16 +781,16 @@ export const FileContent = memo(function FileContent({
           className={cn(
             "shrink-0 w-10 h-10 rounded-lg flex items-center justify-center",
             filesInvalid
-              ? "bg-red-50 dark:bg-red-950"
-              : "bg-blue-50 dark:bg-blue-950",
+              ? "bg-destructive/10"
+              : "bg-primary/10",
           )}
         >
           {filesInvalid ? (
-            <Warning16Regular className="w-5 h-5 text-red-500" />
+            <Warning16Regular className="w-5 h-5 text-destructive" />
           ) : isMultiple ? (
-            <Folder16Regular className="w-5 h-5 text-blue-500" />
+            <Folder16Regular className="w-5 h-5 text-primary" />
           ) : (
-            <Document16Regular className="w-5 h-5 text-blue-500" />
+            <Document16Regular className="w-5 h-5 text-primary" />
           )}
         </div>
         <div className="flex-1 min-w-0">
@@ -796,7 +799,7 @@ export const FileContent = memo(function FileContent({
               <p
                 className={cn(
                   "text-sm font-medium",
-                  filesInvalid ? "text-red-500" : "text-foreground",
+                  filesInvalid ? "text-destructive" : "text-foreground",
                 )}
               >
                 {t("cardContent.fileCount", { count: filePaths.length })}
@@ -807,7 +810,7 @@ export const FileContent = memo(function FileContent({
               <p
                 className={cn(
                   "text-xs truncate mt-0.5",
-                  filesInvalid ? "text-red-400" : "text-muted-foreground",
+                  filesInvalid ? "text-destructive/70" : "text-muted-foreground",
                 )}
               >
                 <HighlightText
@@ -825,7 +828,7 @@ export const FileContent = memo(function FileContent({
               <p
                 className={cn(
                   "text-sm font-medium truncate",
-                  filesInvalid ? "text-red-500" : "text-foreground",
+                  filesInvalid ? "text-destructive" : "text-foreground",
                 )}
               >
                 <HighlightText
@@ -839,7 +842,7 @@ export const FileContent = memo(function FileContent({
                 className={cn(
                   "text-xs truncate mt-0.5",
                   filesInvalid
-                    ? "text-red-400 line-through"
+                    ? "text-destructive/70 line-through"
                     : "text-muted-foreground",
                 )}
               >

@@ -39,22 +39,28 @@
       height: 100%;
       object-fit: contain;
       opacity: 0;
-      transition: opacity 0.15s ease;
+      transition: opacity var(--motion-normal) var(--motion-ease);
     }
     img.loaded { opacity: 1; }
     #badge {
       position: absolute;
-      bottom: 6px;
-      right: 6px;
-      background: rgba(0,0,0,0.6);
-      color: #fff;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      font-size: 12px;
+      bottom: var(--space-badge-offset);
+      right: var(--space-badge-offset);
+      background: var(--preview-badge-bg);
+      color: var(--preview-badge-fg);
+      font-family: var(
+        --ui-font-family,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif
+      );
+      font-size: var(--text-badge-size);
       font-weight: 600;
-      padding: 2px 8px;
+      padding: var(--space-badge-padding-y) var(--space-badge-padding-x);
       border-radius: var(--radius-md);
       opacity: 0;
-      transition: opacity 0.3s ease;
+      transition: opacity var(--motion-slower) var(--motion-ease);
       pointer-events: none;
       white-space: nowrap;
     }
@@ -68,28 +74,22 @@
       <div id="badge"></div>
     </div>
   </div>
+  <script src="/preview-presentation.js"></script>
   <script>
     const wrap = document.getElementById('wrap');
     const img = document.getElementById('preview');
     const badge = document.getElementById('badge');
+    const root = document.documentElement;
     let hideTimer = null;
     let animRaf = null;
     const currentRect = { width: 0, height: 0, top: 0 };
     const targetRect = { width: 0, height: 0, top: 0 };
 
-    function setTheme(theme) {
-      document.body.dataset.theme = theme === 'dark' ? 'dark' : 'light';
-    }
-    function setSharpCorners(enabled) {
-      document.body.dataset.sharpCorners = enabled ? 'true' : 'false';
-    }
-    setTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-    setSharpCorners(false);
-
-    function applyPresentation(payload) {
-      if (payload?.theme) setTheme(payload.theme);
-      if (payload?.sharpCorners !== undefined) setSharpCorners(Boolean(payload.sharpCorners));
-    }
+    applyPreviewPresentation(root, {
+      theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+      sharpCorners: false,
+      colorTheme: 'default',
+    });
 
     function applyRect(rect) {
       wrap.style.width = rect.width + 'px';
@@ -151,7 +151,7 @@
       listen('image-preview-update', (event) => {
         const payload = event.payload || {};
         const { imagePath, width, height, offsetY, align } = payload;
-        applyPresentation(payload);
+        applyPreviewPresentation(root, payload);
         img.classList.remove('loaded');
         clearBadge();
         document.body.className = align === 'right' ? 'align-right' : '';
@@ -169,7 +169,7 @@
       listen('image-preview-zoom', (event) => {
         const payload = event.payload || {};
         const { width, height, offsetY, percent, active, align } = payload;
-        applyPresentation(payload);
+        applyPreviewPresentation(root, payload);
         if (align) document.body.className = align === 'right' ? 'align-right' : '';
         targetRect.width = width || 0;
         targetRect.height = height || 0;
@@ -193,7 +193,7 @@
       });
 
       listen('image-preview-theme', (event) => {
-        applyPresentation(event?.payload || {});
+        applyPreviewPresentation(root, event?.payload || {});
       });
 
       img.addEventListener('load', () => img.classList.add('loaded'));

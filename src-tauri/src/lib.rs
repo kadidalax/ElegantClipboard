@@ -1080,6 +1080,7 @@ pub fn run() {
             commands::preview::show_text_preview,
             commands::preview::hide_text_preview,
             commands::preview::allocate_text_preview_lease,
+            commands::preview::sync_preview_window_effects,
             commands::preview::open_text_editor_window,
             commands::window::set_window_pinned,
             commands::window::is_window_pinned,

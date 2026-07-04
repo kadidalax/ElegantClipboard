@@ -147,7 +147,7 @@ export function ConnectionSection({
                   )}
                 </div>
               </div>
-              <div className="flex items-center justify-between rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+              <div className="flex items-center justify-between rounded-md border border-status-warning bg-status-warning-subtle p-3">
                 <div className="space-y-0.5 pr-4">
                   <Label className="text-xs">{t("settings.sync.acceptInvalidCert")}</Label>
                   <p className="text-xs text-muted-foreground">

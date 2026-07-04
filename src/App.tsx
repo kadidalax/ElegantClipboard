@@ -559,7 +559,7 @@ function App() {
             placeholder={t("app.searchPlaceholder")}
             value={searchQuery}
             onChange={handleSearchChange}
-            className={cn("pl-9 h-9 text-sm bg-background border shadow-sm", searchQuery && "pr-14")}
+            className={cn("pl-9 h-9 text-sm bg-background border elevation-control", searchQuery && "pr-14")}
           />
           {searchQuery && (
             <div className="absolute right-8 top-1/2 -translate-y-1/2 flex items-center gap-1 z-10 pointer-events-none">
@@ -579,7 +579,7 @@ function App() {
         {/* 操作按钮 */}
         {visibleToolbarButtons.length > 0 && (
           <div 
-            className="flex items-center gap-0.5 h-9 px-1 bg-background border rounded-md shadow-sm" 
+            className="flex items-center gap-0.5 h-9 px-1 bg-background border rounded-md elevation-control" 
             style={{ WebkitAppRegion: 'no-drag', pointerEvents: suppressTooltips ? 'none' : undefined } as React.CSSProperties}
           >
             {visibleToolbarButtons.map((btn) => renderToolbarButton(btn))}
@@ -634,14 +634,14 @@ function App() {
       {/* 底部分组选择 */}
       {showCategoryFilter && (
         <div className="shrink-0 px-2 pb-2 pt-1 select-none">
-          {/* 整个底标2区共用一个 bg-muted rounded-lg 容器 */}
+          {/* 整个底栏2区共用一个 bg-muted rounded-md 容器 */}
           <div
             ref={segmentContainerRef}
-            className="relative flex items-center h-8 p-0.5 bg-muted rounded-lg"
+            className="relative flex items-center h-8 p-0.5 bg-muted rounded-md"
           >
             {/* 滑动指示器 */}
             <div
-              className="absolute left-0 top-0.5 h-[calc(100%-4px)] rounded-md bg-background shadow-sm will-change-transform transition-[transform,width,opacity] duration-200 ease-out"
+              className="absolute left-0 top-0.5 h-[calc(100%-4px)] rounded-md bg-background elevation-control will-change-transform transition-[transform,width,opacity] duration-200 ease-out"
               style={{
                 transform: `translateX(${segmentIndicator.left}px)`,
                 width: segmentIndicator.width,
@@ -656,7 +656,7 @@ function App() {
                 ref={(el) => { segmentRefs.current[i] = el; }}
                 onClick={() => setSelectedGroup(g.value)}
                 className={cn(
-                  "relative z-1 flex-1 h-full rounded-md text-xs font-medium transition-colors duration-200",
+                  "relative z-1 flex-1 h-full rounded-md text-xs font-medium transition-surface",
                   selectedGroup === g.value
                     ? "text-foreground"
                     : "text-muted-foreground hover:text-foreground",
@@ -673,7 +673,7 @@ function App() {
             <div ref={groupDropdownRef} className="relative z-1 shrink-0">
               <button
                 onClick={() => setGroupDropdownOpen((o) => !o)}
-                className="h-7 flex items-center gap-1 px-2 rounded-md bg-background shadow-sm text-xs font-medium text-foreground transition-all duration-200"
+                className="h-7 flex items-center gap-1 px-2 rounded-md bg-background elevation-control text-xs font-medium text-foreground transition-surface"
               >
                 <span className="max-w-[80px] truncate">
                   {selectedGroupId === null
@@ -687,7 +687,7 @@ function App() {
 
               {/* 下拉面板 */}
               {groupDropdownOpen && (
-                <div className="absolute bottom-full right-0 mb-1 z-50 min-w-[160px] rounded-md border bg-popover p-1 shadow-md">
+                <div className="absolute bottom-full right-0 mb-1 z-50 min-w-[160px] rounded-md border bg-popover p-1 elevation-floating">
                   {/* 默认选项 */}
                   <div
                     onClick={() => { setSelectedGroupId(null); setGroupDropdownOpen(false); }}

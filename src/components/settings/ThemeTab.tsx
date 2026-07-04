@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { useTranslation } from "@/i18n";
 import { logError } from "@/lib/logger";
 import { getAccentColor, subscribeAccentColor } from "@/lib/theme-applier";
+import { cn } from "@/lib/utils";
 import { useUISettings, ColorTheme, WindowEffect } from "@/stores/ui-settings";
 
 // 过滤艺术字体的关键词（大小写不敏感）
@@ -22,6 +23,35 @@ const DARK_MODE_OPTIONS = [
   { value: "light" as const, labelKey: "settings.theme.darkLight" as const },
   { value: "dark" as const, labelKey: "settings.theme.darkDark" as const },
 ];
+
+function ThemeColorSwatch({
+  themeId,
+  systemAccent,
+}: {
+  themeId: ColorTheme;
+  systemAccent: string | null;
+}) {
+  const themeClass =
+    themeId === "default" ? undefined : themeId === "system" ? "theme-system" : `theme-${themeId}`;
+  const accentStyle =
+    themeId === "system"
+      ? (() => {
+          const parts = (systemAccent ?? "210 65% 50%").split(" ");
+          return {
+            "--system-accent-h": parts[0],
+            "--system-accent-s": parts[1] || "65%",
+            "--system-accent-l": parts[2] || "50%",
+          } as React.CSSProperties;
+        })()
+      : undefined;
+
+  return (
+    <div className={cn("flex gap-1.5 shrink-0", themeClass)} style={accentStyle}>
+      <div className="w-8 h-8 rounded-md elevation-control bg-primary" />
+      <div className="w-8 h-8 rounded-md border elevation-control bg-secondary" />
+    </div>
+  );
+}
 
 function FontSettingGroup({ label, fonts, font, onFontChange, fontSize, onFontSizeChange, min, max, defaultFontLabel, fontSizeLabel }: {
   label: string;
@@ -98,41 +128,21 @@ export function ThemeTab() {
         ? t("settings.theme.systemAccentCurrent")
         : t("settings.theme.systemAccentAuto"),
       icon: Desktop16Regular,
-      getPreview: () => {
-        if (!systemAccentColor) return { primary: "#0078d4", secondary: "#f0f0f0" };
-        const parts = systemAccentColor.split(" ");
-        return {
-          primary: `hsl(${parts[0]} ${parts[1] || "65%"} ${parts[2] || "50%"})`,
-          secondary: `hsl(${parts[0]} 40% 95%)`,
-        };
-      },
     },
     {
       id: "default" as ColorTheme,
       name: t("settings.theme.default"),
       description: t("settings.theme.defaultDesc"),
-      getPreview: () => ({
-        primary: "#1e293b",
-        secondary: "#f1f5f9",
-      }),
     },
     {
       id: "emerald" as ColorTheme,
       name: t("settings.theme.emerald"),
       description: t("settings.theme.emeraldDesc"),
-      getPreview: () => ({
-        primary: "#059669",
-        secondary: "#ecfdf5",
-      }),
     },
     {
       id: "cyan" as ColorTheme,
       name: t("settings.theme.cyan"),
       description: t("settings.theme.cyanDesc"),
-      getPreview: () => ({
-        primary: "#0891b2",
-        secondary: "#ecfeff",
-      }),
     },
   ], [t, systemAccentColor]);
 
@@ -166,7 +176,6 @@ export function ThemeTab() {
 
         <div className="space-y-2">
           {themes.map((theme) => {
-            const preview = theme.getPreview();
             const Icon = theme.icon;
             const isActive = colorTheme === theme.id;
             return (
@@ -174,24 +183,14 @@ export function ThemeTab() {
                 key={theme.id}
                 onClick={() => setColorTheme(theme.id)}
                 className={`
-                  w-full flex items-center gap-3 p-3 rounded-md border transition-all duration-200
+                  w-full flex items-center gap-3 p-3 rounded-md border transition-surface
                   ${isActive
                     ? "border-primary bg-primary/5"
                     : "border-transparent hover:bg-accent"
                   }
                 `}
               >
-                {/* Color Preview */}
-                <div className="flex gap-1.5 shrink-0">
-                  <div
-                    className="w-8 h-8 rounded-md shadow-sm"
-                    style={{ backgroundColor: preview.primary }}
-                  />
-                  <div
-                    className="w-8 h-8 rounded-md border shadow-sm"
-                    style={{ backgroundColor: preview.secondary }}
-                  />
-                </div>
+                <ThemeColorSwatch themeId={theme.id} systemAccent={systemAccentColor} />
 
                 {/* Theme Info */}
                 <div className="flex-1 text-left">
@@ -226,7 +225,7 @@ export function ThemeTab() {
           <div className="relative grid grid-cols-3">
             <div
               aria-hidden
-              className="absolute inset-y-0 left-0 w-1/3 rounded-md bg-primary shadow-sm will-change-transform transition-transform duration-200 ease-out"
+              className="absolute inset-y-0 left-0 w-1/3 rounded-md bg-primary elevation-control will-change-transform transition-transform duration-200 ease-out"
               style={{ transform: `translateX(${activeDarkModeIndex * 100}%)` }}
             />
             {DARK_MODE_OPTIONS.map((opt) => {
@@ -280,7 +279,7 @@ export function ThemeTab() {
             <button
               key={opt.value}
               onClick={() => setWindowEffect(opt.value)}
-              className={`flex flex-col items-start p-3 rounded-md border transition-all duration-200 text-left ${
+              className={`flex flex-col items-start p-3 rounded-md border transition-surface text-left ${
                 windowEffect === opt.value
                   ? "border-primary bg-primary/5"
                   : "border-transparent hover:bg-accent"

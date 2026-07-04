@@ -94,7 +94,10 @@ pub async fn show_image_preview(
     align: Option<String>,
     theme: Option<String>,
     sharp_corners: Option<bool>,
+    color_theme: Option<String>,
+    system_accent: Option<String>,
     window_effect: Option<String>,
+    ui_font_family: Option<String>,
     token: Option<u64>,
 ) -> Result<(), String> {
     let token = token.unwrap_or(0);
@@ -175,6 +178,10 @@ pub async fn show_image_preview(
             "align": align.as_deref().unwrap_or("left"),
             "theme": theme.as_deref().unwrap_or("light"),
             "sharpCorners": sharp_corners.unwrap_or(false),
+            "colorTheme": color_theme.as_deref().unwrap_or("default"),
+            "systemAccent": system_accent,
+            "windowEffect": window_effect.as_deref().unwrap_or("none"),
+            "uiFontFamily": ui_font_family,
         }),
     );
 
@@ -226,7 +233,10 @@ pub async fn show_text_preview(
     align: Option<String>,
     theme: Option<String>,
     sharp_corners: Option<bool>,
+    color_theme: Option<String>,
+    system_accent: Option<String>,
     window_effect: Option<String>,
+    ui_font_family: Option<String>,
     font_family: Option<String>,
     font_size: Option<f64>,
     token: Option<u64>,
@@ -302,6 +312,10 @@ pub async fn show_text_preview(
         "align": align.as_deref().unwrap_or("left"),
         "theme": theme.as_deref().unwrap_or("light"),
         "sharpCorners": sharp_corners.unwrap_or(false),
+        "colorTheme": color_theme.as_deref().unwrap_or("default"),
+        "systemAccent": system_accent,
+        "windowEffect": window_effect.as_deref().unwrap_or("none"),
+        "uiFontFamily": ui_font_family,
         "fontFamily": font_family,
         "fontSize": font_size,
     });
@@ -396,23 +410,39 @@ pub fn is_log_to_file_enabled() -> bool {
     AppConfig::load().is_log_to_file()
 }
 
-/// 为预览窗口应用系统级窗口特效（Acrylic/Mica/Tabbed）
+/// 主窗口切换窗口特效时，同步已打开的预览 WebView 的 DWM 背景
+#[tauri::command]
+pub fn sync_preview_window_effects(app: tauri::AppHandle, window_effect: Option<String>) {
+    let effect = window_effect.as_deref();
+    if let Some(w) = app.get_webview_window("text-preview") {
+        apply_preview_window_effect(&w, effect);
+    }
+    if let Some(w) = app.get_webview_window("image-preview") {
+        apply_preview_window_effect(&w, effect);
+    }
+}
+
+/// 为预览窗口应用系统级窗口特效（Acrylic/Mica/Tabbed）；`none` 时清除 DWM 并恢复 layered
 #[cfg(target_os = "windows")]
 fn apply_preview_window_effect(window: &tauri::WebviewWindow, effect: Option<&str>) {
     use windows::Win32::Foundation::HWND;
 
-    let effect = match effect {
-        Some(e) if e != "none" => e,
-        _ => return,
-    };
-
     let Ok(raw_hwnd) = window.hwnd() else { return };
     let hwnd = HWND(raw_hwnd.0.cast());
 
-    // 移除 WS_EX_LAYERED 支持合成特效
-    super::window_utils::set_ws_ex_layered(hwnd, false);
+    let effect_name = effect.unwrap_or("none");
+    let is_effect = effect_name != "none";
+    super::window_utils::set_ws_ex_layered(hwnd, !is_effect);
 
-    let result = match effect {
+    let _ = window_vibrancy::clear_mica(window);
+    let _ = window_vibrancy::clear_acrylic(window);
+    let _ = window_vibrancy::clear_tabbed(window);
+
+    if !is_effect {
+        return;
+    }
+
+    let result = match effect_name {
         "mica" => window_vibrancy::apply_mica(window, None),
         "acrylic" => window_vibrancy::apply_acrylic(window, Some((0, 0, 0, 0))),
         "tabbed" => window_vibrancy::apply_tabbed(window, None),
@@ -420,9 +450,13 @@ fn apply_preview_window_effect(window: &tauri::WebviewWindow, effect: Option<&st
     };
 
     if let Err(e) = result {
-        tracing::debug!("Preview window effect '{}' failed: {}", effect, e);
+        tracing::debug!("Preview window effect '{}' failed: {}", effect_name, e);
+        super::window_utils::set_ws_ex_layered(hwnd, true);
     }
 }
+
+#[cfg(not(target_os = "windows"))]
+fn apply_preview_window_effect(_window: &tauri::WebviewWindow, _effect: Option<&str>) {}
 
 #[tauri::command]
 pub fn set_log_to_file(enabled: bool) -> Result<(), String> {

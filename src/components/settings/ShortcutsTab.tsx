@@ -414,7 +414,7 @@ export function ShortcutsTab({
             {winvError && (
               <p className="text-xs text-destructive">{winvError}</p>
             )}
-            <p className="text-xs text-amber-500">
+            <p className="text-xs text-status-warning">
               {t("settings.shortcuts.registryWarning")}
             </p>
           </div>
@@ -712,7 +712,7 @@ export function ShortcutsTab({
             )}
 
             {tempShortcut.includes("Shift") && /\d/.test(tempShortcut) && (
-              <p className="text-xs text-amber-500">
+              <p className="text-xs text-status-warning">
                 {t("settings.shortcuts.numpadWarning")}
               </p>
             )}

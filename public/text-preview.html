@@ -21,22 +21,10 @@
       -webkit-user-select: none;
       position: relative;
     }
-    body[data-theme="light"] {
-      --panel-border: rgba(148, 163, 184, 0.24);
-      --panel-bg: rgba(255, 255, 255, 0.88);
-      --content-color: rgba(15, 23, 42, 0.92);
-      --scrollbar-thumb: rgba(100, 116, 139, 0.24);
-    }
-    body[data-theme="dark"] {
-      --panel-border: rgba(148, 163, 184, 0.26);
-      --panel-bg: rgba(15, 23, 42, 0.78);
-      --content-color: rgba(241, 245, 249, 0.94);
-      --scrollbar-thumb: rgba(148, 163, 184, 0.3);
-    }
     #wrap {
       position: absolute;
       inset: 0;
-      padding: 8px;
+      padding: var(--space-preview-wrap);
       display: flex;
       align-items: stretch;
       justify-content: stretch;
@@ -45,14 +33,17 @@
       width: 100%;
       height: 100%;
       border-radius: var(--preview-radius);
-      border: 1px solid var(--panel-border);
-      background: var(--panel-bg);
-      backdrop-filter: blur(6px) saturate(110%);
-      -webkit-backdrop-filter: blur(6px) saturate(110%);
+      border: 1px solid var(--preview-panel-border);
+      background: var(--preview-panel-bg);
+      backdrop-filter: blur(var(--blur-preview-backdrop)) saturate(110%);
+      -webkit-backdrop-filter: blur(var(--blur-preview-backdrop)) saturate(110%);
       box-shadow: var(--preview-shadow);
       overflow: hidden;
       opacity: 0;
-      transition: opacity 0.12s ease, background-color 0.14s ease, border-color 0.14s ease;
+      transition:
+        opacity var(--motion-fast) var(--motion-ease),
+        background-color var(--motion-fast) var(--motion-ease),
+        border-color var(--motion-fast) var(--motion-ease);
     }
     #panel.visible {
       opacity: 1;
@@ -60,10 +51,19 @@
     #content {
       width: 100%;
       height: 100%;
-      padding: 12px 13px;
-      color: var(--content-color);
-      font-family: "CustomFont", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-      font-size: 13px;
+      padding: var(--space-preview-content-y) var(--space-preview-content-x);
+      color: var(--preview-content);
+      font-family: var(
+        --ui-font-family,
+        "CustomFont",
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        "PingFang SC",
+        "Microsoft YaHei",
+        sans-serif
+      );
+      font-size: var(--preview-font-size);
       line-height: 1.56;
       white-space: pre-wrap;
       word-break: break-word;
@@ -72,11 +72,11 @@
       text-overflow: initial;
     }
     #content::-webkit-scrollbar {
-      width: 6px;
+      width: var(--size-scrollbar);
     }
     #content::-webkit-scrollbar-thumb {
-      border-radius: 999px;
-      background: var(--scrollbar-thumb);
+      border-radius: var(--radius-pill);
+      background: var(--preview-scrollbar-thumb);
       border: 1px solid transparent;
       background-clip: padding-box;
     }
@@ -88,17 +88,17 @@
       <div id="content"></div>
     </div>
   </div>
+  <script src="/preview-presentation.js"></script>
   <script>
     const panel = document.getElementById('panel');
     const content = document.getElementById('content');
-    function setTheme(theme) {
-      document.body.dataset.theme = theme === 'dark' ? 'dark' : 'light';
-    }
-    function setSharpCorners(enabled) {
-      document.body.dataset.sharpCorners = enabled ? 'true' : 'false';
-    }
-    setTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-    setSharpCorners(false);
+    const root = document.documentElement;
+
+    applyPreviewPresentation(root, {
+      theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+      sharpCorners: false,
+      colorTheme: 'default',
+    });
 
     function clearPreview() {
       panel.classList.remove('visible');
@@ -110,21 +110,20 @@
       const { listen } = window.__TAURI__.event;
 
       listen('text-preview-update', (event) => {
-        const { text, align, theme, sharpCorners, fontFamily, fontSize } = event.payload || {};
-        setTheme(theme);
-        setSharpCorners(Boolean(sharpCorners));
-        document.body.dataset.align = align === 'right' ? 'right' : 'left';
-        if (fontFamily) {
-          content.style.fontFamily = fontFamily;
+        const payload = event.payload || {};
+        applyPreviewPresentation(root, payload);
+        document.body.dataset.align = payload.align === 'right' ? 'right' : 'left';
+        if (payload.fontFamily) {
+          content.style.fontFamily = payload.fontFamily;
         } else {
           content.style.removeProperty('font-family');
         }
-        if (fontSize && typeof fontSize === 'number') {
-          content.style.fontSize = fontSize + 'px';
+        if (payload.fontSize && typeof payload.fontSize === 'number') {
+          content.style.fontSize = payload.fontSize + 'px';
         } else {
           content.style.fontSize = '';
         }
-        content.textContent = typeof text === 'string' ? text : '';
+        content.textContent = typeof payload.text === 'string' ? payload.text : '';
         panel.classList.add('visible');
       });
 
@@ -139,9 +138,7 @@
       });
 
       listen('text-preview-theme', (event) => {
-        const payload = event?.payload || {};
-        if (payload.theme) setTheme(payload.theme);
-        if (payload.sharpCorners !== undefined) setSharpCorners(Boolean(payload.sharpCorners));
+        applyPreviewPresentation(root, event?.payload || {});
       });
     }
   </script>

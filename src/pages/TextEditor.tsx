@@ -108,7 +108,7 @@ export function TextEditor() {
       <WindowTitleBar
         icon={<Edit16Filled className="w-5 h-5 text-muted-foreground" />}
         title={t("textEditor.title")}
-        extra={hasChanges ? <span className="text-xs text-amber-500">{t("textEditor.unsaved")}</span> : undefined}
+        extra={hasChanges ? <span className="text-xs text-status-warning">{t("textEditor.unsaved")}</span> : undefined}
       />
 
       {/* Editor Area */}

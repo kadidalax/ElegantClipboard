@@ -85,23 +85,23 @@ export const FileDetailsDialog = ({
               "flex items-start gap-3 p-2 rounded-md border",
               file.exists
                 ? "bg-muted/30"
-                : "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900",
+                : "bg-destructive/10 border-destructive/30",
             )}
           >
             <div className="shrink-0 mt-0.5">
               {!file.exists ? (
-                <Warning16Regular className="h-4 w-4 text-red-500" />
+                <Warning16Regular className="h-4 w-4 text-destructive" />
               ) : file.isDir ? (
-                <Folder16Regular className="h-4 w-4 text-blue-500" />
+                <Folder16Regular className="h-4 w-4 text-primary" />
               ) : (
-                <Document16Regular className="h-4 w-4 text-blue-500" />
+                <Document16Regular className="h-4 w-4 text-primary" />
               )}
             </div>
             <div className="flex-1 min-w-0">
               <p
                 className={cn(
                   "text-sm font-medium truncate",
-                  !file.exists && "text-red-500",
+                  !file.exists && "text-destructive",
                 )}
               >
                 {file.name}
@@ -117,7 +117,7 @@ export const FileDetailsDialog = ({
         ))}
       </div>
       {fileListItems.some((f) => !f.exists) && (
-        <p className="text-xs text-red-500 mt-2">
+        <p className="text-xs text-destructive mt-2">
           {t("clipboard.filePartialInvalid")}
         </p>
       )}
@@ -200,7 +200,7 @@ export const ActionToolbar = ({
   const { t } = useTranslation();
   return (
   <div
-    className="absolute right-1 top-1 z-20 flex items-center gap-0.5 bg-background/95 rounded-md p-0.5 shadow border opacity-0 group-hover:opacity-100 transition-opacity"
+    className="absolute right-1 top-1 z-20 flex items-center gap-0.5 bg-background/95 rounded-md p-0.5 elevation-floating border opacity-0 group-hover:opacity-100 transition-opacity"
     data-drag-ignore="true"
   >
     <Tooltip>
@@ -219,7 +219,7 @@ export const ActionToolbar = ({
       <TooltipTrigger asChild>
         <Button variant="ghost" size="icon" onClick={onToggleFavorite} className="h-7 w-7">
           {item.is_favorite ? (
-            <Star16Filled className="w-3.5 h-3.5 text-yellow-500" />
+            <Star16Filled className="w-3.5 h-3.5 text-chart-4" />
           ) : (
             <Star16Regular className="w-3.5 h-3.5" />
           )}

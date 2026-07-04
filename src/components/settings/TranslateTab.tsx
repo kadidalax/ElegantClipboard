@@ -324,7 +324,7 @@ export function TranslateTab() {
                   {testing ? t("settings.translate.testing") : t("settings.translate.testConnection")}
                 </Button>
                 {testResult && (
-                  <span className={`text-xs ${testResult.ok ? "text-green-600 dark:text-green-400" : "text-destructive"}`}>
+                  <span className={`text-xs ${testResult.ok ? "text-status-success" : "text-destructive"}`}>
                     {testResult.msg}
                   </span>
                 )}

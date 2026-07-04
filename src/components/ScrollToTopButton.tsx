@@ -100,13 +100,13 @@ export function ScrollToTopButton({ visible, onScrollToTop }: ScrollToTopButtonP
       style={style}
       className={cn(
         "absolute z-10",
-        snapping ? "transition-all duration-300 ease-out" : "transition-opacity duration-200",
+        snapping ? "transition-all duration-300 ease-out" : "transition-surface",
         visible
           ? "opacity-100 pointer-events-auto"
           : "opacity-0 pointer-events-none",
       )}
     >
-      <div className="flex flex-col items-center gap-0.5 rounded-lg border bg-background/95 backdrop-blur-sm shadow-sm p-1">
+      <div className="flex flex-col items-center gap-0.5 rounded-lg border bg-background/95 backdrop-blur-sm elevation-control p-1">
         {/* 回到顶部 */}
         <button
           onClick={onScrollToTop}

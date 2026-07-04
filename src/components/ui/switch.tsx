@@ -15,8 +15,8 @@ const Switch = React.forwardRef<
   <SwitchPrimitives.Root
     className={cn(
       "group/switch peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full",
-      "border-2 border-transparent shadow-sm",
-      "transition-all duration-200",
+      "border-2 border-transparent elevation-control",
+      "transition-surface",
       "disabled:cursor-not-allowed disabled:opacity-50",
       "data-[state=checked]:bg-primary data-[state=unchecked]:bg-muted",
       className
@@ -27,11 +27,11 @@ const Switch = React.forwardRef<
     <SwitchPrimitives.Thumb
       className={cn(
         "pointer-events-none relative flex items-center justify-center",
-        "h-5 w-5 rounded-full bg-background shadow-sm",
-        "ring-0 transition-all duration-200",
+        "h-5 w-5 rounded-full bg-background elevation-control",
+        "ring-0 transition-surface",
         "data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0",
         // 按压反馈：按下缩小，释放恢复
-        "group-active/switch:scale-90 group-active/switch:shadow-sm"
+        "group-active/switch:scale-90 group-active/switch:elevation-control"
       )}
     >
       {showIndicator && (
