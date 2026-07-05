@@ -23,6 +23,9 @@ import { isUISettingsInitialized, useUISettings, whenUISettingsReady } from "@/s
 
 const THEME_CLASSES = ["theme-emerald", "theme-cyan", "theme-system"];
 
+/** 系统强调色 IPC 返回前使用的占位值，避免首屏无主题 class 闪白 */
+export const FALLBACK_SYSTEM_ACCENT = "210 65% 50%";
+
 let _initialized = false;
 let _accentColor: string | null = null;
 let _readyResolved = false;
@@ -124,6 +127,14 @@ function applyFontSettings() {
   }
 }
 
+function applySystemAccent(root: HTMLElement) {
+  const parts = (_accentColor ?? FALLBACK_SYSTEM_ACCENT).split(" ");
+  root.classList.add("theme-system");
+  root.style.setProperty("--system-accent-h", parts[0]);
+  root.style.setProperty("--system-accent-s", parts[1] || "65%");
+  root.style.setProperty("--system-accent-l", parts[2] || "50%");
+}
+
 function apply() {
   const { colorTheme } = useUISettings.getState();
   const root = document.documentElement;
@@ -133,13 +144,9 @@ function apply() {
   root.style.removeProperty("--system-accent-s");
   root.style.removeProperty("--system-accent-l");
 
-  if (colorTheme === "system" && _accentColor) {
-    const parts = _accentColor.split(" ");
-    root.classList.add("theme-system");
-    root.style.setProperty("--system-accent-h", parts[0]);
-    root.style.setProperty("--system-accent-s", parts[1] || "65%");
-    root.style.setProperty("--system-accent-l", parts[2] || "50%");
-  } else if (colorTheme !== "default" && colorTheme !== "system") {
+  if (colorTheme === "system") {
+    applySystemAccent(root);
+  } else if (colorTheme !== "default") {
     root.classList.add(`theme-${colorTheme}`);
   }
 }
@@ -194,23 +201,19 @@ export function initTheme(): Promise<void> {
       syncPreviewPresentation();
     }
     if (state.colorTheme !== prev.colorTheme) {
+      apply();
+      _lastPreviewPresentation = getPreviewPresentation();
+      syncPreviewPresentation();
       if (state.colorTheme === "system" && !_accentColor) {
-        // 切换到系统主题但还未获取强调色
         invoke<string | null>("get_system_accent_color").then((color) => {
           _accentColor = color;
           apply();
+          notifyAccentSubscribers();
           _lastPreviewPresentation = getPreviewPresentation();
           syncPreviewPresentation();
         }).catch((error) => {
           logError("Failed to fetch system accent color on theme switch:", error);
-          apply();
-          _lastPreviewPresentation = getPreviewPresentation();
-          syncPreviewPresentation();
         });
-      } else {
-        apply();
-        _lastPreviewPresentation = getPreviewPresentation();
-        syncPreviewPresentation();
       }
     }
     if (state.windowEffect !== prev.windowEffect) {

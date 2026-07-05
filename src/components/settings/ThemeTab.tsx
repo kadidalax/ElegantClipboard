@@ -11,7 +11,11 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { useTranslation } from "@/i18n";
 import { logError } from "@/lib/logger";
-import { getAccentColor, subscribeAccentColor } from "@/lib/theme-applier";
+import {
+  FALLBACK_SYSTEM_ACCENT,
+  getAccentColor,
+  subscribeAccentColor,
+} from "@/lib/theme-applier";
 import { cn } from "@/lib/utils";
 import { useUISettings, ColorTheme, WindowEffect } from "@/stores/ui-settings";
 
@@ -32,11 +36,15 @@ function ThemeColorSwatch({
   systemAccent: string | null;
 }) {
   const themeClass =
-    themeId === "default" ? undefined : themeId === "system" ? "theme-system" : `theme-${themeId}`;
+    themeId === "default"
+      ? "theme-swatch-default"
+      : themeId === "system"
+        ? "theme-system"
+        : `theme-${themeId}`;
   const accentStyle =
     themeId === "system"
       ? (() => {
-          const parts = (systemAccent ?? "210 65% 50%").split(" ");
+          const parts = (systemAccent ?? FALLBACK_SYSTEM_ACCENT).split(" ");
           return {
             "--system-accent-h": parts[0],
             "--system-accent-s": parts[1] || "65%",

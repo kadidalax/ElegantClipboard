@@ -47,19 +47,23 @@ function deferSecondaryInit() {
   })();
 }
 
-void initTheme();
+void (async () => {
+  try {
+    await Promise.all([initLocale(), initUISettingsStore()]);
+    await initTheme();
+  } catch (error) {
+    console.error("Settings bootstrap init failed:", error);
+    await initTheme();
+  }
 
-void Promise.all([initLocale(), initUISettingsStore()]).catch((error) => {
-  console.error("Settings bootstrap init failed:", error);
-});
+  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    <React.StrictMode>
+      <TooltipProvider delayDuration={300}>
+        <Settings />
+        <Toaster />
+      </TooltipProvider>
+    </React.StrictMode>,
+  );
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    <TooltipProvider delayDuration={300}>
-      <Settings />
-      <Toaster />
-    </TooltipProvider>
-  </React.StrictMode>,
-);
-
-deferSecondaryInit();
+  deferSecondaryInit();
+})();

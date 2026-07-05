@@ -221,6 +221,18 @@
 
 /* ========== Theme Color Variants ========== */
 
+/* 设置页主题预览色块：与文档根主题隔离，避免继承当前激活主题 */
+.theme-swatch-default {
+    --color-primary: hsl(222.2 47.4% 11.2%);
+    --color-secondary: hsl(210 40% 96.1%);
+}
+
+.dark .theme-swatch-default,
+[data-theme="dark"] .theme-swatch-default {
+    --color-primary: hsl(210 15% 95%);
+    --color-secondary: hsl(220 5% 23%);
+}
+
 .theme-emerald {
     --color-primary: hsl(158 64% 22%);
     --color-primary-foreground: hsl(0 0% 100%);
