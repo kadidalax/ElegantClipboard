@@ -3,8 +3,9 @@ pub mod tray_i18n;
 use crate::commands::AppState;
 use parking_lot::Mutex;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{
-    AppHandle, Manager,
+    AppHandle, Emitter, Manager,
     image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -19,9 +20,13 @@ struct TrayMenuItems {
     pause_item: MenuItem<tauri::Wry>,
     shortcut_item: MenuItem<tauri::Wry>,
     settings_item: MenuItem<tauri::Wry>,
+    check_update_item: MenuItem<tauri::Wry>,
     restart_item: MenuItem<tauri::Wry>,
     quit_item: MenuItem<tauri::Wry>,
 }
+
+/// 设置窗口尚未就绪时，由前端挂载后通过 command 取走
+static PENDING_UPDATE_DIALOG: AtomicBool = AtomicBool::new(false);
 
 /// 全局托盘菜单项 + 当前语言，用于语言切换时更新菜单文本
 static TRAY_STATE: Mutex<Option<(TrayMenuItems, String)>> = Mutex::new(None);
@@ -61,6 +66,8 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     )?;
     let separator1 = PredefinedMenuItem::separator(app)?;
     let settings_item = MenuItem::with_id(app, "settings", &i18n.settings, true, None::<&str>)?;
+    let check_update_item =
+        MenuItem::with_id(app, "check_update", &i18n.check_update, true, None::<&str>)?;
     let restart_item = MenuItem::with_id(app, "restart", &i18n.restart, true, None::<&str>)?;
     let separator2 = PredefinedMenuItem::separator(app)?;
     let quit_item = MenuItem::with_id(app, "quit", &i18n.quit, true, None::<&str>)?;
@@ -72,6 +79,7 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
             &shortcut_item,
             &separator1,
             &settings_item,
+            &check_update_item,
             &restart_item,
             &separator2,
             &quit_item,
@@ -84,6 +92,7 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
             pause_item: pause_item.clone(),
             shortcut_item: shortcut_item.clone(),
             settings_item: settings_item.clone(),
+            check_update_item: check_update_item.clone(),
             restart_item: restart_item.clone(),
             quit_item: quit_item.clone(),
         },
@@ -198,9 +207,26 @@ pub(crate) fn update_tray_language(_app: &AppHandle, locale: &str) {
     let _ = items.pause_item.set_text(&i18n.pause_monitor);
     let _ = items.shortcut_item.set_text(&i18n.disable_shortcuts);
     let _ = items.settings_item.set_text(&i18n.settings);
+    let _ = items.check_update_item.set_text(&i18n.check_update);
     let _ = items.restart_item.set_text(&i18n.restart);
     let _ = items.quit_item.set_text(&i18n.quit);
     info!("Tray menu language updated to: {locale}");
+}
+
+/// 取走「待打开更新对话框」标记（设置窗口首次挂载时调用）
+pub(crate) fn take_pending_update_dialog() -> bool {
+    PENDING_UPDATE_DIALOG.swap(false, Ordering::SeqCst)
+}
+
+/// 打开设置窗口并触发更新检查对话框
+pub(crate) fn open_update_dialog(app: &AppHandle) {
+    let settings_exists = app.get_webview_window("settings").is_some();
+    let _ = open_settings_window(app);
+    if settings_exists {
+        let _ = app.emit("open-update-dialog", ());
+    } else {
+        PENDING_UPDATE_DIALOG.store(true, Ordering::SeqCst);
+    }
 }
 
 /// 处理托盘菜单事件
@@ -208,6 +234,9 @@ fn handle_menu_event(app: &AppHandle, id: &str) {
     match id {
         "settings" => {
             let _ = open_settings_window(app);
+        }
+        "check_update" => {
+            open_update_dialog(app);
         }
         "restart" => {
             crate::admin_launch::perform_restart(app);

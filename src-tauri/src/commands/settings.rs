@@ -97,6 +97,12 @@ pub async fn update_tray_language(app: tauri::AppHandle, locale: String) -> Resu
     Ok(())
 }
 
+/// 取走托盘触发的「待打开更新对话框」标记
+#[tauri::command]
+pub fn take_pending_update_dialog() -> bool {
+    crate::tray::take_pending_update_dialog()
+}
+
 /// 获取所有设置
 #[tauri::command]
 pub async fn get_all_settings(

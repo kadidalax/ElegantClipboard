@@ -14,6 +14,7 @@ import {
   Translate16Regular,
 } from "@fluentui/react-icons";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AboutTab } from "@/components/settings/AboutTab";
 import { AppFilterTab } from "@/components/settings/AppFilterTab";
@@ -219,6 +220,18 @@ export function Settings() {
   const [appVersion, setAppVersion] = useState("0.0.0");
   const [buildTime, setBuildTime] = useState("—");
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
+
+  useEffect(() => {
+    void invoke<boolean>("take_pending_update_dialog").then((pending) => {
+      if (pending) setUpdateDialogOpen(true);
+    });
+    const unlistenOpen = listen("open-update-dialog", () => setUpdateDialogOpen(true));
+    const unlistenAuto = listen("auto-update-available", () => setUpdateDialogOpen(true));
+    return () => {
+      void unlistenOpen.then((fn) => fn());
+      void unlistenAuto.then((fn) => fn());
+    };
+  }, []);
 
   useEffect(() => {
     invoke<string>("get_app_version").then(setAppVersion).catch(console.error);
