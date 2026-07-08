@@ -24,6 +24,7 @@ beforeEach(() => {
     keyboardNavigation: false,
     searchAutoFocus: false,
     searchAutoClear: true,
+    skipClearConfirm: false,
     darkMode: "auto",
     cardDensity: "standard",
     listLayout: "list",
@@ -90,6 +91,12 @@ describe("ui-settings store", () => {
     it("setHoverPreviewDelay updates number", () => {
       useUISettings.getState().setHoverPreviewDelay(300);
       expect(useUISettings.getState().hoverPreviewDelay).toBe(300);
+    });
+
+    it("setSkipClearConfirm toggles boolean", () => {
+      expect(useUISettings.getState().skipClearConfirm).toBe(false);
+      useUISettings.getState().setSkipClearConfirm(true);
+      expect(useUISettings.getState().skipClearConfirm).toBe(true);
     });
   });
 

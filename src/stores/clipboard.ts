@@ -71,7 +71,8 @@ interface ClipboardState {
   copyToClipboard: (id: number) => Promise<void>;
   pasteContent: (id: number) => Promise<void>;
   pasteAsPlainText: (id: number) => Promise<void>;
-  clearHistory: (contentType?: string | null) => Promise<void>;
+  /** 清空当前分组历史，返回删除条数；失败返回 null */
+  clearHistory: (contentType?: string | null) => Promise<number | null>;
   refresh: () => Promise<void>;
   /** 剪贴板捕获后增量更新列表（单条 IPC） */
   applyCaptureUpdate: (id: number) => Promise<void>;
@@ -243,13 +244,15 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
   // contentType=null 时后端 Option<String> 为 None，清除所有类型（正确行为）
   clearHistory: async (contentType = null) => {
     try {
-      await invoke<number>("clear_history", {
+      const deleted = await invoke<number>("clear_history", {
         groupId: get().selectedGroupId,
         contentType,
       });
       await get().refresh();
+      return deleted;
     } catch (error) {
       logError("Failed to clear history:", error);
+      return null;
     }
   },
 

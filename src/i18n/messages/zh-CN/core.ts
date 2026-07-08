@@ -33,6 +33,8 @@ export const core = {
     clearHistoryConfirmText: "确定要清空当前分组内所有文本历史记录吗？此操作不可撤销。",
     clearHistoryConfirmOther: "确定要清空当前分组内所有其它历史记录吗？此操作不可撤销。",
     clearHistoryFavoritesBlocked: "收藏视图下不支持清空操作。收藏项受保护，请在设置中使用「删除所有数据」进行全量删除。",
+    clearHistoryDontAskAgain: "不再询问，点击按钮直接清空",
+    clearHistoryDone: "已清空 {{count}} 条记录",
   },
   toolbar: {
     clearHistory: "清空历史",
@@ -176,6 +178,8 @@ export const core = {
       pasteCloseWindowDesc: "非锁定模式下，粘贴后自动关闭窗口",
       pasteMoveToTop: "粘贴后置顶",
       pasteMoveToTopDesc: "粘贴后自动移到列表首位（固定置顶下方）",
+      skipClearConfirm: "清空历史免确认",
+      skipClearConfirmDesc: "点击工具栏清空按钮时直接清空，不弹出确认对话框",
       logTitle: "日志",
       logDesc: "调试与故障排查",
       logToFile: "保存日志到文件",

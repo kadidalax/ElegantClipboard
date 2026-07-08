@@ -44,6 +44,8 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
   const setSearchAutoFocus = useUISettings((s) => s.setSearchAutoFocus);
   const searchAutoClear = useUISettings((s) => s.searchAutoClear);
   const setSearchAutoClear = useUISettings((s) => s.setSearchAutoClear);
+  const skipClearConfirm = useUISettings((s) => s.skipClearConfirm);
+  const setSkipClearConfirm = useUISettings((s) => s.setSkipClearConfirm);
   const {
     pasteCloseWindow, setPasteCloseWindow,
     pasteMoveToTop, setPasteMoveToTop,
@@ -335,6 +337,15 @@ export function GeneralTab({ settings, onSettingsChange }: GeneralTabProps) {
                 </p>
               </div>
               <Switch checked={pasteMoveToTop} onCheckedChange={setPasteMoveToTop} />
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label className="text-xs">{t("settings.general.skipClearConfirm")}</Label>
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.general.skipClearConfirmDesc")}
+                </p>
+              </div>
+              <Switch checked={skipClearConfirm} onCheckedChange={setSkipClearConfirm} />
             </div>
           </div>
         </SettingsCard>

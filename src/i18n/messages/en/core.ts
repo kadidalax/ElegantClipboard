@@ -33,6 +33,8 @@ export const core = {
     clearHistoryConfirmText: "Clear all text history in the current group? This cannot be undone.",
     clearHistoryConfirmOther: "Clear all other history in the current group? This cannot be undone.",
     clearHistoryFavoritesBlocked: "Clear is not available in Favorites view. Use Delete all data in Settings for a full wipe.",
+    clearHistoryDontAskAgain: "Don't ask again, clear immediately on click",
+    clearHistoryDone: "Cleared {{count}} items",
   },
   toolbar: {
     clearHistory: "Clear history",
@@ -176,6 +178,8 @@ export const core = {
       pasteCloseWindowDesc: "Hide the window after pasting when not pinned",
       pasteMoveToTop: "Move to top after paste",
       pasteMoveToTopDesc: "Move pasted item below pinned items",
+      skipClearConfirm: "Clear history without confirmation",
+      skipClearConfirmDesc: "Clear immediately when clicking the toolbar clear button, without a confirmation dialog",
       logTitle: "Logs",
       logDesc: "Debugging and troubleshooting",
       logToFile: "Save logs to file",

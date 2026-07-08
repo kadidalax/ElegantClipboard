@@ -33,6 +33,8 @@ export const core = {
     clearHistoryConfirmText: "確定要清空目前分組內所有文字歷史記錄嗎？此操作不可撤銷。",
     clearHistoryConfirmOther: "確定要清空目前分組內所有其他歷史記錄嗎？此操作不可撤銷。",
     clearHistoryFavoritesBlocked: "收藏檢視下不支援清空操作。收藏項受保護，請在設定中使用「刪除所有資料」進行全量刪除。",
+    clearHistoryDontAskAgain: "不再詢問，點擊按鈕直接清空",
+    clearHistoryDone: "已清空 {{count}} 條記錄",
   },
   toolbar: {
     clearHistory: "清空歷史",
@@ -176,6 +178,8 @@ export const core = {
       pasteCloseWindowDesc: "非鎖定模式下，貼上後自動關閉視窗",
       pasteMoveToTop: "貼上後置頂",
       pasteMoveToTopDesc: "貼上後自動移到清單首位（固定置頂下方）",
+      skipClearConfirm: "清空歷史免確認",
+      skipClearConfirmDesc: "點擊工具列清空按鈕時直接清空，不彈出確認對話框",
       logTitle: "日誌",
       logDesc: "除錯與故障排除",
       logToFile: "儲存日誌到檔案",

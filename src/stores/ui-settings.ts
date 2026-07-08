@@ -40,6 +40,7 @@ interface UISettingsData {
   keyboardNavigation: boolean;
   searchAutoFocus: boolean;
   searchAutoClear: boolean;
+  skipClearConfirm: boolean;
   darkMode: DarkMode;
   cardDensity: CardDensity;
   listLayout: ListLayout;
@@ -86,6 +87,7 @@ const DEFAULT_UI_SETTINGS: UISettingsData = {
   keyboardNavigation: false,
   searchAutoFocus: false,
   searchAutoClear: true,
+  skipClearConfirm: false,
   darkMode: "auto",
   cardDensity: "standard",
   listLayout: "list",
@@ -132,6 +134,7 @@ interface UISettings extends UISettingsData {
   setKeyboardNavigation: (enabled: boolean) => void;
   setSearchAutoFocus: (enabled: boolean) => void;
   setSearchAutoClear: (enabled: boolean) => void;
+  setSkipClearConfirm: (enabled: boolean) => void;
   setDarkMode: (mode: DarkMode) => void;
   setCardDensity: (density: CardDensity) => void;
   setListLayout: (layout: ListLayout) => void;
@@ -278,6 +281,7 @@ export const useUISettings = create<UISettings>()((set, get) => {
     setAutoResetState: makeSetter("autoResetState"),
     setSearchAutoFocus: makeSetter("searchAutoFocus"),
     setSearchAutoClear: makeSetter("searchAutoClear"),
+    setSkipClearConfirm: makeSetter("skipClearConfirm"),
     setDarkMode: makeSetter("darkMode"),
     setCardDensity: makeSetter("cardDensity"),
     setListLayout: makeSetter("listLayout"),

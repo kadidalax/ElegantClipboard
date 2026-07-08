@@ -120,6 +120,32 @@ describe("clipboard store", () => {
     });
   });
 
+  describe("clearHistory", () => {
+    it("returns deleted count from backend and refreshes", async () => {
+      const { invoke } = await import("@tauri-apps/api/core");
+      vi.mocked(invoke)
+        .mockResolvedValueOnce(5) // clear_history
+        .mockResolvedValueOnce([]); // refresh -> get_clipboard_items
+
+      const deleted = await useClipboardStore.getState().clearHistory(null);
+
+      expect(deleted).toBe(5);
+      expect(invoke).toHaveBeenCalledWith("clear_history", {
+        groupId: null,
+        contentType: null,
+      });
+    });
+
+    it("returns null on failure", async () => {
+      const { invoke } = await import("@tauri-apps/api/core");
+      vi.mocked(invoke).mockRejectedValueOnce(new Error("db error"));
+
+      const deleted = await useClipboardStore.getState().clearHistory(null);
+
+      expect(deleted).toBeNull();
+    });
+  });
+
   describe("batch selection", () => {
     it("toggleSelect adds item to selection", () => {
       const mockItems: ClipboardItem[] = [

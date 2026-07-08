@@ -29,6 +29,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { showToast } from "@/components/ui/toast";
 import {
   Tooltip,
   TooltipContent,
@@ -63,6 +64,7 @@ function App() {
   const { t, locale } = useTranslation();
   const categoryGroups = useMemo(() => getGroups(), [locale]);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [clearDontAskAgain, setClearDontAskAgain] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
   // 分组对话框状态
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -98,6 +100,8 @@ function App() {
   const autoResetState = useUISettings((s) => s.autoResetState);
   const searchAutoFocus = useUISettings((s) => s.searchAutoFocus);
   const searchAutoClear = useUISettings((s) => s.searchAutoClear);
+  const skipClearConfirm = useUISettings((s) => s.skipClearConfirm);
+  const setSkipClearConfirm = useUISettings((s) => s.setSkipClearConfirm);
   const cardDensity = useUISettings((s) => s.cardDensity);
   const showCategoryFilter = useUISettings((s) => s.showCategoryFilter);
   const toolbarButtons = useUISettings((s) => s.toolbarButtons);
@@ -381,13 +385,37 @@ function App() {
     return t("app.clearHistoryConfirmAll");
   }, [selectedGroup, t]);
 
+  const performClearHistory = async () => {
+    const deleted = await clearHistory(selectedGroup);
+    if (deleted !== null) {
+      showToast(t("app.clearHistoryDone", { count: deleted }), "success");
+    }
+  };
+
   const handleClearHistory = async () => {
     if (selectedGroup === "__favorites__") {
       setClearDialogOpen(false);
       return;
     }
-    await clearHistory(selectedGroup);
+    if (clearDontAskAgain) {
+      setSkipClearConfirm(true);
+    }
     setClearDialogOpen(false);
+    await performClearHistory();
+  };
+
+  // 免确认模式下点击工具栏按钮直接清空；收藏视图仍拦截
+  const requestClearHistory = () => {
+    if (!skipClearConfirm) {
+      setClearDontAskAgain(false);
+      setClearDialogOpen(true);
+      return;
+    }
+    if (selectedGroup === "__favorites__") {
+      showToast(t("app.clearHistoryFavoritesBlocked"), "info");
+      return;
+    }
+    void performClearHistory();
   };
 
   const openSettings = async () => {
@@ -440,7 +468,7 @@ function App() {
           <Tooltip key={id}>
             <TooltipTrigger asChild>
               <button
-                onClick={() => setClearDialogOpen(true)}
+                onClick={requestClearHistory}
                 className="interactive-surface w-7 h-7 p-1 flex items-center justify-center text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-md transition-surface"
               >
                 <Delete16Regular className="w-4 h-4" />
@@ -536,7 +564,7 @@ function App() {
       default:
         return null;
     }
-  }, [isPinned, openSettings, togglePinned, batchMode, setBatchMode, webdavSyncing, t]);
+  }, [isPinned, openSettings, togglePinned, batchMode, setBatchMode, webdavSyncing, requestClearHistory, t]);
 
   return (
     <div className={cn("h-screen flex flex-col bg-page-shell overflow-hidden", windowAnimation && windowVisible === true && "window-enter", windowAnimation && windowVisible === false && "window-hidden")}>
@@ -782,6 +810,17 @@ function App() {
               {clearScopeText}
             </DialogDescription>
           </DialogHeader>
+          {selectedGroup !== "__favorites__" && (
+            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none w-fit">
+              <input
+                type="checkbox"
+                checked={clearDontAskAgain}
+                onChange={(e) => setClearDontAskAgain(e.target.checked)}
+                className="h-3.5 w-3.5 accent-primary cursor-pointer"
+              />
+              {t("app.clearHistoryDontAskAgain")}
+            </label>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setClearDialogOpen(false)}>
               {t("common.cancel")}
