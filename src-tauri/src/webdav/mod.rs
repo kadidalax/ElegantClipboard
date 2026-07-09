@@ -86,6 +86,9 @@ pub struct MediaEntry {
     pub source_path: Option<String>,
 }
 
+/// 后端返回给前端的结构化错误码（由前端 i18n 解析）
+pub const SYNC_SESSION_BUSY: &str = "WEBDAV:SYNC_IN_PROGRESS";
+
 /// 从任意来源设备的路径中提取文件名（兼容 Windows / Unix 分隔符）
 fn file_name_from_any_path(path: &str) -> Option<String> {
     let name = path
@@ -93,10 +96,19 @@ fn file_name_from_any_path(path: &str) -> Option<String> {
         .rsplit(['/', '\\'])
         .next()?
         .trim();
-    if name.is_empty() || name == ".." || name == "." {
+    safe_media_file_name(name)
+}
+
+/// 校验媒体文件名，拒绝路径分隔符与 `..` 组件
+fn safe_media_file_name(name: &str) -> Option<String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() || trimmed == "." || trimmed == ".." {
         return None;
     }
-    Some(name.to_string())
+    if trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains("..") {
+        return None;
+    }
+    Some(trimmed.to_string())
 }
 
 /// 计算媒体条目在本机数据目录中的落地路径。
@@ -129,7 +141,7 @@ pub fn local_media_target(entry: &MediaEntry, data_dir: &Path) -> Option<PathBuf
             let name = if entry.file_name.is_empty() {
                 file_name_from_any_path(&entry.local_path)?
             } else {
-                entry.file_name.clone()
+                safe_media_file_name(&entry.file_name)?
             };
             let prefix = &entry.hash[..16.min(entry.hash.len())];
             Some(
@@ -1272,6 +1284,46 @@ impl Drop for SyncSessionGuard {
     }
 }
 
+/// 后台媒体线程持有，延长 SyncSessionGuard 生命周期直至全部完成
+struct SyncSessionHolder {
+    _guard: SyncSessionGuard,
+}
+
+fn finish_auto_media_worker(
+    pending: &std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    _session: Option<std::sync::Arc<SyncSessionHolder>>,
+) {
+    if pending.fetch_sub(1, std::sync::atomic::Ordering::Relaxed) == 1 {
+        MEDIA_SYNC_RUNNING.store(false, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// 写入最近同步时间（精确到秒）
+pub fn record_last_sync_time(db: &crate::database::Database) -> Result<String, String> {
+    let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    crate::database::SettingsRepository::new(db)
+        .set("webdav_last_sync_time", &now)
+        .map_err(|e| format!("写入同步时间失败: {e}"))?;
+    Ok(now)
+}
+
+/// 通知前端刷新「上次同步」显示
+pub fn emit_last_sync_updated(app: &tauri::AppHandle, time: &str) -> Result<(), String> {
+    use tauri::Emitter;
+    app.emit("webdav-last-sync-updated", time.to_string())
+        .map_err(|e| format!("推送同步时间事件失败: {e}"))
+}
+
+/// 写入并通知最近同步时间
+pub fn record_and_notify_last_sync(
+    db: &crate::database::Database,
+    app: &tauri::AppHandle,
+) -> Result<String, String> {
+    let time = record_last_sync_time(db)?;
+    emit_last_sync_updated(app, &time)?;
+    Ok(time)
+}
+
 /// 尝试开始同步会话；已有会话进行中时返回错误。
 pub fn try_begin_sync_session() -> Result<SyncSessionGuard, String> {
     if SYNC_SESSION_ACTIVE
@@ -1283,7 +1335,7 @@ pub fn try_begin_sync_session() -> Result<SyncSessionGuard, String> {
         )
         .is_err()
     {
-        return Err("同步正在进行中，请稍后再试".to_string());
+        return Err(SYNC_SESSION_BUSY.to_string());
     }
     Ok(SyncSessionGuard)
 }
@@ -1296,7 +1348,11 @@ static MEDIA_SYNC_RUNNING: std::sync::atomic::AtomicBool =
 static AUTO_SYNC_STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// 启动后台自动同步任务（仅在插件启用时调用）
-pub fn start_auto_sync_task(db: crate::database::Database, data_dir: std::path::PathBuf) {
+pub fn start_auto_sync_task(
+    db: crate::database::Database,
+    data_dir: std::path::PathBuf,
+    app: tauri::AppHandle,
+) {
     if AUTO_SYNC_STARTED.swap(true, std::sync::atomic::Ordering::SeqCst) {
         return;
     }
@@ -1331,7 +1387,7 @@ pub fn start_auto_sync_task(db: crate::database::Database, data_dir: std::path::
 
                     if let Some((config, options)) = load_config_and_options(&db) {
                         match try_begin_sync_session() {
-                            Ok(_guard) => {
+                            Ok(guard) => {
                                 info!("WebDAV 轻量同步: 开始上传");
                                 match export_sync_data(&db, &data_dir, &options) {
                                     Ok(zip_data) => {
@@ -1343,235 +1399,279 @@ pub fn start_auto_sync_task(db: crate::database::Database, data_dir: std::path::
                                         ) {
                                             info!("WebDAV 轻量同步上传失败: {}", e);
                                         } else {
-                                            let now = chrono::Local::now()
-                                                .format("%Y-%m-%d %H:%M:%S")
-                                                .to_string();
-                                            let _ =
-                                                settings_repo.set("webdav_last_sync_time", &now);
-                                            info!("WebDAV 轻量同步: 上传完成");
+                                            match record_and_notify_last_sync(&db, &app) {
+                                                Ok(_) => info!("WebDAV 轻量同步: 上传完成"),
+                                                Err(e) => {
+                                                    warn!(
+                                                        "WebDAV 轻量同步: 记录同步时间失败: {}",
+                                                        e
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                     Err(e) => info!("WebDAV 轻量同步导出失败: {}", e),
                                 }
-                            }
-                            Err(e) => info!("WebDAV 轻量同步: 跳过（{}）", e),
-                        }
 
-                        let need_media = (options.sync_image || options.sync_files)
-                            && cycle_count.is_multiple_of(3);
-                        if need_media
-                            && !MEDIA_SYNC_RUNNING.load(std::sync::atomic::Ordering::Relaxed)
-                        {
-                            MEDIA_SYNC_RUNNING.store(true, std::sync::atomic::Ordering::Relaxed);
+                                let need_media = (options.sync_image || options.sync_files)
+                                    && cycle_count.is_multiple_of(3);
+                                if need_media
+                                    && !MEDIA_SYNC_RUNNING
+                                        .load(std::sync::atomic::Ordering::Relaxed)
+                                {
+                                    MEDIA_SYNC_RUNNING
+                                        .store(true, std::sync::atomic::Ordering::Relaxed);
 
-                            let device_id = get_or_create_device_id(&db);
-                            let local_items = query_sync_items(&db, &options).unwrap_or_default();
-                            let local_map =
-                                build_media_map(&local_items, &data_dir, &options, &device_id);
+                                    let device_id = get_or_create_device_id(&db);
+                                    let local_items =
+                                        query_sync_items(&db, &options).unwrap_or_default();
+                                    let local_map = build_media_map(
+                                        &local_items,
+                                        &data_dir,
+                                        &options,
+                                        &device_id,
+                                    );
 
-                            let merged_map = if local_map.is_empty() {
-                                let map = download_media_map(&config).unwrap_or_default();
-                                let _ = cleanup_orphaned_remote_media(&config, &map);
-                                map
-                            } else {
-                                match upload_media_map(&config, &local_map, &device_id) {
-                                    Ok(map) => {
+                                    let merged_map = if local_map.is_empty() {
+                                        let map = download_media_map(&config).unwrap_or_default();
                                         let _ = cleanup_orphaned_remote_media(&config, &map);
                                         map
-                                    }
-                                    Err(e) => {
-                                        info!("上传 media map 失败，跳过清理: {}", e);
-                                        Vec::new()
-                                    }
-                                }
-                            };
-
-                            let local_images: Vec<MediaEntry> = local_map
-                                .iter()
-                                .filter(|e| e.media_type == "image")
-                                .cloned()
-                                .collect();
-                            let local_files: Vec<MediaEntry> = local_map
-                                .iter()
-                                .filter(|e| e.media_type == "file")
-                                .cloned()
-                                .collect();
-                            let local_icons: Vec<MediaEntry> = local_map
-                                .iter()
-                                .filter(|e| e.media_type == "icon")
-                                .cloned()
-                                .collect();
-
-                            // 先自愈库中失效的媒体路径，再计算需要下载的条目
-                            let _ = reconcile_local_media(&db, &merged_map, &data_dir);
-                            let needed = plan_media_downloads(&db, &merged_map, &data_dir);
-                            let dl_images: Vec<MediaEntry> = needed
-                                .iter()
-                                .filter(|e| e.media_type == "image")
-                                .cloned()
-                                .collect();
-                            let dl_icons: Vec<MediaEntry> = needed
-                                .iter()
-                                .filter(|e| e.media_type == "icon")
-                                .cloned()
-                                .collect();
-                            let dl_files: Vec<MediaEntry> = needed
-                                .into_iter()
-                                .filter(|e| e.media_type == "file")
-                                .collect();
-
-                            let pending =
-                                std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-
-                            if options.sync_image
-                                && (!local_images.is_empty() || !dl_images.is_empty())
-                            {
-                                pending.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                let cfg = config.clone();
-                                let dir = data_dir.clone();
-                                let cnt = pending.clone();
-                                match std::thread::Builder::new()
-                                    .name("webdav-sync-images".into())
-                                    .spawn(move || {
-                                        if !local_images.is_empty() {
-                                            match upload_media_files(&cfg, &local_images, &dir) {
-                                                Ok((u, s, _)) => {
-                                                    info!("图片上传: {} 新, {} 跳过", u, s);
-                                                }
-                                                Err(e) => info!("图片上传失败: {}", e),
+                                    } else {
+                                        match upload_media_map(&config, &local_map, &device_id) {
+                                            Ok(map) => {
+                                                let _ =
+                                                    cleanup_orphaned_remote_media(&config, &map);
+                                                map
+                                            }
+                                            Err(e) => {
+                                                info!("上传 media map 失败，跳过清理: {}", e);
+                                                Vec::new()
                                             }
                                         }
-                                        if !dl_images.is_empty() {
-                                            match download_missing_media(&cfg, &dl_images, &dir) {
-                                                Ok(n) => {
-                                                    if n > 0 {
-                                                        info!("图片下载: {} 个", n);
+                                    };
+
+                                    let local_images: Vec<MediaEntry> = local_map
+                                        .iter()
+                                        .filter(|e| e.media_type == "image")
+                                        .cloned()
+                                        .collect();
+                                    let local_files: Vec<MediaEntry> = local_map
+                                        .iter()
+                                        .filter(|e| e.media_type == "file")
+                                        .cloned()
+                                        .collect();
+                                    let local_icons: Vec<MediaEntry> = local_map
+                                        .iter()
+                                        .filter(|e| e.media_type == "icon")
+                                        .cloned()
+                                        .collect();
+
+                                    let _ = reconcile_local_media(&db, &merged_map, &data_dir);
+                                    let needed = plan_media_downloads(&db, &merged_map, &data_dir);
+                                    let dl_images: Vec<MediaEntry> = needed
+                                        .iter()
+                                        .filter(|e| e.media_type == "image")
+                                        .cloned()
+                                        .collect();
+                                    let dl_icons: Vec<MediaEntry> = needed
+                                        .iter()
+                                        .filter(|e| e.media_type == "icon")
+                                        .cloned()
+                                        .collect();
+                                    let dl_files: Vec<MediaEntry> = needed
+                                        .into_iter()
+                                        .filter(|e| e.media_type == "file")
+                                        .collect();
+
+                                    let pending =
+                                        std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+
+                                    if options.sync_image
+                                        && (!local_images.is_empty() || !dl_images.is_empty())
+                                    {
+                                        pending.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                    }
+                                    if options.sync_files
+                                        && (!local_files.is_empty() || !dl_files.is_empty())
+                                    {
+                                        pending.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                    }
+                                    if !local_icons.is_empty() || !dl_icons.is_empty() {
+                                        pending.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                    }
+
+                                    let session =
+                                        if pending.load(std::sync::atomic::Ordering::Relaxed) > 0 {
+                                            Some(std::sync::Arc::new(SyncSessionHolder {
+                                                _guard: guard,
+                                            }))
+                                        } else {
+                                            MEDIA_SYNC_RUNNING
+                                                .store(false, std::sync::atomic::Ordering::Relaxed);
+                                            None
+                                        };
+
+                                    if let Some(session) = session {
+                                        if options.sync_image
+                                            && (!local_images.is_empty() || !dl_images.is_empty())
+                                        {
+                                            let cfg = config.clone();
+                                            let dir = data_dir.clone();
+                                            let cnt = pending.clone();
+                                            let sess = session.clone();
+                                            match std::thread::Builder::new()
+                                                .name("webdav-sync-images".into())
+                                                .spawn(move || {
+                                                    if !local_images.is_empty() {
+                                                        match upload_media_files(
+                                                            &cfg,
+                                                            &local_images,
+                                                            &dir,
+                                                        ) {
+                                                            Ok((u, s, _)) => {
+                                                                info!(
+                                                                    "图片上传: {} 新, {} 跳过",
+                                                                    u, s
+                                                                );
+                                                            }
+                                                            Err(e) => {
+                                                                info!("图片上传失败: {}", e)
+                                                            }
+                                                        }
                                                     }
-                                                }
-                                                Err(e) => info!("图片下载失败: {}", e),
-                                            }
-                                        }
-                                        if cnt.fetch_sub(1, std::sync::atomic::Ordering::Relaxed)
-                                            == 1
-                                        {
-                                            MEDIA_SYNC_RUNNING
-                                                .store(false, std::sync::atomic::Ordering::Relaxed);
-                                        }
-                                    }) {
-                                    Ok(_) => {}
-                                    Err(e) => {
-                                        info!("图片同步线程创建失败: {}", e);
-                                        if pending
-                                            .fetch_sub(1, std::sync::atomic::Ordering::Relaxed)
-                                            == 1
-                                        {
-                                            MEDIA_SYNC_RUNNING
-                                                .store(false, std::sync::atomic::Ordering::Relaxed);
-                                        }
-                                    }
-                                }
-                            }
-
-                            if options.sync_files
-                                && (!local_files.is_empty() || !dl_files.is_empty())
-                            {
-                                pending.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                let cfg = config.clone();
-                                let dir = data_dir.clone();
-                                let cnt = pending.clone();
-                                match std::thread::Builder::new()
-                                    .name("webdav-sync-files".into())
-                                    .spawn(move || {
-                                        if !local_files.is_empty() {
-                                            match upload_media_files(&cfg, &local_files, &dir) {
-                                                Ok((u, s, _)) => {
-                                                    info!("文件上传: {} 新, {} 跳过", u, s);
-                                                }
-                                                Err(e) => info!("文件上传失败: {}", e),
-                                            }
-                                        }
-                                        if !dl_files.is_empty() {
-                                            match download_missing_media(&cfg, &dl_files, &dir) {
-                                                Ok(n) => {
-                                                    if n > 0 {
-                                                        info!("文件下载: {} 个", n);
+                                                    if !dl_images.is_empty() {
+                                                        match download_missing_media(
+                                                            &cfg, &dl_images, &dir,
+                                                        ) {
+                                                            Ok(n) if n > 0 => {
+                                                                info!("图片下载: {} 个", n)
+                                                            }
+                                                            Ok(_) => {}
+                                                            Err(e) => {
+                                                                info!("图片下载失败: {}", e)
+                                                            }
+                                                        }
                                                     }
+                                                    finish_auto_media_worker(&cnt, Some(sess));
+                                                }) {
+                                                Ok(_) => {}
+                                                Err(e) => {
+                                                    info!("图片同步线程创建失败: {}", e);
+                                                    finish_auto_media_worker(
+                                                        &pending,
+                                                        Some(session.clone()),
+                                                    );
                                                 }
-                                                Err(e) => info!("文件下载失败: {}", e),
                                             }
                                         }
-                                        if cnt.fetch_sub(1, std::sync::atomic::Ordering::Relaxed)
-                                            == 1
-                                        {
-                                            MEDIA_SYNC_RUNNING
-                                                .store(false, std::sync::atomic::Ordering::Relaxed);
-                                        }
-                                    }) {
-                                    Ok(_) => {}
-                                    Err(e) => {
-                                        info!("文件同步线程创建失败: {}", e);
-                                        if pending
-                                            .fetch_sub(1, std::sync::atomic::Ordering::Relaxed)
-                                            == 1
-                                        {
-                                            MEDIA_SYNC_RUNNING
-                                                .store(false, std::sync::atomic::Ordering::Relaxed);
-                                        }
-                                    }
-                                }
-                            }
 
-                            if !local_icons.is_empty() || !dl_icons.is_empty() {
-                                pending.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                let cfg = config.clone();
-                                let dir = data_dir.clone();
-                                let cnt = pending.clone();
-                                match std::thread::Builder::new()
-                                    .name("webdav-sync-icons".into())
-                                    .spawn(move || {
-                                        if !local_icons.is_empty() {
-                                            match upload_media_files(&cfg, &local_icons, &dir) {
-                                                Ok((u, s, _)) => {
-                                                    info!("图标上传: {} 新, {} 跳过", u, s);
-                                                }
-                                                Err(e) => info!("图标上传失败: {}", e),
-                                            }
-                                        }
-                                        if !dl_icons.is_empty() {
-                                            match download_missing_media(&cfg, &dl_icons, &dir) {
-                                                Ok(n) => {
-                                                    if n > 0 {
-                                                        info!("图标下载: {} 个", n);
+                                        if options.sync_files
+                                            && (!local_files.is_empty() || !dl_files.is_empty())
+                                        {
+                                            let cfg = config.clone();
+                                            let dir = data_dir.clone();
+                                            let cnt = pending.clone();
+                                            let sess = session.clone();
+                                            match std::thread::Builder::new()
+                                                .name("webdav-sync-files".into())
+                                                .spawn(move || {
+                                                    if !local_files.is_empty() {
+                                                        match upload_media_files(
+                                                            &cfg,
+                                                            &local_files,
+                                                            &dir,
+                                                        ) {
+                                                            Ok((u, s, _)) => {
+                                                                info!(
+                                                                    "文件上传: {} 新, {} 跳过",
+                                                                    u, s
+                                                                );
+                                                            }
+                                                            Err(e) => {
+                                                                info!("文件上传失败: {}", e)
+                                                            }
+                                                        }
                                                     }
+                                                    if !dl_files.is_empty() {
+                                                        match download_missing_media(
+                                                            &cfg, &dl_files, &dir,
+                                                        ) {
+                                                            Ok(n) if n > 0 => {
+                                                                info!("文件下载: {} 个", n)
+                                                            }
+                                                            Ok(_) => {}
+                                                            Err(e) => {
+                                                                info!("文件下载失败: {}", e)
+                                                            }
+                                                        }
+                                                    }
+                                                    finish_auto_media_worker(&cnt, Some(sess));
+                                                }) {
+                                                Ok(_) => {}
+                                                Err(e) => {
+                                                    info!("文件同步线程创建失败: {}", e);
+                                                    finish_auto_media_worker(
+                                                        &pending,
+                                                        Some(session.clone()),
+                                                    );
                                                 }
-                                                Err(e) => info!("图标下载失败: {}", e),
                                             }
                                         }
-                                        if cnt.fetch_sub(1, std::sync::atomic::Ordering::Relaxed)
-                                            == 1
-                                        {
-                                            MEDIA_SYNC_RUNNING
-                                                .store(false, std::sync::atomic::Ordering::Relaxed);
-                                        }
-                                    }) {
-                                    Ok(_) => {}
-                                    Err(e) => {
-                                        info!("图标同步线程创建失败: {}", e);
-                                        if pending
-                                            .fetch_sub(1, std::sync::atomic::Ordering::Relaxed)
-                                            == 1
-                                        {
-                                            MEDIA_SYNC_RUNNING
-                                                .store(false, std::sync::atomic::Ordering::Relaxed);
+
+                                        if !local_icons.is_empty() || !dl_icons.is_empty() {
+                                            let cfg = config.clone();
+                                            let dir = data_dir.clone();
+                                            let cnt = pending.clone();
+                                            let sess = session.clone();
+                                            match std::thread::Builder::new()
+                                                .name("webdav-sync-icons".into())
+                                                .spawn(move || {
+                                                    if !local_icons.is_empty() {
+                                                        match upload_media_files(
+                                                            &cfg,
+                                                            &local_icons,
+                                                            &dir,
+                                                        ) {
+                                                            Ok((u, s, _)) => {
+                                                                info!(
+                                                                    "图标上传: {} 新, {} 跳过",
+                                                                    u, s
+                                                                );
+                                                            }
+                                                            Err(e) => {
+                                                                info!("图标上传失败: {}", e)
+                                                            }
+                                                        }
+                                                    }
+                                                    if !dl_icons.is_empty() {
+                                                        match download_missing_media(
+                                                            &cfg, &dl_icons, &dir,
+                                                        ) {
+                                                            Ok(n) if n > 0 => {
+                                                                info!("图标下载: {} 个", n)
+                                                            }
+                                                            Ok(_) => {}
+                                                            Err(e) => {
+                                                                info!("图标下载失败: {}", e)
+                                                            }
+                                                        }
+                                                    }
+                                                    finish_auto_media_worker(&cnt, Some(sess));
+                                                }) {
+                                                Ok(_) => {}
+                                                Err(e) => {
+                                                    info!("图标同步线程创建失败: {}", e);
+                                                    finish_auto_media_worker(
+                                                        &pending,
+                                                        Some(session.clone()),
+                                                    );
+                                                }
+                                            }
                                         }
                                     }
                                 }
                             }
-
-                            if pending.load(std::sync::atomic::Ordering::Relaxed) == 0 {
-                                MEDIA_SYNC_RUNNING
-                                    .store(false, std::sync::atomic::Ordering::Relaxed);
-                            }
+                            Err(e) => info!("WebDAV 轻量同步: 跳过（{}）", e),
                         }
                     }
 
@@ -1638,8 +1738,8 @@ pub fn download_sync(config: &WebDavConfig, filename: &str) -> Result<Option<Vec
 #[cfg(test)]
 mod tests {
     use super::{
-        MediaEntry, SyncOptions, build_media_index, local_media_target, rewrite_item_media_paths,
-        sync_query_limits, try_begin_sync_session, SYNC_SESSION_ACTIVE,
+        MediaEntry, SYNC_SESSION_ACTIVE, SYNC_SESSION_BUSY, SyncOptions, build_media_index,
+        local_media_target, rewrite_item_media_paths, sync_query_limits, try_begin_sync_session,
     };
     use std::path::Path;
 
@@ -1861,8 +1961,15 @@ mod tests {
         let _first = try_begin_sync_session().unwrap();
         assert_eq!(
             try_begin_sync_session().err().as_deref(),
-            Some("同步正在进行中，请稍后再试"),
+            Some(SYNC_SESSION_BUSY),
         );
         SYNC_SESSION_ACTIVE.store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    #[test]
+    fn media_target_file_rejects_traversal_in_file_name() {
+        let mut entry = media_entry("file", "D:\\Downloads\\report.zip", "aabbccddeeff00112233");
+        entry.file_name = "..\\..\\evil.exe".to_string();
+        assert!(local_media_target(&entry, Path::new("E:\\app")).is_none());
     }
 }

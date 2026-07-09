@@ -1631,7 +1631,11 @@ mod tests {
         }
     }
 
-    fn make_sized_sync_item(content_type: ContentType, byte_size: i64, label: &str) -> NewClipboardItem {
+    fn make_sized_sync_item(
+        content_type: ContentType,
+        byte_size: i64,
+        label: &str,
+    ) -> NewClipboardItem {
         let hash = blake3::hash(format!("{label}:{byte_size}").as_bytes())
             .to_hex()
             .to_string();
@@ -1658,10 +1662,7 @@ mod tests {
     }
 
     fn sync_preview_labels(items: &[ClipboardItem]) -> Vec<String> {
-        items
-            .iter()
-            .filter_map(|i| i.preview.clone())
-            .collect()
+        items.iter().filter_map(|i| i.preview.clone()).collect()
     }
 
     #[test]
@@ -1985,11 +1986,8 @@ mod tests {
         assert!(!labels.contains(&"sync_files_over".to_string()));
 
         // 关闭文本时只返回已启用的媒体类型
-        let image_only = sync_preview_labels(
-            &repo
-                .query_items_for_sync(false, Some(LIMIT), None)
-                .unwrap(),
-        );
+        let image_only =
+            sync_preview_labels(&repo.query_items_for_sync(false, Some(LIMIT), None).unwrap());
         assert!(image_only.contains(&"sync_image_within".to_string()));
         assert!(!image_only.contains(&"sync_text_large".to_string()));
         assert!(!image_only.contains(&"sync_files_within".to_string()));

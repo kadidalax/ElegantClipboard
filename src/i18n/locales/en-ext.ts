@@ -474,6 +474,9 @@ export const extended = {
       download: "Download to local",
       lastSync: "Last sync: {{time}}",
       lastSyncNever: "Last sync: never",
+      errors: {
+        syncInProgress: "Sync is already in progress. Please try again later.",
+      },
     },
     about: {
       tagline: "Low footprint · High performance · Modern · Fully local offline clipboard",

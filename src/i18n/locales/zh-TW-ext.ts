@@ -474,6 +474,9 @@ export const extended = {
       download: "下載至本機",
       lastSync: "上次同步：{{time}}",
       lastSyncNever: "上次同步：暫無",
+      errors: {
+        syncInProgress: "同步正在進行中，請稍後再試",
+      },
     },
     about: {
       tagline: "低占用 · 高效能 · 現代化 · 完全本地化離線剪貼簿",

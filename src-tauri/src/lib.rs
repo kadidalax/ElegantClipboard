@@ -988,6 +988,7 @@ pub fn run() {
                     webdav::start_auto_sync_task(
                         app_state.db.clone(),
                         AppConfig::load().get_data_dir(),
+                        app.handle().clone(),
                     );
                 }
                 if settings.get_bool("plugin_translate_enabled", false) {

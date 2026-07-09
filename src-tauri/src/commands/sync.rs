@@ -84,23 +84,9 @@ fn load_sync_options(state: &Arc<AppState>) -> SyncOptions {
     }
 }
 
-/// 写入最近同步时间（精确到秒），返回格式化后的时间字符串
-fn record_last_sync_time(db: &crate::database::Database) -> String {
-    let now = chrono::Local::now()
-        .format("%Y-%m-%d %H:%M:%S")
-        .to_string();
-    let _ = SettingsRepository::new(db).set("webdav_last_sync_time", &now);
-    now
-}
-
 /// 获取数据目录
 fn get_data_dir() -> std::path::PathBuf {
     config::AppConfig::load().get_data_dir()
-}
-
-fn emit_last_sync_updated(app: &tauri::AppHandle, time: &str) {
-    use tauri::Emitter;
-    let _ = app.emit("webdav-last-sync-updated", time.to_string());
 }
 
 /// 检查 WebDAV 插件已启用
@@ -124,8 +110,11 @@ fn ensure_webdav_available(state: &Arc<AppState>) -> Result<(), String> {
 
 /// 运行时启用 WebDAV 插件（启动自动同步后台任务）
 #[tauri::command]
-pub async fn webdav_enable_plugin(state: State<'_, Arc<AppState>>) -> Result<(), String> {
-    webdav::start_auto_sync_task(state.db.clone(), get_data_dir());
+pub async fn webdav_enable_plugin(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    webdav::start_auto_sync_task(state.db.clone(), get_data_dir(), app);
     Ok(())
 }
 
@@ -177,8 +166,7 @@ pub async fn webdav_upload(
         let has_media = !local_map.is_empty();
         spawn_media_upload_files(&app, &config, &data_dir, &local_map);
 
-        let sync_time = record_last_sync_time(&db);
-        emit_last_sync_updated(&app_handle, &sync_time);
+        webdav::record_and_notify_last_sync(&db, &app_handle)?;
 
         let mut msg = format!("记录已上传 ({})", format_size(size as u64));
         if has_media {
@@ -237,8 +225,7 @@ pub async fn webdav_download(
             }
         }
 
-        let sync_time = record_last_sync_time(&db);
-        emit_last_sync_updated(&app_handle, &sync_time);
+        webdav::record_and_notify_last_sync(&db, &app_handle)?;
 
         if pending_media {
             msg.push_str("\n媒体文件正在后台下载…");
@@ -407,5 +394,7 @@ fn spawn_media_download(
 
 fn emit_media_sync_done(app: &tauri::AppHandle, message: &str) {
     use tauri::Emitter;
-    let _ = app.emit("media-sync-done", message.to_string());
+    if let Err(e) = app.emit("media-sync-done", message.to_string()) {
+        tracing::warn!("推送媒体同步完成事件失败: {}", e);
+    }
 }

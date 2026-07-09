@@ -474,6 +474,9 @@ export const extended = {
       download: "下载至本地",
       lastSync: "上次同步：{{time}}",
       lastSyncNever: "上次同步：暂无",
+      errors: {
+        syncInProgress: "同步正在进行中，请稍后再试",
+      },
     },
     about: {
       tagline: "低占用 · 高性能 · 现代化 · 完全本地化离线剪贴板",
