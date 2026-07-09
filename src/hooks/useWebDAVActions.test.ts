@@ -7,10 +7,16 @@ vi.mock("@tauri-apps/api/core", () => ({
       return Promise.resolve("Connection successful");
     }
     if (command === "webdav_upload") {
-      return Promise.resolve("Upload complete");
+      return Promise.resolve({
+        message: "Upload complete",
+        pending_media_workers: 0,
+      });
     }
     if (command === "webdav_download") {
-      return Promise.resolve("Download complete");
+      return Promise.resolve({
+        message: "Download complete",
+        pending_media_workers: 0,
+      });
     }
     return Promise.resolve();
   }),

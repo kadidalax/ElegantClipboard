@@ -6,6 +6,14 @@ use crate::webdav::{self, SyncOptions, WebDavConfig};
 use std::sync::Arc;
 use tauri::State;
 
+/// 手动同步命令的返回体
+#[derive(serde::Serialize)]
+pub struct WebdavManualSyncResponse {
+    pub message: String,
+    /// 后台媒体任务数（图片/文件/图标各算一个，仅非空列表）
+    pub pending_media_workers: u8,
+}
+
 /// 从数据库读取 WebDAV 配置
 fn load_webdav_config(state: &Arc<AppState>) -> Result<WebDavConfig, String> {
     let repo = SettingsRepository::new(&state.db);
@@ -133,7 +141,7 @@ pub async fn webdav_test_connection(state: State<'_, Arc<AppState>>) -> Result<S
 pub async fn webdav_upload(
     app: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
-) -> Result<String, String> {
+) -> Result<WebdavManualSyncResponse, String> {
     ensure_webdav_available(&state)?;
     let config = load_webdav_config(&state)?;
     let options = load_sync_options(&state);
@@ -163,16 +171,18 @@ pub async fn webdav_upload(
             }
         }
 
-        let has_media = !local_map.is_empty();
-        spawn_media_upload_files(&app, &config, &data_dir, &local_map);
+        let pending_media_workers = spawn_media_upload_files(&app, &config, &data_dir, &local_map);
 
         webdav::record_and_notify_last_sync(&db, &app_handle)?;
 
         let mut msg = format!("记录已上传 ({})", format_size(size as u64));
-        if has_media {
+        if pending_media_workers > 0 {
             msg.push_str("\n媒体文件正在后台上传…");
         }
-        Ok(msg)
+        Ok(WebdavManualSyncResponse {
+            message: msg,
+            pending_media_workers,
+        })
     })
     .await
     .map_err(|e| format!("任务失败: {e}"))?
@@ -183,7 +193,7 @@ pub async fn webdav_upload(
 pub async fn webdav_download(
     app: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
-) -> Result<String, String> {
+) -> Result<WebdavManualSyncResponse, String> {
     ensure_webdav_available(&state)?;
     let config = load_webdav_config(&state)?;
     let options = load_sync_options(&state);
@@ -215,23 +225,25 @@ pub async fn webdav_download(
 
         // 权威媒体映射表：先自愈库中失效的媒体路径，再按需下载缺失媒体
         let media_map = webdav::download_media_map(&config).unwrap_or_default();
-        let mut pending_media = false;
+        let mut pending_media_workers = 0u8;
         if !media_map.is_empty() {
             let _ = webdav::reconcile_local_media(&db, &media_map, &data_dir);
             let needed = webdav::plan_media_downloads(&db, &media_map, &data_dir);
             if !needed.is_empty() {
-                pending_media = true;
-                spawn_media_download(&app, &config, &data_dir, needed);
+                pending_media_workers = spawn_media_download(&app, &config, &data_dir, needed);
             }
         }
 
         webdav::record_and_notify_last_sync(&db, &app_handle)?;
 
-        if pending_media {
+        if pending_media_workers > 0 {
             msg.push_str("\n媒体文件正在后台下载…");
         }
 
-        Ok(msg)
+        Ok(WebdavManualSyncResponse {
+            message: msg,
+            pending_media_workers,
+        })
     })
     .await
     .map_err(|e| format!("任务失败: {e}"))?
@@ -255,14 +267,14 @@ fn spawn_media_upload_worker(
     entries: Vec<webdav::MediaEntry>,
     thread_name: &'static str,
     label: &'static str,
-) {
+) -> bool {
     if entries.is_empty() {
-        return;
+        return false;
     }
     let cfg = config.clone();
     let dir = data_dir.to_path_buf();
     let handle = app.clone();
-    std::thread::Builder::new()
+    match std::thread::Builder::new()
         .name(thread_name.into())
         .spawn(move || {
             let msg = match webdav::upload_media_files(&cfg, &entries, &dir) {
@@ -276,8 +288,13 @@ fn spawn_media_upload_worker(
                 Err(e) => format!("{label}上传失败: {e}"),
             };
             emit_media_sync_done(&handle, &msg);
-        })
-        .ok();
+        }) {
+        Ok(_) => true,
+        Err(e) => {
+            emit_media_sync_done(app, &format!("{label}上传线程启动失败: {e}"));
+            true
+        }
+    }
 }
 
 fn spawn_media_download_worker(
@@ -287,14 +304,14 @@ fn spawn_media_download_worker(
     entries: Vec<webdav::MediaEntry>,
     thread_name: &'static str,
     label: &'static str,
-) {
+) -> bool {
     if entries.is_empty() {
-        return;
+        return false;
     }
     let cfg = config.clone();
     let dir = data_dir.to_path_buf();
     let handle = app.clone();
-    std::thread::Builder::new()
+    match std::thread::Builder::new()
         .name(thread_name.into())
         .spawn(move || {
             let msg = match webdav::download_missing_media(&cfg, &entries, &dir) {
@@ -303,8 +320,13 @@ fn spawn_media_download_worker(
                 Err(e) => format!("{label}下载失败: {e}"),
             };
             emit_media_sync_done(&handle, &msg);
-        })
-        .ok();
+        }) {
+        Ok(_) => true,
+        Err(e) => {
+            emit_media_sync_done(app, &format!("{label}下载线程启动失败: {e}"));
+            true
+        }
+    }
 }
 
 fn spawn_media_upload_files(
@@ -312,9 +334,9 @@ fn spawn_media_upload_files(
     config: &webdav::WebDavConfig,
     data_dir: &std::path::Path,
     media_map: &[webdav::MediaEntry],
-) {
+) -> u8 {
     if media_map.is_empty() {
-        return;
+        return 0;
     }
     let images: Vec<_> = media_map
         .iter()
@@ -332,16 +354,24 @@ fn spawn_media_upload_files(
         .cloned()
         .collect();
 
-    spawn_media_upload_worker(
+    let mut workers = 0u8;
+    if spawn_media_upload_worker(
         app,
         config,
         data_dir,
         images,
         "webdav-upload-images",
         "图片",
-    );
-    spawn_media_upload_worker(app, config, data_dir, files, "webdav-upload-files", "文件");
-    spawn_media_upload_worker(app, config, data_dir, icons, "webdav-upload-icons", "图标");
+    ) {
+        workers += 1;
+    }
+    if spawn_media_upload_worker(app, config, data_dir, files, "webdav-upload-files", "文件") {
+        workers += 1;
+    }
+    if spawn_media_upload_worker(app, config, data_dir, icons, "webdav-upload-icons", "图标") {
+        workers += 1;
+    }
+    workers
 }
 
 fn spawn_media_download(
@@ -349,7 +379,7 @@ fn spawn_media_download(
     config: &webdav::WebDavConfig,
     data_dir: &std::path::Path,
     media_map: Vec<webdav::MediaEntry>,
-) {
+) -> u8 {
     let images: Vec<_> = media_map
         .iter()
         .filter(|e| e.media_type == "image")
@@ -366,30 +396,38 @@ fn spawn_media_download(
         .cloned()
         .collect();
 
-    spawn_media_download_worker(
+    let mut workers = 0u8;
+    if spawn_media_download_worker(
         app,
         config,
         data_dir,
         images,
         "webdav-download-images",
         "图片",
-    );
-    spawn_media_download_worker(
+    ) {
+        workers += 1;
+    }
+    if spawn_media_download_worker(
         app,
         config,
         data_dir,
         files,
         "webdav-download-files",
         "文件",
-    );
-    spawn_media_download_worker(
+    ) {
+        workers += 1;
+    }
+    if spawn_media_download_worker(
         app,
         config,
         data_dir,
         icons,
         "webdav-download-icons",
         "图标",
-    );
+    ) {
+        workers += 1;
+    }
+    workers
 }
 
 fn emit_media_sync_done(app: &tauri::AppHandle, message: &str) {

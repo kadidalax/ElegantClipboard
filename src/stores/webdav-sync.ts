@@ -8,17 +8,37 @@ import { loadUISettingsFromBackend } from "@/stores/ui-settings";
 
 export type SyncStatusType = "success" | "error" | "info";
 
+type WebdavManualSyncResponse = {
+  message: string;
+  pending_media_workers: number;
+};
+
 type WebDAVSyncState = {
   testing: boolean;
   syncing: boolean;
   statusMsg: string;
   statusType: SyncStatusType;
+  pendingMediaWorkers: number;
   setStatusMsg: (msg: string | ((prev: string) => string)) => void;
   setStatusType: (type: SyncStatusType) => void;
   handleTestConnection: () => Promise<void>;
   handleUpload: () => Promise<void>;
   handleDownload: () => Promise<void>;
 };
+
+const MEDIA_PENDING_UPLOAD = "媒体文件正在后台上传";
+const MEDIA_PENDING_DOWNLOAD = "媒体文件正在后台下载";
+
+function stripMediaPendingLines(msg: string): string {
+  return msg
+    .split("\n")
+    .filter(
+      (line) =>
+        !line.includes(MEDIA_PENDING_UPLOAD)
+        && !line.includes(MEDIA_PENDING_DOWNLOAD),
+    )
+    .join("\n");
+}
 
 function localizeWebDAVError(error: unknown): string {
   if (typeof error !== "string") return String(error);
@@ -33,6 +53,7 @@ export const useWebDAVSyncStore = create<WebDAVSyncState>((set, get) => ({
   syncing: false,
   statusMsg: "",
   statusType: "info",
+  pendingMediaWorkers: 0,
 
   setStatusMsg: (msg) =>
     set({
@@ -58,14 +79,19 @@ export const useWebDAVSyncStore = create<WebDAVSyncState>((set, get) => ({
 
   handleUpload: async () => {
     if (get().syncing) return;
-    set({ syncing: true });
+    set({ syncing: true, pendingMediaWorkers: 0 });
     try {
-      const msg = await invoke<string>("webdav_upload");
-      set({ statusMsg: msg, statusType: "success" });
+      const res = await invoke<WebdavManualSyncResponse>("webdav_upload");
+      set({
+        statusMsg: res.message,
+        statusType: "success",
+        pendingMediaWorkers: res.pending_media_workers,
+      });
     } catch (error) {
       set({
         statusMsg: localizeWebDAVError(error),
         statusType: "error",
+        pendingMediaWorkers: 0,
       });
     } finally {
       set({ syncing: false });
@@ -74,15 +100,19 @@ export const useWebDAVSyncStore = create<WebDAVSyncState>((set, get) => ({
 
   handleDownload: async () => {
     if (get().syncing) return;
-    set({ syncing: true });
+    set({ syncing: true, pendingMediaWorkers: 0 });
     let msg = "";
+    let pendingMediaWorkers = 0;
     try {
-      msg = await invoke<string>("webdav_download");
-      set({ statusMsg: msg, statusType: "success" });
+      const res = await invoke<WebdavManualSyncResponse>("webdav_download");
+      msg = res.message;
+      pendingMediaWorkers = res.pending_media_workers;
+      set({ statusMsg: msg, statusType: "success", pendingMediaWorkers });
     } catch (error) {
       set({
         statusMsg: localizeWebDAVError(error),
         statusType: "error",
+        pendingMediaWorkers: 0,
       });
       return;
     } finally {
@@ -118,12 +148,20 @@ export async function initWebDAVSyncListeners() {
   try {
     unlistenFns.push(
       await listen<string>("media-sync-done", (event) => {
-        const { statusMsg, setStatusMsg, setStatusType } =
+        const { statusMsg, pendingMediaWorkers } =
           useWebDAVSyncStore.getState();
-        setStatusMsg(
-          statusMsg ? `${statusMsg}\n${event.payload}` : event.payload,
-        );
-        setStatusType("success");
+        const pendingLeft = Math.max(0, pendingMediaWorkers - 1);
+        let nextMsg = statusMsg
+          ? `${statusMsg}\n${event.payload}`
+          : event.payload;
+        if (pendingLeft === 0) {
+          nextMsg = stripMediaPendingLines(nextMsg);
+        }
+        useWebDAVSyncStore.setState({
+          statusMsg: nextMsg,
+          pendingMediaWorkers: pendingLeft,
+          statusType: "success",
+        });
       }),
     );
     unlistenFns.push(
@@ -156,5 +194,6 @@ export function resetWebDAVSyncStoreForTests() {
     syncing: false,
     statusMsg: "",
     statusType: "info",
+    pendingMediaWorkers: 0,
   });
 }

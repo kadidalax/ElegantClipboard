@@ -439,9 +439,9 @@ function App() {
   const handleWebdavUpload = async () => {
     setWebdavSyncing(true);
     try {
-      const msg = await invoke<string>("webdav_upload");
+      const res = await invoke<{ message: string }>("webdav_upload");
       await refresh();
-      logError("WebDAV upload:", msg);
+      logError("WebDAV upload:", res.message);
     } catch (error) {
       logError("WebDAV upload failed:", error);
     } finally {
@@ -452,9 +452,9 @@ function App() {
   const handleWebdavDownload = async () => {
     setWebdavSyncing(true);
     try {
-      const msg = await invoke<string>("webdav_download");
+      const res = await invoke<{ message: string }>("webdav_download");
       await refresh();
-      logError("WebDAV download:", msg);
+      logError("WebDAV download:", res.message);
     } catch (error) {
       logError("WebDAV download failed:", error);
     } finally {
