@@ -84,9 +84,23 @@ fn load_sync_options(state: &Arc<AppState>) -> SyncOptions {
     }
 }
 
+/// 写入最近同步时间（精确到秒），返回格式化后的时间字符串
+fn record_last_sync_time(db: &crate::database::Database) -> String {
+    let now = chrono::Local::now()
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string();
+    let _ = SettingsRepository::new(db).set("webdav_last_sync_time", &now);
+    now
+}
+
 /// 获取数据目录
 fn get_data_dir() -> std::path::PathBuf {
     config::AppConfig::load().get_data_dir()
+}
+
+fn emit_last_sync_updated(app: &tauri::AppHandle, time: &str) {
+    use tauri::Emitter;
+    let _ = app.emit("webdav-last-sync-updated", time.to_string());
 }
 
 /// 检查 WebDAV 插件已启用
@@ -136,8 +150,10 @@ pub async fn webdav_upload(
     let options = load_sync_options(&state);
     let data_dir = get_data_dir();
     let db = state.db.clone();
+    let app_handle = app.clone();
 
     tokio::task::spawn_blocking(move || {
+        let _guard = webdav::try_begin_sync_session()?;
         let zip_data = webdav::export_sync_data(&db, &data_dir, &options)?;
         let size = zip_data.len();
         webdav::upload_sync(&config, &zip_data, "clipboard_sync.zip", "application/zip")?;
@@ -158,9 +174,17 @@ pub async fn webdav_upload(
             }
         }
 
+        let has_media = !local_map.is_empty();
         spawn_media_upload_files(&app, &config, &data_dir, &local_map);
 
-        Ok(format!("上传成功 ({})", format_size(size as u64)))
+        let sync_time = record_last_sync_time(&db);
+        emit_last_sync_updated(&app_handle, &sync_time);
+
+        let mut msg = format!("记录已上传 ({})", format_size(size as u64));
+        if has_media {
+            msg.push_str("\n媒体文件正在后台上传…");
+        }
+        Ok(msg)
     })
     .await
     .map_err(|e| format!("任务失败: {e}"))?
@@ -177,12 +201,14 @@ pub async fn webdav_download(
     let options = load_sync_options(&state);
     let data_dir = get_data_dir();
     let db = state.db.clone();
+    let app_handle = app.clone();
 
     tokio::task::spawn_blocking(move || {
+        let _guard = webdav::try_begin_sync_session()?;
         let zip_data = webdav::download_sync(&config, "clipboard_sync.zip")?;
-        let msg = match zip_data {
+        let mut msg = match zip_data {
             Some(data) => {
-                let result = webdav::import_sync_data(&db, &data, &options)?;
+                let result = webdav::import_sync_data(&db, &data, &options, &data_dir)?;
                 let mut parts = Vec::new();
                 if result.items_imported > 0 {
                     parts.push(format!("导入 {} 条记录", result.items_imported));
@@ -191,17 +217,31 @@ pub async fn webdav_download(
                     parts.push("设置已同步".to_string());
                 }
                 if parts.is_empty() {
-                    "下载成功，无新数据".to_string()
+                    "记录已下载，无新数据".to_string()
                 } else {
-                    format!("下载成功：{}", parts.join("，"))
+                    format!("记录已下载：{}", parts.join("，"))
                 }
             }
             None => "远端无同步数据".to_string(),
         };
 
+        // 权威媒体映射表：先自愈库中失效的媒体路径，再按需下载缺失媒体
         let media_map = webdav::download_media_map(&config).unwrap_or_default();
+        let mut pending_media = false;
         if !media_map.is_empty() {
-            spawn_media_download(&app, &config, &data_dir, media_map);
+            let _ = webdav::reconcile_local_media(&db, &media_map, &data_dir);
+            let needed = webdav::plan_media_downloads(&db, &media_map, &data_dir);
+            if !needed.is_empty() {
+                pending_media = true;
+                spawn_media_download(&app, &config, &data_dir, needed);
+            }
+        }
+
+        let sync_time = record_last_sync_time(&db);
+        emit_last_sync_updated(&app_handle, &sync_time);
+
+        if pending_media {
+            msg.push_str("\n媒体文件正在后台下载…");
         }
 
         Ok(msg)
@@ -217,15 +257,7 @@ fn build_local_media_map(
     options: &SyncOptions,
     device_id: &str,
 ) -> Vec<webdav::MediaEntry> {
-    let max_bs = webdav::calc_max_query_size(options);
-    let content_types = webdav::build_type_filter(options);
-    if content_types.is_empty() {
-        return Vec::new();
-    }
-    let tf = content_types.join(",");
-    let items = crate::database::ClipboardRepository::new(db)
-        .query_items_for_sync(&tf, max_bs)
-        .unwrap_or_default();
+    let items = webdav::query_sync_items(db, options).unwrap_or_default();
     webdav::build_media_map(&items, data_dir, options, device_id)
 }
 

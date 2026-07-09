@@ -1147,22 +1147,82 @@ impl ClipboardRepository {
         })
     }
 
-    /// 查询符合同步条件的条目（按类型过滤 + 大小限制）
+    /// 查询符合同步条件的条目（按类型分别应用大小限制）
+    ///
+    /// `image_max_bytes` / `files_max_bytes` 为 `None` 表示该类型不同步；
+    /// 文本类条目不受大小限制。
     pub fn query_items_for_sync(
         &self,
-        type_filter_sql: &str,
-        max_byte_size: i64,
+        include_text: bool,
+        image_max_bytes: Option<i64>,
+        files_max_bytes: Option<i64>,
     ) -> Result<Vec<ClipboardItem>, rusqlite::Error> {
+        let mut clauses: Vec<String> = Vec::new();
+        let mut param_values: Vec<i64> = Vec::new();
+
+        if include_text {
+            clauses.push("content_type IN ('text','html','rtf','url')".to_string());
+        }
+        if let Some(max) = image_max_bytes {
+            param_values.push(max);
+            clauses.push(format!(
+                "(content_type = 'image' AND byte_size <= ?{})",
+                param_values.len()
+            ));
+        }
+        if let Some(max) = files_max_bytes {
+            param_values.push(max);
+            clauses.push(format!(
+                "(content_type = 'files' AND byte_size <= ?{})",
+                param_values.len()
+            ));
+        }
+        if clauses.is_empty() {
+            return Ok(Vec::new());
+        }
+
         let conn = self.read_conn.lock();
         let sql = format!(
-            "SELECT * FROM clipboard_items WHERE content_type IN ({type_filter_sql}) AND byte_size <= ?1 ORDER BY created_at DESC"
+            "SELECT * FROM clipboard_items WHERE {} ORDER BY created_at DESC",
+            clauses.join(" OR ")
         );
         let mut stmt = conn.prepare(&sql)?;
         let items = stmt
-            .query_map(params![max_byte_size], Self::row_to_item)?
+            .query_map(rusqlite::params_from_iter(param_values), Self::row_to_item)?
             .filter_map(std::result::Result::ok)
             .collect();
         Ok(items)
+    }
+
+    /// 查询可能引用本地媒体文件的条目（图片/文件条目，或带来源应用图标）
+    pub fn query_media_items(&self) -> Result<Vec<ClipboardItem>, rusqlite::Error> {
+        let conn = self.read_conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT * FROM clipboard_items \
+             WHERE content_type IN ('image','files') OR source_app_icon IS NOT NULL",
+        )?;
+        let items = stmt
+            .query_map([], Self::row_to_item)?
+            .filter_map(std::result::Result::ok)
+            .collect();
+        Ok(items)
+    }
+
+    /// 更新条目的媒体相关路径（WebDAV 同步路径自愈用）
+    pub fn update_item_media_paths(
+        &self,
+        id: i64,
+        image_path: Option<&str>,
+        file_payload: Option<&str>,
+        source_app_icon: Option<&str>,
+    ) -> Result<(), rusqlite::Error> {
+        let conn = self.write_conn.lock();
+        conn.execute(
+            "UPDATE clipboard_items SET image_path = ?1, file_payload = ?2, source_app_icon = ?3 \
+             WHERE id = ?4",
+            params![image_path, file_payload, source_app_icon, id],
+        )?;
+        Ok(())
     }
 
     /// 导入同步条目（基于 content_hash 去重，已存在则跳过）
@@ -1571,7 +1631,38 @@ mod tests {
         }
     }
 
-    // ==================== ClipboardRepository ====================
+    fn make_sized_sync_item(content_type: ContentType, byte_size: i64, label: &str) -> NewClipboardItem {
+        let hash = blake3::hash(format!("{label}:{byte_size}").as_bytes())
+            .to_hex()
+            .to_string();
+        let mut item = NewClipboardItem {
+            content_type,
+            content_hash: hash.clone(),
+            semantic_hash: hash,
+            byte_size,
+            preview: Some(label.to_string()),
+            ..Default::default()
+        };
+        match content_type {
+            ContentType::Text | ContentType::Url | ContentType::Html | ContentType::Rtf => {
+                item.text_content = Some(label.to_string());
+            }
+            ContentType::Image => {
+                item.image_path = Some(format!("/fake/{label}.png"));
+            }
+            ContentType::Files => {
+                item.file_paths = Some(vec![format!("/fake/{label}.txt")]);
+            }
+        }
+        item
+    }
+
+    fn sync_preview_labels(items: &[ClipboardItem]) -> Vec<String> {
+        items
+            .iter()
+            .filter_map(|i| i.preview.clone())
+            .collect()
+    }
 
     #[test]
     fn insert_and_get_by_id() {
@@ -1816,6 +1907,96 @@ mod tests {
             })
             .unwrap();
         assert_eq!(fav_count, 1);
+    }
+
+    #[test]
+    fn query_items_for_sync_filters_by_type_and_size() {
+        let db = temp_db();
+        let repo = ClipboardRepository::new(&db);
+
+        const KB: i64 = 1024;
+        const LIMIT: i64 = 512 * KB;
+
+        // 文本类不受 byte_size 限制
+        repo.insert(make_sized_sync_item(
+            ContentType::Text,
+            10 * LIMIT,
+            "sync_text_large",
+        ))
+        .unwrap();
+        repo.insert(make_sized_sync_item(
+            ContentType::Url,
+            10 * LIMIT,
+            "sync_url_large",
+        ))
+        .unwrap();
+        repo.insert(make_sized_sync_item(
+            ContentType::Html,
+            10 * LIMIT,
+            "sync_html_large",
+        ))
+        .unwrap();
+
+        // 图片/文件分别按上限过滤（含边界：等于上限应保留）
+        repo.insert(make_sized_sync_item(
+            ContentType::Image,
+            100 * KB,
+            "sync_image_within",
+        ))
+        .unwrap();
+        repo.insert(make_sized_sync_item(
+            ContentType::Image,
+            LIMIT,
+            "sync_image_at_limit",
+        ))
+        .unwrap();
+        repo.insert(make_sized_sync_item(
+            ContentType::Image,
+            LIMIT + 1,
+            "sync_image_over",
+        ))
+        .unwrap();
+        repo.insert(make_sized_sync_item(
+            ContentType::Files,
+            200 * KB,
+            "sync_files_within",
+        ))
+        .unwrap();
+        repo.insert(make_sized_sync_item(
+            ContentType::Files,
+            LIMIT + 1,
+            "sync_files_over",
+        ))
+        .unwrap();
+
+        let labels = sync_preview_labels(
+            &repo
+                .query_items_for_sync(true, Some(LIMIT), Some(LIMIT))
+                .unwrap(),
+        );
+
+        assert!(labels.contains(&"sync_text_large".to_string()));
+        assert!(labels.contains(&"sync_url_large".to_string()));
+        assert!(labels.contains(&"sync_html_large".to_string()));
+        assert!(labels.contains(&"sync_image_within".to_string()));
+        assert!(labels.contains(&"sync_image_at_limit".to_string()));
+        assert!(!labels.contains(&"sync_image_over".to_string()));
+        assert!(labels.contains(&"sync_files_within".to_string()));
+        assert!(!labels.contains(&"sync_files_over".to_string()));
+
+        // 关闭文本时只返回已启用的媒体类型
+        let image_only = sync_preview_labels(
+            &repo
+                .query_items_for_sync(false, Some(LIMIT), None)
+                .unwrap(),
+        );
+        assert!(image_only.contains(&"sync_image_within".to_string()));
+        assert!(!image_only.contains(&"sync_text_large".to_string()));
+        assert!(!image_only.contains(&"sync_files_within".to_string()));
+
+        // 全部关闭时返回空
+        let none_enabled = repo.query_items_for_sync(false, None, None).unwrap();
+        assert!(none_enabled.is_empty());
     }
 
     #[test]

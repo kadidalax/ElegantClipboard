@@ -473,6 +473,7 @@ export const extended = {
       upload: "Upload to cloud",
       download: "Download to local",
       lastSync: "Last sync: {{time}}",
+      lastSyncNever: "Last sync: never",
     },
     about: {
       tagline: "Low footprint · High performance · Modern · Fully local offline clipboard",

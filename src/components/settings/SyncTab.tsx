@@ -1,11 +1,11 @@
 import { useEffect, useRef } from "react";
-import { listen } from "@tauri-apps/api/event";
 import { AutoSyncSection } from "@/components/settings/sync/AutoSyncSection";
 import { ConnectionSection } from "@/components/settings/sync/ConnectionSection";
 import { ManualSyncSection } from "@/components/settings/sync/ManualSyncSection";
 import { SyncTypesSection } from "@/components/settings/sync/SyncTypesSection";
 import { useWebDAVActions } from "@/hooks/useWebDAVActions";
 import { useWebDAVSettings } from "@/hooks/useWebDAVSettings";
+import { onWebDAVLastSyncUpdated } from "@/stores/webdav-sync";
 
 export function SyncTab() {
   const settings = useWebDAVSettings();
@@ -14,8 +14,6 @@ export function SyncTab() {
     syncing,
     statusMsg,
     statusType,
-    setStatusMsg,
-    setStatusType,
     handleTestConnection,
     handleUpload,
     handleDownload,
@@ -29,12 +27,10 @@ export function SyncTab() {
   }, [statusMsg]);
 
   useEffect(() => {
-    const unlisten = listen<string>("media-sync-done", (event) => {
-      setStatusMsg((prev) => prev ? `${prev}\n${event.payload}` : event.payload);
-      setStatusType("success");
+    return onWebDAVLastSyncUpdated(() => {
+      void settings.loadSettings();
     });
-    return () => { unlisten.then((fn) => fn()); };
-  }, [setStatusMsg, setStatusType]);
+  }, [settings.loadSettings]);
 
   return (
     <>

@@ -68,11 +68,11 @@ export function ManualSyncSection({
           </Button>
         </div>
 
-        {lastSyncTime && (
-          <p className="text-xs text-muted-foreground">
-            {t("settings.sync.lastSync", { time: lastSyncTime })}
-          </p>
-        )}
+        <p className="text-xs text-muted-foreground">
+          {lastSyncTime
+            ? t("settings.sync.lastSync", { time: lastSyncTime })
+            : t("settings.sync.lastSyncNever")}
+        </p>
 
         {statusMsg && (
           <div

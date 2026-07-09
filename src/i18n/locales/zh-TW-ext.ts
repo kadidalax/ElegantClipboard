@@ -473,6 +473,7 @@ export const extended = {
       upload: "上傳至雲端",
       download: "下載至本機",
       lastSync: "上次同步：{{time}}",
+      lastSyncNever: "上次同步：暫無",
     },
     about: {
       tagline: "低占用 · 高效能 · 現代化 · 完全本地化離線剪貼簿",

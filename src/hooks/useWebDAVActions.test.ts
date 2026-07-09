@@ -20,13 +20,21 @@ vi.mock("@tauri-apps/api/event", () => ({
   emit: vi.fn(() => Promise.resolve()),
 }));
 
+vi.mock("@/stores/clipboard", () => ({
+  useClipboardStore: {
+    getState: () => ({ refresh: vi.fn(() => Promise.resolve()) }),
+  },
+}));
+
 vi.mock("@/stores/ui-settings", () => ({
   loadUISettingsFromBackend: vi.fn(() => Promise.resolve()),
 }));
 
 describe("useWebDAVActions", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    const { resetWebDAVSyncStoreForTests } = await import("@/stores/webdav-sync");
+    resetWebDAVSyncStoreForTests();
   });
 
   it("exports useWebDAVActions hook", async () => {

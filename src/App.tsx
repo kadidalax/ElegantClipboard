@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useState, useMemo, useRef } from "react";
 import {
   Search16Regular,
+  Checkmark12Filled,
   Dismiss16Regular,
   Delete16Regular,
   Edit16Regular,
@@ -811,13 +812,25 @@ function App() {
             </DialogDescription>
           </DialogHeader>
           {selectedGroup !== "__favorites__" && (
-            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none w-fit">
+            <label className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer select-none w-fit transition-surface">
               <input
                 type="checkbox"
                 checked={clearDontAskAgain}
                 onChange={(e) => setClearDontAskAgain(e.target.checked)}
-                className="h-3.5 w-3.5 accent-primary cursor-pointer"
+                className="peer sr-only"
               />
+              <span
+                aria-hidden
+                className={cn(
+                  "flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-surface",
+                  "peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-1",
+                  clearDontAskAgain
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-input bg-background elevation-control"
+                )}
+              >
+                {clearDontAskAgain && <Checkmark12Filled className="h-3 w-3" />}
+              </span>
               {t("app.clearHistoryDontAskAgain")}
             </label>
           )}

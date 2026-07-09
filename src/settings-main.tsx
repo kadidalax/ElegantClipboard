@@ -7,6 +7,7 @@ import { initTheme } from "@/lib/theme-applier";
 import { initPluginAvailability } from "@/stores/plugin-availability";
 import { useTranslateSettings } from "@/stores/translate-settings";
 import { initUISettingsStore } from "@/stores/ui-settings";
+import { initWebDAVSyncListeners } from "@/stores/webdav-sync";
 import { Settings } from "./pages/Settings";
 import "overlayscrollbars/overlayscrollbars.css";
 import "./index.css";
@@ -40,6 +41,7 @@ function deferSecondaryInit() {
   void (async () => {
     try {
       await initPluginAvailability();
+      await initWebDAVSyncListeners();
       await useTranslateSettings.getState().loadSettings();
     } catch (error) {
       console.error("Settings window deferred init failed:", error);

@@ -473,6 +473,7 @@ export const extended = {
       upload: "上传至云端",
       download: "下载至本地",
       lastSync: "上次同步：{{time}}",
+      lastSyncNever: "上次同步：暂无",
     },
     about: {
       tagline: "低占用 · 高性能 · 现代化 · 完全本地化离线剪贴板",
