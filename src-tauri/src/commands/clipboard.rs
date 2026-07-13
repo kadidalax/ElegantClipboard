@@ -185,12 +185,102 @@ fn simulate_ctrl_combo(key_vk: u16, action: &str) -> Result<(), String> {
     Ok(())
 }
 
+pub const PASTE_KEY_SETTING: &str = "paste_key";
+pub const PASTE_KEY_CTRL_V: &str = "ctrl_v";
+pub const PASTE_KEY_SHIFT_INSERT: &str = "shift_insert";
+
+/// 按用户设置模拟粘贴按键（未知值回退为 Ctrl+V）。
+#[cfg(target_os = "windows")]
+pub fn simulate_paste_by_key(paste_key: &str) -> Result<(), String> {
+    if paste_key == PASTE_KEY_SHIFT_INSERT {
+        simulate_shift_insert()
+    } else {
+        simulate_paste()
+    }
+}
+
 /// 使用 Windows SendInput API 模拟 Ctrl+V 粘贴。
 /// 先释放用户可能按住的所有修饰键（Alt/Shift/Win），再发送纯净的 Ctrl+V。
 #[cfg(target_os = "windows")]
 pub fn simulate_paste() -> Result<(), String> {
     use windows::Win32::UI::Input::KeyboardAndMouse::VK_V;
     simulate_ctrl_combo(VK_V.0, "simulate_paste")
+}
+
+/// 使用 Windows SendInput API 模拟 Shift+Insert 粘贴。
+/// 先释放 Ctrl/Alt/Win，保留或补按 Shift 后发送 Insert。
+#[cfg(target_os = "windows")]
+fn simulate_shift_insert() -> Result<(), String> {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        GetAsyncKeyState, INPUT, INPUT_KEYBOARD, KEYBD_EVENT_FLAGS, KEYBDINPUT, KEYEVENTF_KEYUP,
+        SendInput, VK_CONTROL, VK_INSERT, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
+    };
+
+    fn is_key_pressed(vk: u16) -> bool {
+        unsafe { GetAsyncKeyState(i32::from(vk)) < 0 }
+    }
+
+    fn send_key(vk: u16, up: bool) {
+        let input = INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: windows::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY(vk),
+                    wScan: 0,
+                    dwFlags: if up {
+                        KEYEVENTF_KEYUP
+                    } else {
+                        KEYBD_EVENT_FLAGS(0)
+                    },
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        };
+        unsafe {
+            SendInput(&[input], std::mem::size_of::<INPUT>() as i32);
+        }
+    }
+
+    fn release_if_held(vk: u16) {
+        for _ in 0..20 {
+            if !is_key_pressed(vk) {
+                return;
+            }
+            send_key(vk, true);
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+    }
+
+    {
+        use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowTextW};
+        let fg = unsafe { GetForegroundWindow() };
+        let mut buf = [0u16; 256];
+        let len = unsafe { GetWindowTextW(fg, &mut buf) } as usize;
+        let title = String::from_utf16_lossy(&buf[..len]);
+        info!(
+            "simulate_shift_insert: foreground hwnd={:?} title=\"{title}\"",
+            fg.0
+        );
+    }
+
+    release_if_held(VK_MENU.0);
+    release_if_held(VK_CONTROL.0);
+    release_if_held(VK_LWIN.0);
+    release_if_held(VK_RWIN.0);
+
+    let user_shift = is_key_pressed(VK_SHIFT.0);
+    if !user_shift {
+        send_key(VK_SHIFT.0, false);
+    }
+    send_key(VK_INSERT.0, false);
+    std::thread::sleep(std::time::Duration::from_millis(8));
+    send_key(VK_INSERT.0, true);
+    if !user_shift {
+        send_key(VK_SHIFT.0, true);
+    }
+
+    Ok(())
 }
 
 /// 使用 Windows SendInput API 模拟 Ctrl+C 复制选中文字。

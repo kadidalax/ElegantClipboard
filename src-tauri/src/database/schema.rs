@@ -81,7 +81,8 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     ('autostart_enabled', 'false'),
     ('theme', 'system'),
     ('language', 'zh-CN'),
-    ('auto_cleanup_days', '30');
+    ('auto_cleanup_days', '30'),
+    ('paste_key', 'ctrl_v');
 "#;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

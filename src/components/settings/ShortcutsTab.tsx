@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   ChevronDown16Regular,
   ChevronUp16Regular,
@@ -35,6 +35,13 @@ type ShortcutEditTarget =
 
 const QUICK_PASTE_SLOT_COUNT = 10;
 
+type PasteKey = "ctrl_v" | "shift_insert";
+
+const PASTE_KEY_OPTIONS: { value: PasteKey; labelKey: string; descKey: string }[] = [
+  { value: "ctrl_v", labelKey: "settings.shortcuts.pasteKeyCtrlV", descKey: "settings.shortcuts.pasteKeyCtrlVDesc" },
+  { value: "shift_insert", labelKey: "settings.shortcuts.pasteKeyShiftInsert", descKey: "settings.shortcuts.pasteKeyShiftInsertDesc" },
+];
+
 interface ShortcutsTabProps {
   settings: ShortcutSettings;
   onSettingsChange: (settings: ShortcutSettings) => void;
@@ -69,6 +76,40 @@ export function ShortcutsTab({
   const [favPasteLoaded, setFavPasteLoaded] = useState(false);
   const [favPasteExpanded, setFavPasteExpanded] = useState(false);
   const [favSlotErrors, setFavSlotErrors] = useState<Record<number, string>>({});
+  const [pasteKey, setPasteKey] = useState<PasteKey>("ctrl_v");
+
+  const pasteKeyOptions = useMemo(
+    () => PASTE_KEY_OPTIONS.map((opt) => ({
+      value: opt.value,
+      label: t(opt.labelKey),
+      desc: t(opt.descKey),
+    })),
+    [t],
+  );
+  const activePasteKeyIndex = Math.max(
+    0,
+    pasteKeyOptions.findIndex((opt) => opt.value === pasteKey),
+  );
+
+  useEffect(() => {
+    invoke<string | null>("get_setting", { key: "paste_key" })
+      .then((val) => {
+        if (val === "shift_insert") setPasteKey("shift_insert");
+        else setPasteKey("ctrl_v");
+      })
+      .catch((error) => {
+        logError("Failed to load paste key setting:", error);
+      });
+  }, []);
+
+  const handlePasteKeyChange = async (value: PasteKey) => {
+    setPasteKey(value);
+    try {
+      await invoke("set_setting", { key: "paste_key", value });
+    } catch (error) {
+      logError("Failed to save paste key setting:", error);
+    }
+  };
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     e.preventDefault();
@@ -349,6 +390,50 @@ export function ShortcutsTab({
               />
             </div>
           </div>
+        </SettingsCard>
+
+        {/* Paste Key Card */}
+        <SettingsCard>
+          <SettingsCardHeader
+            title={t("settings.shortcuts.pasteKeyTitle")}
+            description={t("settings.shortcuts.pasteKeyDesc")}
+          />
+          <div
+            role="radiogroup"
+            aria-label={t("settings.shortcuts.pasteKeyAria")}
+            className="relative rounded-md border p-1 bg-muted-surface-subtle"
+          >
+            <div className="relative grid grid-cols-2">
+              <div
+                aria-hidden
+                className="absolute inset-y-0 left-0 w-1/2 rounded-md elevation-control will-change-transform transition-transform duration-200 ease-out bg-primary"
+                style={{ transform: `translateX(${activePasteKeyIndex * 100}%)` }}
+              />
+              {pasteKeyOptions.map((opt) => {
+                const isActive = pasteKey === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={isActive}
+                    onClick={() => { void handlePasteKeyChange(opt.value); }}
+                    className={cn(
+                      "relative z-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-surface font-mono",
+                      isActive
+                        ? "text-primary-foreground"
+                        : "text-foreground/80 hover:text-foreground",
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            {pasteKeyOptions.find((o) => o.value === pasteKey)?.desc}
+          </p>
         </SettingsCard>
 
         {/* Shortcut Card */}

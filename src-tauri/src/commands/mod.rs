@@ -13,7 +13,7 @@ use crate::clipboard::ClipboardMonitor;
 use crate::database::Database;
 use parking_lot::Mutex;
 use std::sync::Arc;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 /// 缓存窗口定位相关设置，避免每次 show 时读 DB
 pub struct PositionCache {
@@ -45,9 +45,19 @@ pub(crate) fn emit_paste_sound_success(app: &tauri::AppHandle) {
     let _ = app.emit("paste-sound-success", ());
 }
 
-/// 模拟 Ctrl+V 并按设置触发粘贴音效（仅成功时播放）
+/// 按用户设置模拟粘贴按键并触发粘贴音效（仅成功时播放）
 pub(crate) fn run_simulate_paste_with_sound(app: &tauri::AppHandle) -> Result<(), String> {
-    let result = clipboard::simulate_paste();
+    use crate::database::SettingsRepository;
+
+    let paste_key = app
+        .try_state::<Arc<AppState>>()
+        .map(|state| {
+            SettingsRepository::new(&state.db)
+                .get_or(clipboard::PASTE_KEY_SETTING, clipboard::PASTE_KEY_CTRL_V)
+        })
+        .unwrap_or_else(|| clipboard::PASTE_KEY_CTRL_V.to_string());
+
+    let result = clipboard::simulate_paste_by_key(&paste_key);
     if result.is_ok() {
         emit_paste_sound_immediate(app);
         emit_paste_sound_success(app);
