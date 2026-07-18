@@ -21,6 +21,11 @@ use windows::core::BSTR;
 #[cfg(target_os = "windows")]
 use windows_core::Interface;
 
+#[cfg(target_os = "windows")]
+fn com_err<E: std::fmt::Display>(e: E) -> String {
+    e.to_string()
+}
+
 /// 连接本地任务计划服务并获取根文件夹
 #[cfg(target_os = "windows")]
 fn get_task_root() -> Result<(ITaskService, ITaskFolder), String> {
@@ -50,7 +55,7 @@ fn get_task_root() -> Result<(ITaskService, ITaskFolder), String> {
 /// 创建以最高权限运行的计划任务（用于免 UAC 提权）
 #[cfg(target_os = "windows")]
 pub fn create_elevation_task() -> Result<(), String> {
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let exe = std::env::current_exe().map_err(com_err)?;
 
     unsafe {
         let (service, root) = get_task_root()?;
@@ -63,58 +68,58 @@ pub fn create_elevation_task() -> Result<(), String> {
             .map_err(|e| format!("创建任务定义失败: {e}"))?;
 
         // 设置
-        let settings = task.Settings().map_err(|e| e.to_string())?;
+        let settings = task.Settings().map_err(com_err)?;
         settings
             .SetMultipleInstances(TASK_INSTANCES_PARALLEL)
-            .map_err(|e| e.to_string())?;
+            .map_err(com_err)?;
         settings
             .SetDisallowStartIfOnBatteries(VARIANT_BOOL(0))
-            .map_err(|e| e.to_string())?;
+            .map_err(com_err)?;
         settings
             .SetStopIfGoingOnBatteries(VARIANT_BOOL(0))
-            .map_err(|e| e.to_string())?;
+            .map_err(com_err)?;
         settings
             .SetAllowDemandStart(VARIANT_BOOL(-1))
-            .map_err(|e| e.to_string())?;
+            .map_err(com_err)?;
         settings
             .SetEnabled(VARIANT_BOOL(-1))
-            .map_err(|e| e.to_string())?;
+            .map_err(com_err)?;
         settings
             .SetStartWhenAvailable(VARIANT_BOOL(0))
-            .map_err(|e| e.to_string())?;
+            .map_err(com_err)?;
         settings
             .SetRunOnlyIfNetworkAvailable(VARIANT_BOOL(0))
-            .map_err(|e| e.to_string())?;
+            .map_err(com_err)?;
 
-        let idle = settings.IdleSettings().map_err(|e| e.to_string())?;
+        let idle = settings.IdleSettings().map_err(com_err)?;
         idle.SetStopOnIdleEnd(VARIANT_BOOL(0))
-            .map_err(|e| e.to_string())?;
+            .map_err(com_err)?;
         idle.SetRestartOnIdle(VARIANT_BOOL(0))
-            .map_err(|e| e.to_string())?;
+            .map_err(com_err)?;
 
         // 主体
-        let principal = task.Principal().map_err(|e| e.to_string())?;
+        let principal = task.Principal().map_err(com_err)?;
         principal
             .SetLogonType(TASK_LOGON_INTERACTIVE_TOKEN)
-            .map_err(|e| e.to_string())?;
+            .map_err(com_err)?;
         principal
             .SetRunLevel(TASK_RUNLEVEL_HIGHEST)
-            .map_err(|e| e.to_string())?;
+            .map_err(com_err)?;
 
         // 操作
-        let actions = task.Actions().map_err(|e| e.to_string())?;
+        let actions = task.Actions().map_err(com_err)?;
         let action: IAction = actions
             .Create(TASK_ACTION_EXEC)
-            .map_err(|e| e.to_string())?;
-        let exec_action: IExecAction = action.cast::<IExecAction>().map_err(|e| e.to_string())?;
+            .map_err(com_err)?;
+        let exec_action: IExecAction = action.cast::<IExecAction>().map_err(com_err)?;
         exec_action
             .SetPath(&BSTR::from(exe.to_string_lossy().as_ref()))
-            .map_err(|e| e.to_string())?;
+            .map_err(com_err)?;
 
         // 描述
-        let info = task.RegistrationInfo().map_err(|e| e.to_string())?;
+        let info = task.RegistrationInfo().map_err(com_err)?;
         info.SetDescription(&BSTR::from("ElegantClipboard Admin Elevation Helper"))
-            .map_err(|e| e.to_string())?;
+            .map_err(com_err)?;
 
         // 注册
         root.RegisterTaskDefinition(

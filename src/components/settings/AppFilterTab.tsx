@@ -35,44 +35,51 @@ export function AppFilterTab() {
   const appMetaCache = useRef<Map<string, AppMeta>>(new Map());
 
   useEffect(() => {
-    invoke<string | null>("get_setting", { key: "app_filter_enabled" })
-      .then((v) => setAppFilterEnabled(v === "true"))
-      .catch((error) => {
-        logError("Failed to load app_filter_enabled:", error);
-      });
-    invoke<string | null>("get_setting", { key: "app_filter_mode" })
-      .then((v) => { if (v === "whitelist") setAppFilterMode("whitelist"); })
-      .catch((error) => {
-        logError("Failed to load app_filter_mode:", error);
-      });
-    invoke<string | null>("get_setting", { key: "app_filter_list" })
-      .then((v) => {
+    void (async () => {
+      const results = await Promise.allSettled([
+        invoke<string | null>("get_setting", { key: "app_filter_enabled" }),
+        invoke<string | null>("get_setting", { key: "app_filter_mode" }),
+        invoke<string | null>("get_setting", { key: "app_filter_list" }),
+        invoke<string | null>("get_setting", { key: "monitor_types" }),
+        invoke<RunningApp[]>("get_running_apps"),
+      ]);
+
+      const [enabledR, modeR, listR, typesR, appsR] = results;
+
+      if (enabledR.status === "fulfilled") {
+        setAppFilterEnabled(enabledR.value === "true");
+      } else {
+        logError("Failed to load app_filter_enabled:", enabledR.reason);
+      }
+      if (modeR.status === "fulfilled") {
+        if (modeR.value === "whitelist") setAppFilterMode("whitelist");
+      } else {
+        logError("Failed to load app_filter_mode:", modeR.reason);
+      }
+      if (listR.status === "fulfilled") {
+        const v = listR.value;
         if (v && v.length > 0) {
           setAppFilterList(v.split(",").map((t) => t.trim()).filter(Boolean));
         }
-      })
-      .catch((error) => {
-        logError("Failed to load app_filter_list:", error);
-      });
-    invoke<string | null>("get_setting", { key: "monitor_types" })
-      .then((v) => {
+      } else {
+        logError("Failed to load app_filter_list:", listR.reason);
+      }
+      if (typesR.status === "fulfilled") {
+        const v = typesR.value;
         if (v && v.length > 0) {
           setMonitorTypes(new Set(v.split(",").map((t) => t.trim()).filter(Boolean)));
         }
-      })
-      .catch((error) => {
-        logError("Failed to load monitor_types:", error);
-      });
-    // 预加载一次运行中应用来填充图标缓存
-    invoke<RunningApp[]>("get_running_apps")
-      .then((apps) => {
-        for (const app of apps) {
+      } else {
+        logError("Failed to load monitor_types:", typesR.reason);
+      }
+      if (appsR.status === "fulfilled") {
+        for (const app of appsR.value) {
           appMetaCache.current.set(app.process.toLowerCase(), { name: app.name, icon: app.icon });
         }
-      })
-      .catch((error) => {
-        logError("Failed to preload running apps:", error);
-      });
+      } else {
+        logError("Failed to preload running apps:", appsR.reason);
+      }
+    })();
   }, []);
 
   const toggleMonitorType = useCallback((type: string) => {

@@ -352,22 +352,24 @@ export function Settings() {
   const saveSettings = async () => {
     try {
       // 保存设置到数据库（data_path 由 GeneralTab 单独处理迁移）
-      await invoke("set_setting", {
-        key: "max_history_count",
-        value: settings.max_history_count.toString(),
-      });
-      await invoke("set_setting", {
-        key: "max_content_size_kb",
-        value: settings.max_content_size_kb.toString(),
-      });
-      await invoke("set_setting", {
-        key: "max_image_size_kb",
-        value: settings.max_image_size_kb.toString(),
-      });
-      await invoke("set_setting", {
-        key: "auto_cleanup_days",
-        value: settings.auto_cleanup_days.toString(),
-      });
+      await Promise.all([
+        invoke("set_setting", {
+          key: "max_history_count",
+          value: settings.max_history_count.toString(),
+        }),
+        invoke("set_setting", {
+          key: "max_content_size_kb",
+          value: settings.max_content_size_kb.toString(),
+        }),
+        invoke("set_setting", {
+          key: "max_image_size_kb",
+          value: settings.max_image_size_kb.toString(),
+        }),
+        invoke("set_setting", {
+          key: "auto_cleanup_days",
+          value: settings.auto_cleanup_days.toString(),
+        }),
+      ]);
       if (settings.auto_start) {
         await invoke("enable_autostart");
       } else {
