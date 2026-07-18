@@ -1,5 +1,20 @@
 # ElegantClipboard 更新日志
 
+## v1.2.4
+**发布日期：** 2026年7月18日
+
+- feat: 粘贴按键选择——设置 → 快捷键新增粘贴按键选项，支持 Ctrl+V（默认）与 Shift+Insert 两种模式 https://github.com/Y-ASLant/ElegantClipboard/issues/134
+- feat: 清空历史支持免确认模式——确认对话框新增"不再询问"复选框，开启后点击清空按钮直接执行并显示 toast https://github.com/Y-ASLant/ElegantClipboard/issues/133
+- feat: 系统托盘新增「检查更新」菜单项
+- feat: WebDAV 同步支持记录最近同步时间，前端同步页实时展示
+- feat: WebDAV 手动同步完成后自动清理状态提示
+- fix: 修复新手引导在设置未加载完成时错误显示
+- fix: 修复设置页主题预览色块颜色异常
+- fix: WebDAV 跨设备同步媒体文件落地路径修复，不再依赖两端目录一致
+- fix: WebDAV 同步并发保护，避免重复同步请求
+- refactor: 优化 WebDAV 媒体同步——按类型分别限制大小，图片/文件同步独立线程
+
+
 ## v1.2.3
 **发布日期：** 2026年7月5日
 
