@@ -242,6 +242,16 @@ async function saveUISettings(state: UISettingsData) {
   });
 }
 
+async function syncBackendKeyboardNav() {
+  try {
+    await invoke("set_keyboard_nav_enabled", {
+      enabled: useUISettings.getState().keyboardNavigation,
+    });
+  } catch (error) {
+    logError("Failed to sync keyboard navigation setting:", error);
+  }
+}
+
 // 广播设置变更
 const broadcastChange = (state: Partial<UISettingsData>) => {
   emit(SYNC_EVENT, state).catch((error) => {
@@ -404,6 +414,7 @@ export function initUISettingsStore() {
     }
 
     await loadUISettingsFromBackend();
+    await syncBackendKeyboardNav();
     initialized = true;
   })();
 
