@@ -81,9 +81,7 @@ pub fn create_elevation_task() -> Result<(), String> {
         settings
             .SetAllowDemandStart(VARIANT_BOOL(-1))
             .map_err(com_err)?;
-        settings
-            .SetEnabled(VARIANT_BOOL(-1))
-            .map_err(com_err)?;
+        settings.SetEnabled(VARIANT_BOOL(-1)).map_err(com_err)?;
         settings
             .SetStartWhenAvailable(VARIANT_BOOL(0))
             .map_err(com_err)?;
@@ -92,10 +90,8 @@ pub fn create_elevation_task() -> Result<(), String> {
             .map_err(com_err)?;
 
         let idle = settings.IdleSettings().map_err(com_err)?;
-        idle.SetStopOnIdleEnd(VARIANT_BOOL(0))
-            .map_err(com_err)?;
-        idle.SetRestartOnIdle(VARIANT_BOOL(0))
-            .map_err(com_err)?;
+        idle.SetStopOnIdleEnd(VARIANT_BOOL(0)).map_err(com_err)?;
+        idle.SetRestartOnIdle(VARIANT_BOOL(0)).map_err(com_err)?;
 
         // 主体
         let principal = task.Principal().map_err(com_err)?;
@@ -108,9 +104,7 @@ pub fn create_elevation_task() -> Result<(), String> {
 
         // 操作
         let actions = task.Actions().map_err(com_err)?;
-        let action: IAction = actions
-            .Create(TASK_ACTION_EXEC)
-            .map_err(com_err)?;
+        let action: IAction = actions.Create(TASK_ACTION_EXEC).map_err(com_err)?;
         let exec_action: IExecAction = action.cast::<IExecAction>().map_err(com_err)?;
         exec_action
             .SetPath(&BSTR::from(exe.to_string_lossy().as_ref()))

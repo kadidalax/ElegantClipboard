@@ -111,7 +111,7 @@ impl AppConfig {
         self.data_path
             .as_ref()
             .filter(|path| !path.is_empty())
-            .map(|path| PathBuf::from(path))
+            .map(PathBuf::from)
     }
 }
 

@@ -47,7 +47,7 @@ import { useClipboardStore } from "@/stores/clipboard";
 import { useGroupStore } from "@/stores/groups";
 import type { Group } from "@/stores/groups";
 import type { ToolbarButton } from "@/stores/ui-settings";
-import { useUISettings } from "@/stores/ui-settings";
+import { isUISettingsInitialized, useUISettings, whenUISettingsReady } from "@/stores/ui-settings";
 
 /** 关闭已打开的弹出层 */
 function dismissOverlays(): boolean {
@@ -114,6 +114,12 @@ function App() {
   const windowAnimation = useUISettings((s) => s.windowAnimation);
   const onboardingCompleted = useUISettings((s) => s.onboardingCompleted);
   const setOnboardingCompleted = useUISettings((s) => s.setOnboardingCompleted);
+  const [uiSettingsReady, setUiSettingsReady] = useState(isUISettingsInitialized);
+
+  useEffect(() => {
+    if (uiSettingsReady) return;
+    void whenUISettingsReady().then(() => setUiSettingsReady(true));
+  }, [uiSettingsReady]);
   const inputRef = useInputFocus<HTMLInputElement>();
   // 追踪窗口隐藏期间是否有剪贴板变化
   const clipboardDirtyRef = useRef(false);
@@ -314,7 +320,8 @@ function App() {
   // ESC 键处理（后端钩子 + DOM 双通道）
   const handleEscape = useCallback(async () => {
     // 先关闭新手引导
-    if (!onboardingCompleted) {
+    // 设置未加载完成前 onboardingCompleted 为默认值 false，不可当作「未完成引导」
+    if (uiSettingsReady && !onboardingCompleted) {
       setOnboardingCompleted(true);
       return;
     }
@@ -328,7 +335,7 @@ function App() {
     } catch (error) {
       logError("Failed to hide window:", error);
     }
-  }, [setBatchMode, onboardingCompleted, setOnboardingCompleted]);
+  }, [setBatchMode, uiSettingsReady, onboardingCompleted, setOnboardingCompleted]);
 
   // 通道1：后端键盘钩子
   useEffect(() => {
@@ -921,7 +928,7 @@ function App() {
       </Dialog>
 
       {/* 新手引导 */}
-      {!onboardingCompleted && (
+      {uiSettingsReady && !onboardingCompleted && (
         <Onboarding onComplete={() => setOnboardingCompleted(true)} />
       )}
     </div>

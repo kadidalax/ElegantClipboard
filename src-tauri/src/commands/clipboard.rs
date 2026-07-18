@@ -171,7 +171,9 @@ mod win_keyboard {
 #[cfg(target_os = "windows")]
 fn simulate_ctrl_combo(key_vk: u16, action: &str) -> Result<(), String> {
     use win_keyboard::{is_key_pressed, log_foreground_window, release_if_held, send_key};
-    use windows::Win32::UI::Input::KeyboardAndMouse::{VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT};
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
+    };
 
     log_foreground_window(action);
 
@@ -734,11 +736,17 @@ fn paste_plain_text_to_active_window(
         close_window
     );
     let text = text.to_string();
-    execute_paste_flow(state, app, close_window, "paste_plain_text", move |clipboard| {
-        clipboard
-            .set_text(text)
-            .map_err(|e| format!("Failed to set clipboard text: {e}"))
-    })
+    execute_paste_flow(
+        state,
+        app,
+        close_window,
+        "paste_plain_text",
+        move |clipboard| {
+            clipboard
+                .set_text(text)
+                .map_err(|e| format!("Failed to set clipboard text: {e}"))
+        },
+    )
 }
 
 #[cfg(test)]
