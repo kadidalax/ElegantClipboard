@@ -129,9 +129,9 @@ export function TranslateTab() {
   const handleToggleTranslateSelection = async (value: boolean) => {
     setTranslateSelectionEnabled(value);
     if (value && translateSelectionShortcut) {
-      try { await invoke("update_translate_selection_shortcut", { newShortcut: translateSelectionShortcut }); } catch (e) { console.error("更新划词翻译快捷键失败:", e); }
+      try { await invoke("update_translate_selection_shortcut", { newShortcut: translateSelectionShortcut }); } catch (e) { logError("更新划词翻译快捷键失败:", e); }
     } else if (!value) {
-      try { await invoke("update_translate_selection_shortcut", { newShortcut: "" }); } catch (e) { console.error("清除划词翻译快捷键失败:", e); }
+      try { await invoke("update_translate_selection_shortcut", { newShortcut: "" }); } catch (e) { logError("清除划词翻译快捷键失败:", e); }
     }
   };
 
@@ -153,9 +153,9 @@ export function TranslateTab() {
           <Switch checked={enabled} onCheckedChange={async (value) => {
             setEnabled(value);
             if (!value && translateSelectionShortcut) {
-              try { await invoke("update_translate_selection_shortcut", { newShortcut: "" }); } catch (e) { console.error("清除划词翻译快捷键失败:", e); }
+              try { await invoke("update_translate_selection_shortcut", { newShortcut: "" }); } catch (e) { logError("清除划词翻译快捷键失败:", e); }
             } else if (value && translateSelectionEnabled && translateSelectionShortcut) {
-              try { await invoke("update_translate_selection_shortcut", { newShortcut: translateSelectionShortcut }); } catch (e) { console.error("更新划词翻译快捷键失败:", e); }
+              try { await invoke("update_translate_selection_shortcut", { newShortcut: translateSelectionShortcut }); } catch (e) { logError("更新划词翻译快捷键失败:", e); }
             }
           }} />
         </div>

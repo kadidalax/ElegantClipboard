@@ -150,10 +150,8 @@ export function cancelPendingFocusRestore() {
   resetWebViewFocus();
 }
 
-/** 窗口隐藏时释放 WebView 焦点（与 cancelPendingFocusRestore 相同逻辑） */
-export function releaseWebViewFocus() {
-  resetWebViewFocus();
-}
+/** 窗口隐藏时释放 WebView 焦点 */
+export const releaseWebViewFocus = cancelPendingFocusRestore;
 
 /** 立即启用窗口焦点（跳过防抖） */
 export async function focusWindowImmediately() {

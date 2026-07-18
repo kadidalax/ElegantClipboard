@@ -12,6 +12,15 @@ export type WindowEffect = "none" | "mica" | "acrylic" | "tabbed";
 export type SoundTiming = "immediate" | "after_success";
 export type ToolbarButton = "clear" | "pin" | "batch" | "settings" | "webdav-upload" | "webdav-download";
 
+export const VALID_TOOLBAR_BUTTONS = [
+  "clear",
+  "pin",
+  "batch",
+  "settings",
+  "webdav-upload",
+  "webdav-download",
+] as const satisfies readonly ToolbarButton[];
+
 export const DEFAULT_TOOLBAR_BUTTONS: ToolbarButton[] = ["clear", "batch", "pin", "settings"];
 export const MAX_TOOLBAR_BUTTONS = 6;
 
@@ -186,7 +195,7 @@ function mergeUISettings(raw: unknown): UISettingsData {
     ...persisted,
     toolbarButtons: Array.isArray(persisted.toolbarButtons) && persisted.toolbarButtons.length > 0
       ? persisted.toolbarButtons.filter((button): button is ToolbarButton =>
-        ["clear", "pin", "batch", "settings", "webdav-upload", "webdav-download"].includes(button),
+        (VALID_TOOLBAR_BUTTONS as readonly string[]).includes(button),
       )
       : DEFAULT_TOOLBAR_BUTTONS,
   };

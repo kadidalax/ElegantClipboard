@@ -159,6 +159,8 @@ function isMainThemeWindow(): boolean {
 function syncPreviewPresentation() {
   if (!isMainThemeWindow()) return;
   const payload = getPreviewPresentation();
+  if (!previewPresentationChanged(_lastPreviewPresentation, payload)) return;
+  _lastPreviewPresentation = payload;
   void emitTo("text-preview", "text-preview-theme", payload).catch(() => {});
   void emitTo("image-preview", "image-preview-theme", payload).catch(() => {});
 }
@@ -179,15 +181,8 @@ export function initTheme(): Promise<void> {
   const mq = window.matchMedia("(prefers-color-scheme: dark)");
 
   function applyDarkMode() {
-    const { darkMode } = useUISettings.getState();
-    const isDark =
-      darkMode === "dark" ? true : darkMode === "light" ? false : mq.matches;
-    document.documentElement.classList.toggle("dark", isDark);
-    const nextPresentation = getPreviewPresentation();
-    if (previewPresentationChanged(_lastPreviewPresentation, nextPresentation)) {
-      _lastPreviewPresentation = nextPresentation;
-      syncPreviewPresentation();
-    }
+    document.documentElement.classList.toggle("dark", getIsDark());
+    syncPreviewPresentation();
   }
 
   applyDarkMode();
@@ -197,19 +192,16 @@ export function initTheme(): Promise<void> {
   useUISettings.subscribe((state, prev) => {
     if (state.sharpCorners !== prev.sharpCorners) {
       applySharpCorners();
-      _lastPreviewPresentation = getPreviewPresentation();
       syncPreviewPresentation();
     }
     if (state.colorTheme !== prev.colorTheme) {
       apply();
-      _lastPreviewPresentation = getPreviewPresentation();
       syncPreviewPresentation();
       if (state.colorTheme === "system" && !_accentColor) {
         invoke<string | null>("get_system_accent_color").then((color) => {
           _accentColor = color;
           apply();
           notifyAccentSubscribers();
-          _lastPreviewPresentation = getPreviewPresentation();
           syncPreviewPresentation();
         }).catch((error) => {
           logError("Failed to fetch system accent color on theme switch:", error);
@@ -218,7 +210,6 @@ export function initTheme(): Promise<void> {
     }
     if (state.windowEffect !== prev.windowEffect) {
       applyWindowEffect();
-      _lastPreviewPresentation = getPreviewPresentation();
       syncPreviewWindowEffects(state.windowEffect);
       syncPreviewPresentation();
     }
@@ -238,7 +229,6 @@ export function initTheme(): Promise<void> {
       state.previewFontSize !== prev.previewFontSize
     ) {
       applyFontSettings();
-      _lastPreviewPresentation = getPreviewPresentation();
       syncPreviewPresentation();
     }
   });
@@ -249,7 +239,6 @@ export function initTheme(): Promise<void> {
     notifyAccentSubscribers();
     apply();
     if (useUISettings.getState().colorTheme === "system") {
-      _lastPreviewPresentation = getPreviewPresentation();
       syncPreviewPresentation();
     }
   });

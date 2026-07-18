@@ -217,10 +217,10 @@ mod tests {
     }
 }
 
-fn load_quick_paste_shortcuts(repo: &SettingsRepository) -> Vec<String> {
-    let mut shortcuts = default_quick_paste_shortcuts();
+fn load_paste_shortcuts(repo: &SettingsRepository, kind: PasteKind) -> Vec<String> {
+    let mut shortcuts = kind.defaults();
     for slot in 1..=10 {
-        let key = quick_paste_setting_key(slot);
+        let key = kind.setting_key(slot);
         if let Ok(Some(value)) = repo.get(&key) {
             shortcuts[(slot - 1) as usize] = normalize_shortcut_value(&value);
         }
@@ -239,17 +239,6 @@ fn default_favorite_paste_shortcuts() -> Vec<String> {
 
 fn favorite_paste_setting_key(slot: u8) -> String {
     format!("favorite_paste_shortcut_{slot}")
-}
-
-fn load_favorite_paste_shortcuts(repo: &SettingsRepository) -> Vec<String> {
-    let mut shortcuts = default_favorite_paste_shortcuts();
-    for slot in 1..=10 {
-        let key = favorite_paste_setting_key(slot);
-        if let Ok(Some(value)) = repo.get(&key) {
-            shortcuts[(slot - 1) as usize] = normalize_shortcut_value(&value);
-        }
-    }
-    shortcuts
 }
 
 /// 若快捷键的主键是数字（0-9），返回对应的小键盘变体字符串，如 "Alt+1" → "Alt+Numpad1"
@@ -650,10 +639,7 @@ fn reload_paste_shortcuts_from_settings(
 ) -> HashMap<u8, String> {
     let state = app.state::<Arc<AppState>>();
     let settings_repo = SettingsRepository::new(&state.db);
-    let shortcuts = match kind {
-        PasteKind::Quick => load_quick_paste_shortcuts(&settings_repo),
-        PasteKind::Favorite => load_favorite_paste_shortcuts(&settings_repo),
-    };
+    let shortcuts = load_paste_shortcuts(&settings_repo, kind);
     apply_paste_shortcuts(app, &shortcuts, kind)
 }
 

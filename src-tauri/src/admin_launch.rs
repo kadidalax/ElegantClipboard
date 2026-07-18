@@ -202,11 +202,24 @@ pub fn self_elevate() -> bool {
     false
 }
 
+// ─── UAC 提权 ─────────────────────────────────────────────────────────────────
+
+#[cfg(target_os = "windows")]
+fn to_wide(s: &str) -> Vec<u16> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    OsStr::new(s).encode_wide().chain(Some(0)).collect()
+}
+
+#[cfg(target_os = "windows")]
+fn to_wide_path(path: &std::path::Path) -> Vec<u16> {
+    use std::os::windows::ffi::OsStrExt;
+    path.as_os_str().encode_wide().chain(Some(0)).collect()
+}
+
 /// 通过 ShellExecute "runas" 启动新实例（会弹出 UAC 提示）
 #[cfg(target_os = "windows")]
 fn elevate_with_uac() -> bool {
-    use std::ffi::OsStr;
-    use std::os::windows::ffi::OsStrExt;
     use windows::Win32::UI::Shell::ShellExecuteW;
     use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
     use windows::core::PCWSTR;
@@ -215,8 +228,8 @@ fn elevate_with_uac() -> bool {
         return false;
     };
 
-    let op: Vec<u16> = OsStr::new("runas").encode_wide().chain(Some(0)).collect();
-    let file: Vec<u16> = exe_path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let op = to_wide("runas");
+    let file = to_wide_path(&exe_path);
 
     unsafe {
         ShellExecuteW(
@@ -260,8 +273,6 @@ pub fn perform_restart<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
 /// 通过 explorer.exe 启动，确保新进程不继承管理员权限
 #[cfg(target_os = "windows")]
 fn launch_via_explorer() -> bool {
-    use std::ffi::OsStr;
-    use std::os::windows::ffi::OsStrExt;
     use windows::Win32::UI::Shell::ShellExecuteW;
     use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
     use windows::core::PCWSTR;
@@ -270,11 +281,8 @@ fn launch_via_explorer() -> bool {
         return false;
     };
 
-    let explorer: Vec<u16> = OsStr::new("explorer.exe")
-        .encode_wide()
-        .chain(Some(0))
-        .collect();
-    let file: Vec<u16> = exe_path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let explorer = to_wide("explorer.exe");
+    let file = to_wide_path(&exe_path);
 
     unsafe {
         ShellExecuteW(

@@ -73,20 +73,16 @@ impl AppConfig {
 
     /// 获取数据库路径
     pub fn get_db_path(&self) -> PathBuf {
-        if let Some(ref custom_path) = self.data_path
-            && !custom_path.is_empty()
-        {
-            return PathBuf::from(custom_path).join("clipboard.db");
+        if let Some(dir) = self.custom_data_dir() {
+            return dir.join("clipboard.db");
         }
         crate::database::get_default_db_path()
     }
 
     /// 获取图片存储路径
     pub fn get_images_path(&self) -> PathBuf {
-        if let Some(ref custom_path) = self.data_path
-            && !custom_path.is_empty()
-        {
-            return PathBuf::from(custom_path).join("images");
+        if let Some(dir) = self.custom_data_dir() {
+            return dir.join("images");
         }
         crate::database::get_default_images_path()
     }
@@ -103,14 +99,19 @@ impl AppConfig {
 
     /// 获取数据目录路径
     pub fn get_data_dir(&self) -> PathBuf {
-        if let Some(ref custom_path) = self.data_path
-            && !custom_path.is_empty()
-        {
-            return PathBuf::from(custom_path);
+        if let Some(dir) = self.custom_data_dir() {
+            return dir;
         }
         crate::database::get_default_db_path()
             .parent()
             .map_or_else(|| PathBuf::from("."), std::path::Path::to_path_buf)
+    }
+
+    fn custom_data_dir(&self) -> Option<PathBuf> {
+        self.data_path
+            .as_ref()
+            .filter(|path| !path.is_empty())
+            .map(|path| PathBuf::from(path))
     }
 }
 

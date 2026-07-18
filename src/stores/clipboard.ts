@@ -8,6 +8,10 @@ import { playCopySound, setupPasteSoundListeners } from "@/lib/sounds";
 import { mergeCaptureItem, matchesListFilter } from "@/stores/clipboard-merge";
 import { useUISettings } from "@/stores/ui-settings";
 
+function batchResetState() {
+  return { batchMode: false, selectedIds: new Set<number>(), lastSelectedIndex: -1 };
+}
+
 export interface ClipboardItem {
   id: number;
   content_type: "text" | "image" | "html" | "rtf" | "files" | "url";
@@ -151,12 +155,12 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
   },
 
   setSelectedGroup: (group: string | null) => {
-    set({ selectedGroup: group, batchMode: false, selectedIds: new Set(), lastSelectedIndex: -1 });
+    set({ selectedGroup: group, ...batchResetState() });
     get().fetchItems();
   },
 
   setSelectedGroupId: (groupId: number | null) => {
-    set({ selectedGroupId: groupId, batchMode: false, selectedIds: new Set(), lastSelectedIndex: -1 });
+    set({ selectedGroupId: groupId, ...batchResetState() });
     invoke("set_active_group", { groupId }).catch((error) => {
       logError("Failed to persist active group:", error);
     });
@@ -290,9 +294,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
     set((state) => ({
       searchQuery: "",
       selectedGroup: null,
-      batchMode: false,
-      selectedIds: new Set(),
-      lastSelectedIndex: -1,
+      ...batchResetState(),
       _resetToken: state._resetToken + 1,
     }));
     await get().fetchItems({ search: "" });
@@ -327,7 +329,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
   lastSelectedIndex: -1,
 
   setBatchMode: (enabled) => {
-    set({ batchMode: enabled, selectedIds: new Set(), lastSelectedIndex: -1 });
+    set({ ...batchResetState(), batchMode: enabled });
   },
 
   toggleSelect: (id, index, shiftKey) => {
@@ -361,7 +363,7 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
     if (selectedIds.size === 0) return;
     try {
       await invoke("batch_delete_clipboard_items", { ids: Array.from(selectedIds) });
-      set({ selectedIds: new Set(), batchMode: false, lastSelectedIndex: -1 });
+      set({ ...batchResetState() });
       await get().refresh();
     } catch (error) {
       logError("Failed to batch delete:", error);

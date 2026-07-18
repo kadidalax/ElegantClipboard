@@ -528,13 +528,19 @@ fn is_monitoring_active() -> bool {
 }
 
 /// 低级钩子回调不在主线程，不能直接操作 WebView 窗口；派发到主线程执行。
-fn dispatch_on_main_thread(f: impl FnOnce(&tauri::AppHandle, &WebviewWindow) + Send + 'static) {
-    let Some(app) = MAIN_WINDOW
+fn dispatch_to_window(
+    primary: &Mutex<Option<WebviewWindow>>,
+    fallback: &Mutex<Option<WebviewWindow>>,
+    window_label: &'static str,
+    action_name: &str,
+    f: impl FnOnce(&tauri::AppHandle, &WebviewWindow) + Send + 'static,
+) {
+    let Some(app) = primary
         .lock()
         .as_ref()
         .map(|window| window.app_handle().clone())
         .or_else(|| {
-            TRANSLATE_WINDOW
+            fallback
                 .lock()
                 .as_ref()
                 .map(|window| window.app_handle().clone())
@@ -545,39 +551,33 @@ fn dispatch_on_main_thread(f: impl FnOnce(&tauri::AppHandle, &WebviewWindow) + S
     if let Err(err) = crate::main_thread::run_on_ui_thread(&app, {
         let app = app.clone();
         move || {
-            if let Some(window) = app.get_webview_window("main") {
+            if let Some(window) = app.get_webview_window(window_label) {
                 f(&app, &window);
             }
         }
     }) {
-        warn!("Failed to dispatch input monitor action to main thread: {err}");
+        warn!("Failed to dispatch {action_name} to main thread: {err}");
     }
 }
 
+fn dispatch_on_main_thread(f: impl FnOnce(&tauri::AppHandle, &WebviewWindow) + Send + 'static) {
+    dispatch_to_window(
+        &MAIN_WINDOW,
+        &TRANSLATE_WINDOW,
+        "main",
+        "input monitor action",
+        f,
+    );
+}
+
 fn dispatch_translate_action(f: impl FnOnce(&tauri::AppHandle, &WebviewWindow) + Send + 'static) {
-    let Some(app) = TRANSLATE_WINDOW
-        .lock()
-        .as_ref()
-        .map(|window| window.app_handle().clone())
-        .or_else(|| {
-            MAIN_WINDOW
-                .lock()
-                .as_ref()
-                .map(|window| window.app_handle().clone())
-        })
-    else {
-        return;
-    };
-    if let Err(err) = crate::main_thread::run_on_ui_thread(&app, {
-        let app = app.clone();
-        move || {
-            if let Some(window) = app.get_webview_window("translate-result") {
-                f(&app, &window);
-            }
-        }
-    }) {
-        warn!("Failed to dispatch translate window action to main thread: {err}");
-    }
+    dispatch_to_window(
+        &TRANSLATE_WINDOW,
+        &MAIN_WINDOW,
+        "translate-result",
+        "translate window action",
+        f,
+    );
 }
 
 fn handle_escape_key() {

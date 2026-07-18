@@ -50,6 +50,21 @@ const ScrollSeekPlaceholder = ({ height }: { height: number }) => (
 );
 
 // 模块级静态配置：避免每次渲染重新分配对象，触发 OverlayScrollbars/Virtuoso 内部 effect 重订阅
+function smoothScrollToTop(el: HTMLElement) {
+  const start = el.scrollTop;
+  if (start <= 0) return;
+  const duration = Math.min(300, start / 10);
+  const startTime = performance.now();
+  const easeOut = (t: number) => 1 - (1 - t) * (1 - t);
+  const tick = (now: number) => {
+    const elapsed = now - startTime;
+    const progress = Math.min(1, elapsed / duration);
+    el.scrollTop = start * (1 - easeOut(progress));
+    if (progress < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
 const OS_OPTIONS = {
   scrollbars: {
     theme: "os-theme-custom",
@@ -191,12 +206,9 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
       try {
         if (fromIsPinned !== toIsPinned) {
           await togglePin(fromItem.id);
-          if (isFavoritesView) await moveFavoriteItem(fromItem.id, toItem.id);
-          else await moveItem(fromItem.id, toItem.id);
-        } else {
-          if (isFavoritesView) await moveFavoriteItem(fromItem.id, toItem.id);
-          else await moveItem(fromItem.id, toItem.id);
         }
+        if (isFavoritesView) await moveFavoriteItem(fromItem.id, toItem.id);
+        else await moveItem(fromItem.id, toItem.id);
       } catch {
         // store 内部已记录错误
       } finally {
@@ -286,39 +298,19 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
         el.scrollTop = 0;
         return;
       }
-      const start = el.scrollTop;
-      if (start <= 0) return;
-      const duration = Math.min(300, start / 10);
-      const startTime = performance.now();
-      const easeOut = (t: number) => 1 - (1 - t) * (1 - t);
-      const tick = (now: number) => {
-        const elapsed = now - startTime;
-        const progress = Math.min(1, elapsed / duration);
-        el.scrollTop = start * (1 - easeOut(progress));
-        if (progress < 1) requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
+      smoothScrollToTop(el);
       return;
     }
     if (!smooth) {
       virtuosoRef.current?.scrollToIndex({ index: 0, align: "start", behavior: "auto" });
       return;
     }
-    // 快速平滑滚动：150ms 内完成，比浏览器原生 smooth 快得多
     const el = customScrollParent;
-    if (!el) { virtuosoRef.current?.scrollToIndex({ index: 0, align: "start", behavior: "auto" }); return; }
-    const start = el.scrollTop;
-    if (start <= 0) return;
-    const duration = Math.min(300, start / 10);
-    const startTime = performance.now();
-    const easeOut = (t: number) => 1 - (1 - t) * (1 - t);
-    const tick = (now: number) => {
-      const elapsed = now - startTime;
-      const progress = Math.min(1, elapsed / duration);
-      el.scrollTop = start * (1 - easeOut(progress));
-      if (progress < 1) requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
+    if (!el) {
+      virtuosoRef.current?.scrollToIndex({ index: 0, align: "start", behavior: "auto" });
+      return;
+    }
+    smoothScrollToTop(el);
   }, [customScrollParent, isMasonry]);
 
   // 窗口重新打开时重置滚动位置

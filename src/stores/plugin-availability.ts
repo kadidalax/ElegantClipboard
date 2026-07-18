@@ -36,27 +36,25 @@ export const usePluginAvailability = create<PluginAvailabilityState>((set) => ({
 let initialized = false;
 
 export async function initPluginAvailability() {
-  if (initialized) {
-    await usePluginAvailability.getState().refresh();
-    return;
+  if (!initialized) {
+    initialized = true;
+
+    try {
+      await listen(WEBDAV_AVAILABILITY_EVENT, () => {
+        void usePluginAvailability.getState().refresh();
+      });
+      await listen(TRANSLATE_AVAILABILITY_EVENT, () => {
+        void usePluginAvailability.getState().refresh();
+      });
+      await listen("translate-settings-changed", () => {
+        void usePluginAvailability.getState().refresh();
+      });
+    } catch {
+      // non-Tauri environments
+    }
   }
-  initialized = true;
 
   await usePluginAvailability.getState().refresh();
-
-  try {
-    await listen(WEBDAV_AVAILABILITY_EVENT, () => {
-      void usePluginAvailability.getState().refresh();
-    });
-    await listen(TRANSLATE_AVAILABILITY_EVENT, () => {
-      void usePluginAvailability.getState().refresh();
-    });
-    await listen("translate-settings-changed", () => {
-      void usePluginAvailability.getState().refresh();
-    });
-  } catch {
-    // non-Tauri environments
-  }
 }
 
 export function useWebDAVAvailable() {

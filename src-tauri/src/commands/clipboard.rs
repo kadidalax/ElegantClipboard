@@ -111,20 +111,19 @@ fn build_context_snippet(
     result
 }
 
-/// 使用 Windows SendInput API 模拟 Ctrl+组合键。
-/// 先释放用户可能按住的所有修饰键（Alt/Shift/Win），再发送纯净的组合键。
 #[cfg(target_os = "windows")]
-fn simulate_ctrl_combo(key_vk: u16, action: &str) -> Result<(), String> {
+mod win_keyboard {
+    use tracing::info;
     use windows::Win32::UI::Input::KeyboardAndMouse::{
         GetAsyncKeyState, INPUT, INPUT_KEYBOARD, KEYBD_EVENT_FLAGS, KEYBDINPUT, KEYEVENTF_KEYUP,
-        SendInput, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
+        SendInput,
     };
 
-    fn is_key_pressed(vk: u16) -> bool {
+    pub fn is_key_pressed(vk: u16) -> bool {
         unsafe { GetAsyncKeyState(i32::from(vk)) < 0 }
     }
 
-    fn send_key(vk: u16, up: bool) {
+    pub fn send_key(vk: u16, up: bool) {
         let input = INPUT {
             r#type: INPUT_KEYBOARD,
             Anonymous: windows::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
@@ -147,7 +146,7 @@ fn simulate_ctrl_combo(key_vk: u16, action: &str) -> Result<(), String> {
     }
 
     /// 若用户正按住修饰键则释放，最多重试 20 次（间隔 5ms）。
-    fn release_if_held(vk: u16) {
+    pub fn release_if_held(vk: u16) {
         for _ in 0..20 {
             if !is_key_pressed(vk) {
                 return;
@@ -157,7 +156,7 @@ fn simulate_ctrl_combo(key_vk: u16, action: &str) -> Result<(), String> {
         }
     }
 
-    {
+    pub fn log_foreground_window(action: &str) {
         use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowTextW};
         let fg = unsafe { GetForegroundWindow() };
         let mut buf = [0u16; 256];
@@ -165,6 +164,16 @@ fn simulate_ctrl_combo(key_vk: u16, action: &str) -> Result<(), String> {
         let title = String::from_utf16_lossy(&buf[..len]);
         info!("{action}: foreground hwnd={:?} title=\"{title}\"", fg.0);
     }
+}
+
+/// 使用 Windows SendInput API 模拟 Ctrl+组合键。
+/// 先释放用户可能按住的所有修饰键（Alt/Shift/Win），再发送纯净的组合键。
+#[cfg(target_os = "windows")]
+fn simulate_ctrl_combo(key_vk: u16, action: &str) -> Result<(), String> {
+    use win_keyboard::{is_key_pressed, log_foreground_window, release_if_held, send_key};
+    use windows::Win32::UI::Input::KeyboardAndMouse::{VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT};
+
+    log_foreground_window(action);
 
     release_if_held(VK_MENU.0);
     release_if_held(VK_SHIFT.0);
@@ -211,58 +220,12 @@ pub fn simulate_paste() -> Result<(), String> {
 /// 先释放 Ctrl/Alt/Win，保留或补按 Shift 后发送 Insert。
 #[cfg(target_os = "windows")]
 fn simulate_shift_insert() -> Result<(), String> {
+    use win_keyboard::{is_key_pressed, log_foreground_window, release_if_held, send_key};
     use windows::Win32::UI::Input::KeyboardAndMouse::{
-        GetAsyncKeyState, INPUT, INPUT_KEYBOARD, KEYBD_EVENT_FLAGS, KEYBDINPUT, KEYEVENTF_KEYUP,
-        SendInput, VK_CONTROL, VK_INSERT, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
+        VK_CONTROL, VK_INSERT, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
     };
 
-    fn is_key_pressed(vk: u16) -> bool {
-        unsafe { GetAsyncKeyState(i32::from(vk)) < 0 }
-    }
-
-    fn send_key(vk: u16, up: bool) {
-        let input = INPUT {
-            r#type: INPUT_KEYBOARD,
-            Anonymous: windows::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
-                ki: KEYBDINPUT {
-                    wVk: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY(vk),
-                    wScan: 0,
-                    dwFlags: if up {
-                        KEYEVENTF_KEYUP
-                    } else {
-                        KEYBD_EVENT_FLAGS(0)
-                    },
-                    time: 0,
-                    dwExtraInfo: 0,
-                },
-            },
-        };
-        unsafe {
-            SendInput(&[input], std::mem::size_of::<INPUT>() as i32);
-        }
-    }
-
-    fn release_if_held(vk: u16) {
-        for _ in 0..20 {
-            if !is_key_pressed(vk) {
-                return;
-            }
-            send_key(vk, true);
-            std::thread::sleep(std::time::Duration::from_millis(5));
-        }
-    }
-
-    {
-        use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowTextW};
-        let fg = unsafe { GetForegroundWindow() };
-        let mut buf = [0u16; 256];
-        let len = unsafe { GetWindowTextW(fg, &mut buf) } as usize;
-        let title = String::from_utf16_lossy(&buf[..len]);
-        info!(
-            "simulate_shift_insert: foreground hwnd={:?} title=\"{title}\"",
-            fg.0
-        );
-    }
+    log_foreground_window("simulate_shift_insert");
 
     release_if_held(VK_MENU.0);
     release_if_held(VK_CONTROL.0);
@@ -713,21 +676,23 @@ pub fn quick_paste_favorite_by_slot(
     Ok(())
 }
 
-/// 公共粘贴执行：写剪贴板 → 隐藏窗口 → 模拟 Ctrl+V
-fn paste_item_to_active_window(
+/// 公共粘贴执行：写剪贴板 → 隐藏窗口 → 模拟粘贴
+fn execute_paste_flow<F>(
     state: &Arc<AppState>,
     app: &tauri::AppHandle,
-    item: &ClipboardItem,
     close_window: bool,
-) -> Result<(), String> {
-    info!("paste_item: id={}, close_window={}", item.id, close_window);
+    log_label: &str,
+    write_fn: F,
+) -> Result<(), String>
+where
+    F: FnOnce(&mut clipboard_rs::ClipboardContext) -> Result<(), String>,
+{
     with_paused_monitor(state, || {
         let mut clipboard = clipboard_rs::ClipboardContext::new()
             .map_err(|e| format!("Failed to access clipboard: {e}"))?;
-        set_clipboard_content(item, &mut clipboard)?;
-        debug!("paste_item: clipboard set ok");
+        write_fn(&mut clipboard)?;
+        debug!("{log_label}: clipboard set ok");
 
-        // 粘贴时隐藏预览窗口
         super::hide_preview_windows(app);
 
         if close_window {
@@ -737,11 +702,22 @@ fn paste_item_to_active_window(
         std::thread::sleep(std::time::Duration::from_millis(50));
         super::run_simulate_paste_with_sound(app)?;
 
-        // 粘贴后再次隐藏预览窗口（防止竞态）
         super::hide_preview_windows(app);
 
-        debug!("paste_item: simulate_paste ok");
+        debug!("{log_label}: simulate_paste ok");
         Ok(())
+    })
+}
+
+fn paste_item_to_active_window(
+    state: &Arc<AppState>,
+    app: &tauri::AppHandle,
+    item: &ClipboardItem,
+    close_window: bool,
+) -> Result<(), String> {
+    info!("paste_item: id={}, close_window={}", item.id, close_window);
+    execute_paste_flow(state, app, close_window, "paste_item", |clipboard| {
+        set_clipboard_content(item, clipboard)
     })
 }
 
@@ -757,29 +733,11 @@ fn paste_plain_text_to_active_window(
         text.len(),
         close_window
     );
-    with_paused_monitor(state, || {
-        let clipboard = clipboard_rs::ClipboardContext::new()
-            .map_err(|e| format!("Failed to access clipboard: {e}"))?;
+    let text = text.to_string();
+    execute_paste_flow(state, app, close_window, "paste_plain_text", move |clipboard| {
         clipboard
-            .set_text(text.to_string())
-            .map_err(|e| format!("Failed to set clipboard text: {e}"))?;
-        debug!("paste_plain_text: clipboard set ok");
-
-        // 粘贴时隐藏预览窗口
-        super::hide_preview_windows(app);
-
-        if close_window {
-            hide_main_window_if_not_pinned(app);
-        }
-
-        std::thread::sleep(std::time::Duration::from_millis(50));
-        super::run_simulate_paste_with_sound(app)?;
-
-        // 粘贴后再次隐藏预览窗口（防止竞态）
-        super::hide_preview_windows(app);
-
-        debug!("paste_plain_text: simulate_paste ok");
-        Ok(())
+            .set_text(text)
+            .map_err(|e| format!("Failed to set clipboard text: {e}"))
     })
 }
 

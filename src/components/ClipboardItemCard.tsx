@@ -216,6 +216,10 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
     sharpCorners,
     timeFormat,
   } = uiSettings;
+  const effectiveSourceName =
+    showSourceApp && sourceAppDisplay !== "icon" ? item.source_app_name : undefined;
+  const effectiveSourceIcon =
+    showSourceApp && sourceAppDisplay !== "name" ? item.source_app_icon : undefined;
   const {
     togglePin,
     toggleFavorite,
@@ -775,8 +779,8 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
               index={index}
               showBadge={showBadge}
               isDragOverlay={isDragOverlay}
-              sourceAppName={showSourceApp && sourceAppDisplay !== "icon" ? item.source_app_name : undefined}
-              sourceAppIcon={showSourceApp && sourceAppDisplay !== "name" ? item.source_app_icon : undefined}
+              sourceAppName={effectiveSourceName}
+              sourceAppIcon={effectiveSourceIcon}
               imageWidth={item.image_width}
               imageHeight={item.image_height}
             />
@@ -789,8 +793,8 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
               index={index}
               showBadge={showBadge}
               isDragOverlay={isDragOverlay}
-              sourceAppName={showSourceApp && sourceAppDisplay !== "icon" ? item.source_app_name : undefined}
-              sourceAppIcon={showSourceApp && sourceAppDisplay !== "name" ? item.source_app_icon : undefined}
+              sourceAppName={effectiveSourceName}
+              sourceAppIcon={effectiveSourceIcon}
             />
           ) : (
             <div
@@ -816,8 +820,8 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
                 index={index}
                 showBadge={showBadge}
                 isDragOverlay={isDragOverlay}
-                sourceAppName={showSourceApp && sourceAppDisplay !== "icon" ? item.source_app_name : undefined}
-                sourceAppIcon={showSourceApp && sourceAppDisplay !== "name" ? item.source_app_icon : undefined}
+                sourceAppName={effectiveSourceName}
+                sourceAppIcon={effectiveSourceIcon}
               />
             </div>
           )}
