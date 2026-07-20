@@ -86,6 +86,7 @@ describe("ClipboardItemCard source details", () => {
     });
 
     expect(invoke).toHaveBeenCalledWith("show_text_preview", expect.objectContaining({
+      sourceAppName: sourceItem.source_app_name,
       sourceTitle: sourceItem.source_title,
       sourceUrl: sourceItem.source_url,
       sourceFileName: sourceItem.source_file_name,
