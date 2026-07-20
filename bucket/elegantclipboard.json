@@ -1,16 +1,16 @@
 {
-  "version": "1.2.7",
+  "version": "1.2.8",
   "description": "An elegant Windows clipboard manager built with Tauri",
   "homepage": "https://github.com/kadidalax/ElegantClipboard",
   "license": "MIT",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/kadidalax/ElegantClipboard/releases/download/v1.2.7/ElegantClipboard_1.2.7_x64-setup.exe#/dl.7z",
-      "hash": "4d4a4d66c7968846a5c27368f1c19235f3a8efc2d5b7b3161025409ccc37336a"
+      "url": "https://github.com/kadidalax/ElegantClipboard/releases/download/v1.2.8/ElegantClipboard_1.2.8_x64-setup.exe#/dl.7z",
+      "hash": "5be93db69837f620db8ec853aa006d477c62342e650a9d5ea45473607c22732c"
     },
     "arm64": {
-      "url": "https://github.com/kadidalax/ElegantClipboard/releases/download/v1.2.7/ElegantClipboard_1.2.7_arm64-setup.exe#/dl.7z",
-      "hash": "a059a5f9fc8b89ece23a9d98261034c96f5b53387dc508c4249562ef02ad14ca"
+      "url": "https://github.com/kadidalax/ElegantClipboard/releases/download/v1.2.8/ElegantClipboard_1.2.8_arm64-setup.exe#/dl.7z",
+      "hash": "358592c4536719c40a64f7996ab5ab7649ae5c17c7643d7bc5e376789f88b593"
     }
   },
   "pre_install": "Remove-Item \"$dir\\`$*\", \"$dir\\uninst*\" -Force -Recurse",
