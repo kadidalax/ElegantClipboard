@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (vX.Y.Z)"
+        required: true
+        type: string
 
 jobs:
   build-and-release:
@@ -11,6 +17,7 @@ jobs:
       contents: write
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         include:
           - arch: x64
@@ -20,12 +27,22 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
-      # Extract version from tag (v0.6.0 → 0.6.0)
-      - name: Extract version from tag
+      # Extract tag and version (v0.6.0 → 0.6.0)
+      - name: Extract release tag and version
         id: version
         shell: bash
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+        env:
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid release tag: $TAG" >&2
+            exit 1
+          fi
+          echo "TAG=$TAG" >> "$GITHUB_OUTPUT"
+          echo "VERSION=${TAG#v}" >> "$GITHUB_OUTPUT"
 
       # Sync version in package.json, tauri.conf.json, Cargo.toml
       - name: Bump version to ${{ steps.version.outputs.VERSION }}
@@ -79,8 +96,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "ElegantClipboard ${{ github.ref_name }}"
+          tagName: ${{ steps.version.outputs.TAG }}
+          releaseName: "ElegantClipboard ${{ steps.version.outputs.TAG }}"
           releaseBody: |
             下载对应架构的安装包或便携版即可使用。
             Download the installer or portable executable for your architecture.
@@ -119,7 +136,7 @@ jobs:
       - name: Upload portable to release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           draft: true
           files: portables/*
         env:
