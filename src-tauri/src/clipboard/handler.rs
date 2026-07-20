@@ -31,53 +31,71 @@ pub(crate) fn parse_cf_html_source_url(html: &str) -> Option<String> {
 }
 
 fn source_file_name_from_title(title: &str, allow_code: bool) -> Option<String> {
-    title.split(" - ").find_map(|part| {
-        let name = part.trim();
-        let ext = Path::new(name).extension()?.to_str()?.to_ascii_lowercase();
-        let document = matches!(
-            ext.as_str(),
-            "pdf"
-                | "doc"
-                | "docx"
-                | "xls"
-                | "xlsx"
-                | "ppt"
-                | "pptx"
-                | "txt"
-                | "md"
-                | "rtf"
-                | "csv"
-                | "odt"
-                | "ods"
-                | "odp"
-        );
-        let code = matches!(
-            ext.as_str(),
-            "rs" | "js"
-                | "jsx"
-                | "ts"
-                | "tsx"
-                | "py"
-                | "go"
-                | "java"
-                | "c"
-                | "h"
-                | "cpp"
-                | "hpp"
-                | "cs"
-                | "html"
-                | "css"
-                | "json"
-                | "yaml"
-                | "yml"
-                | "toml"
-                | "xml"
-                | "sql"
-                | "sh"
-        );
-        ((document || allow_code && code) && !name.contains('/') && !name.contains('\\'))
-            .then(|| name.to_string())
-    })
+    let title = title.trim();
+    let title_prefix = title.rsplit_once(" - ").map(|(prefix, _)| prefix.trim());
+
+    title_prefix
+        .into_iter()
+        .chain([title])
+        .find_map(|candidate| {
+            let candidate = candidate
+                .rsplit_once(" [")
+                .filter(|(_, directory)| directory.ends_with(']'))
+                .map_or(candidate, |(file_name, _)| file_name.trim());
+            if candidate
+                .get(..candidate.len().min(8))
+                .is_some_and(|prefix| {
+                    prefix.eq_ignore_ascii_case("http://")
+                        || prefix.eq_ignore_ascii_case("https://")
+                })
+            {
+                return None;
+            }
+            let name = candidate.rsplit(['\\', '/']).next()?.trim();
+            let ext = Path::new(name).extension()?.to_str()?.to_ascii_lowercase();
+            let document = matches!(
+                ext.as_str(),
+                "pdf"
+                    | "doc"
+                    | "docx"
+                    | "xls"
+                    | "xlsx"
+                    | "ppt"
+                    | "pptx"
+                    | "txt"
+                    | "md"
+                    | "rtf"
+                    | "csv"
+                    | "odt"
+                    | "ods"
+                    | "odp"
+            );
+            let code = matches!(
+                ext.as_str(),
+                "rs" | "js"
+                    | "jsx"
+                    | "ts"
+                    | "tsx"
+                    | "py"
+                    | "go"
+                    | "java"
+                    | "c"
+                    | "h"
+                    | "cpp"
+                    | "hpp"
+                    | "cs"
+                    | "html"
+                    | "css"
+                    | "json"
+                    | "yaml"
+                    | "yml"
+                    | "toml"
+                    | "xml"
+                    | "sql"
+                    | "sh"
+            );
+            (document || allow_code && code).then(|| name.to_string())
+        })
 }
 
 fn attach_source_file_name(
@@ -604,6 +622,30 @@ impl ClipboardHandler {
                     );
                     self.repository
                         .refresh_rich_fields(id, &refreshed)
+                        .map_err(|e| e.to_string())?;
+                }
+
+                if let Some(id) = id
+                    && let ClipboardContent::Text(text) = &content
+                {
+                    let mut refreshed = NewClipboardItem {
+                        content_type: if is_url(text) {
+                            ContentType::Url
+                        } else {
+                            ContentType::Text
+                        },
+                        source_app_name: source_app_name.clone(),
+                        source_app_icon: source_app_icon.clone(),
+                        source_title: source_title.clone(),
+                        ..Default::default()
+                    };
+                    attach_source_file_name(
+                        &mut refreshed,
+                        source_title.as_deref(),
+                        source_app_name.as_deref(),
+                    );
+                    self.repository
+                        .refresh_source_metadata(id, &refreshed)
                         .map_err(|e| e.to_string())?;
                 }
 
@@ -1197,6 +1239,27 @@ mod source_metadata_tests {
     #[test]
     fn conservatively_extracts_file_name_from_window_title() {
         assert_eq!(
+            source_file_name_from_title(
+                "C:\\Users\\Administrator\\Desktop\\report.docx - Microsoft Word",
+                false,
+            ),
+            Some("report.docx".to_string()),
+        );
+        assert_eq!(
+            source_file_name_from_title(
+                "plan - final.txt [C:\\Users\\Administrator\\Desktop] - Notepad3",
+                true,
+            ),
+            Some("plan - final.txt".to_string()),
+        );
+        assert_eq!(
+            source_file_name_from_title(
+                "新建文本文档.txt [C:\\Users\\Administrator\\Desktop] - Notepad3 · 管理员权限",
+                true,
+            ),
+            Some("新建文本文档.txt".to_string()),
+        );
+        assert_eq!(
             source_file_name_from_title("report.final.pdf - Microsoft Edge", false),
             Some("report.final.pdf".to_string())
         );
@@ -1315,5 +1378,98 @@ mod source_metadata_tests {
                 "second.docx".to_string(),
             )
         );
+    }
+
+    #[test]
+    fn repeated_plain_text_refreshes_source_metadata() {
+        let db_path = std::env::temp_dir().join(format!(
+            "ec_plain_source_refresh_{}.db",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let db = Database::new(db_path).unwrap();
+        let source = |title: &str| SourceAppInfo {
+            app_name: "Notepad3".to_string(),
+            exe_path: "missing.exe".to_string(),
+            icon_cache_key: "missing".to_string(),
+            source_title: Some(title.to_string()),
+        };
+
+        let first_id = ClipboardHandler::new(&db)
+            .process(
+                ClipboardContent::Text("same text".to_string()),
+                Some(source("first.txt [C:\\Old] - Notepad3")),
+                None,
+            )
+            .unwrap()
+            .unwrap();
+        let second_id = ClipboardHandler::new(&db)
+            .process(
+                ClipboardContent::Text("same text".to_string()),
+                Some(source("second.txt [C:\\New] - Notepad3")),
+                None,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(first_id, second_id);
+
+        let conn = db.read_connection();
+        let conn = conn.lock();
+        let values: (String, String) = conn
+            .query_row(
+                "SELECT source_title, source_file_name FROM clipboard_items WHERE id = ?1",
+                [first_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            values,
+            (
+                "second.txt [C:\\New] - Notepad3".to_string(),
+                "second.txt".to_string(),
+            )
+        );
+    }
+
+    #[test]
+    fn repeated_url_does_not_infer_a_file_name_from_browser_title() {
+        let db_path = std::env::temp_dir().join(format!(
+            "ec_url_source_refresh_{}.db",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let db = Database::new(db_path).unwrap();
+        let source = |title: &str| SourceAppInfo {
+            app_name: "Google Chrome".to_string(),
+            exe_path: "missing.exe".to_string(),
+            icon_cache_key: "missing".to_string(),
+            source_title: Some(title.to_string()),
+        };
+
+        for title in ["first page - Google Chrome", "report.pdf - Google Chrome"] {
+            ClipboardHandler::new(&db)
+                .process(
+                    ClipboardContent::Text("https://example.com/report.pdf".to_string()),
+                    Some(source(title)),
+                    None,
+                )
+                .unwrap()
+                .unwrap();
+        }
+
+        let conn = db.read_connection();
+        let conn = conn.lock();
+        let file_name: Option<String> = conn
+            .query_row(
+                "SELECT source_file_name FROM clipboard_items LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(file_name, None);
     }
 }

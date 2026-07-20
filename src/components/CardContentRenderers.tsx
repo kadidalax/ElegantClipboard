@@ -1,6 +1,7 @@
 // 剪贴板卡片内容渲染器：图片预览、文件内容、卡片底栏
 
 import { memo, useCallback, useEffect, useRef, useState, useMemo } from "react";
+import type { MouseEventHandler, Ref, WheelEventHandler } from "react";
 import {
   Document16Regular,
   Folder16Regular,
@@ -776,6 +777,10 @@ const FileImagePreview = memo(function FileImagePreview({
   sourceAppName,
   sourceAppIcon,
   sourceDetails,
+  previewAnchorRef,
+  onPreviewMouseEnter,
+  onPreviewMouseLeave,
+  onPreviewWheel,
 }: {
   filePath: string;
   metaItems: string[];
@@ -785,6 +790,10 @@ const FileImagePreview = memo(function FileImagePreview({
   sourceAppName?: string | null;
   sourceAppIcon?: string | null;
   sourceDetails?: SourceDetails;
+  previewAnchorRef?: Ref<HTMLDivElement>;
+  onPreviewMouseEnter?: MouseEventHandler<HTMLDivElement>;
+  onPreviewMouseLeave?: MouseEventHandler<HTMLDivElement>;
+  onPreviewWheel?: WheelEventHandler<HTMLDivElement>;
 }) {
   const [imgError, setImgError] = useState(false);
   const { t } = useTranslation();
@@ -796,7 +805,13 @@ const FileImagePreview = memo(function FileImagePreview({
 
   if (imgError) {
     return (
-      <div className="flex-1 min-w-0 px-3 py-2.5">
+      <div
+        ref={previewAnchorRef}
+        className="flex-1 min-w-0 px-3 py-2.5"
+        onMouseEnter={onPreviewMouseEnter}
+        onMouseLeave={onPreviewMouseLeave}
+        onWheel={onPreviewWheel}
+      >
         <div className="flex items-start gap-2.5">
           <div className="shrink-0 w-10 h-10 rounded-md flex items-center justify-center bg-destructive-subtle">
             <Warning16Regular className="w-5 h-5 text-destructive" />
@@ -825,12 +840,17 @@ const FileImagePreview = memo(function FileImagePreview({
   }
 
   return (
-    <div className="flex-1 min-w-0 px-3 py-2.5">
+    <div
+      ref={previewAnchorRef}
+      className="flex-1 min-w-0 px-3 py-2.5"
+      onMouseEnter={onPreviewMouseEnter}
+      onMouseLeave={onPreviewMouseLeave}
+      onWheel={onPreviewWheel}
+    >
       <ImagePreview
         src={convertFileSrc(filePath)}
         alt={fileName}
         onError={() => setImgError(true)}
-        imagePath={filePath}
         overlay={
           showImageFileName ? (
             <div className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-black/50 to-transparent px-2 py-1">
@@ -865,6 +885,10 @@ interface FileContentProps {
   sourceAppName?: string | null;
   sourceAppIcon?: string | null;
   sourceDetails?: SourceDetails;
+  previewAnchorRef?: Ref<HTMLDivElement>;
+  onPreviewMouseEnter?: MouseEventHandler<HTMLDivElement>;
+  onPreviewMouseLeave?: MouseEventHandler<HTMLDivElement>;
+  onPreviewWheel?: WheelEventHandler<HTMLDivElement>;
 }
 
 export const FileContent = memo(function FileContent({
@@ -878,6 +902,10 @@ export const FileContent = memo(function FileContent({
   sourceAppName,
   sourceAppIcon,
   sourceDetails,
+  previewAnchorRef,
+  onPreviewMouseEnter,
+  onPreviewMouseLeave,
+  onPreviewWheel,
 }: FileContentProps) {
   const { t } = useTranslation();
   const isMultiple = filePaths.length > 1;
@@ -898,12 +926,22 @@ export const FileContent = memo(function FileContent({
         sourceAppName={sourceAppName}
         sourceAppIcon={sourceAppIcon}
         sourceDetails={sourceDetails}
+        previewAnchorRef={previewAnchorRef}
+        onPreviewMouseEnter={onPreviewMouseEnter}
+        onPreviewMouseLeave={onPreviewMouseLeave}
+        onPreviewWheel={onPreviewWheel}
       />
     );
   }
 
   return (
-    <div className="flex-1 min-w-0 px-3 py-2.5">
+    <div
+      ref={previewAnchorRef}
+      className="flex-1 min-w-0 px-3 py-2.5"
+      onMouseEnter={onPreviewMouseEnter}
+      onMouseLeave={onPreviewMouseLeave}
+      onWheel={onPreviewWheel}
+    >
       <div className="flex items-start gap-2.5">
         <div
           className={cn(

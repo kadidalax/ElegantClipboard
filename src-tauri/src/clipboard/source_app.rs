@@ -13,24 +13,91 @@ pub struct SourceAppInfo {
     pub source_title: Option<String>,
 }
 
+fn select_source_title(
+    owner_title: Option<String>,
+    foreground_title: Option<String>,
+    visible_titles: Vec<String>,
+) -> Option<String> {
+    let clean = |value: String| {
+        let value = value.trim().to_string();
+        (!value.is_empty()).then_some(value)
+    };
+    if let Some(title) = owner_title.and_then(clean) {
+        return Some(title);
+    }
+    if let Some(title) = foreground_title.and_then(clean) {
+        return Some(title);
+    }
+
+    let mut unique: Option<String> = None;
+    for title in visible_titles.into_iter().filter_map(clean) {
+        if unique.as_ref().is_some_and(|current| current != &title) {
+            return None;
+        }
+        unique = Some(title);
+    }
+    unique
+}
+
 /// 获取剪贴板来源应用，需在剪贴板变化回调的最开始调用
 #[cfg(target_os = "windows")]
 pub fn get_clipboard_source_app() -> Option<SourceAppInfo> {
-    use windows::Win32::Foundation::HWND;
+    use windows::Win32::Foundation::{HWND, LPARAM};
     use windows::Win32::System::DataExchange::GetClipboardOwner;
     use windows::Win32::UI::WindowsAndMessaging::{
-        GetForegroundWindow, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId,
+        EnumWindows, GetForegroundWindow, GetWindowTextLengthW, GetWindowTextW,
+        GetWindowThreadProcessId, IsWindowVisible,
     };
 
     let self_pid = std::process::id();
+
+    unsafe fn window_pid(hwnd: HWND) -> u32 {
+        let mut pid = 0;
+        unsafe { GetWindowThreadProcessId(hwnd, Some(&raw mut pid)) };
+        pid
+    }
+
+    unsafe fn window_title(hwnd: HWND) -> Option<String> {
+        let len = unsafe { GetWindowTextLengthW(hwnd) };
+        if len <= 0 {
+            return None;
+        }
+        let mut buf = vec![0u16; len as usize + 1];
+        let copied = unsafe { GetWindowTextW(hwnd, &mut buf) };
+        (copied > 0).then(|| String::from_utf16_lossy(&buf[..copied as usize]))
+    }
+
+    unsafe fn visible_window_titles_for_pid(pid: u32) -> Vec<String> {
+        struct Search {
+            pid: u32,
+            titles: Vec<String>,
+        }
+
+        unsafe extern "system" fn callback(hwnd: HWND, lparam: LPARAM) -> windows_core::BOOL {
+            let search = unsafe { &mut *(lparam.0 as *mut Search) };
+            if unsafe { IsWindowVisible(hwnd).as_bool() }
+                && unsafe { window_pid(hwnd) } == search.pid
+                && let Some(title) = unsafe { window_title(hwnd) }
+            {
+                search.titles.push(title);
+            }
+            windows_core::BOOL::from(true)
+        }
+
+        let mut search = Search {
+            pid,
+            titles: Vec::new(),
+        };
+        let _ = unsafe { EnumWindows(Some(callback), LPARAM(&raw mut search as isize)) };
+        search.titles
+    }
 
     // 从 HWND 解析来源应用，失败或属于自身返回 None
     unsafe fn try_resolve(hwnd: HWND, self_pid: u32) -> Option<SourceAppInfo> {
         if hwnd.0.is_null() {
             return None;
         }
-        let mut pid: u32 = 0;
-        unsafe { GetWindowThreadProcessId(hwnd, Some(&raw mut pid)) };
+        let pid = unsafe { window_pid(hwnd) };
         if pid == 0 || pid == self_pid {
             return None;
         }
@@ -39,16 +106,22 @@ pub fn get_clipboard_source_app() -> Option<SourceAppInfo> {
         let exe_path = unsafe { resolve_uwp_app(hwnd, &exe_path) }.unwrap_or(exe_path);
         let app_name = get_app_display_name(&exe_path);
         let icon_cache_key = compute_icon_cache_key(&exe_path);
-        let source_title = unsafe {
-            let len = GetWindowTextLengthW(hwnd);
-            (len > 0)
-                .then(|| {
-                    let mut buf = vec![0u16; len as usize + 1];
-                    let copied = GetWindowTextW(hwnd, &mut buf);
-                    String::from_utf16_lossy(&buf[..copied.max(0) as usize])
-                })
-                .filter(|s| !s.is_empty())
+        let owner_title = unsafe { window_title(hwnd) };
+        let foreground = unsafe { GetForegroundWindow() };
+        let foreground_title = if foreground.0.is_null() {
+            None
+        } else {
+            let foreground_pid = unsafe { window_pid(foreground) };
+            (foreground_pid == pid)
+                .then(|| unsafe { window_title(foreground) })
+                .flatten()
         };
+        let visible_titles = if owner_title.is_none() && foreground_title.is_none() {
+            unsafe { visible_window_titles_for_pid(pid) }
+        } else {
+            Vec::new()
+        };
+        let source_title = select_source_title(owner_title, foreground_title, visible_titles);
 
         Some(SourceAppInfo {
             app_name,
@@ -373,5 +446,48 @@ fn extract_icon_png(exe_path: &str) -> Option<Vec<u8>> {
         let mut buf = std::io::Cursor::new(Vec::new());
         img.write_to(&mut buf, image::ImageFormat::Png).ok()?;
         Some(buf.into_inner())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::select_source_title;
+
+    #[test]
+    fn source_title_prefers_owner_then_matching_foreground() {
+        assert_eq!(
+            select_source_title(
+                Some("owner.txt - Editor".to_string()),
+                Some("foreground.txt - Editor".to_string()),
+                vec!["visible.txt - Editor".to_string()],
+            )
+            .as_deref(),
+            Some("owner.txt - Editor"),
+        );
+        assert_eq!(
+            select_source_title(
+                None,
+                Some("foreground.txt - Editor".to_string()),
+                vec!["visible.txt - Editor".to_string()],
+            )
+            .as_deref(),
+            Some("foreground.txt - Editor"),
+        );
+    }
+
+    #[test]
+    fn source_title_uses_only_an_unambiguous_visible_window() {
+        assert_eq!(
+            select_source_title(None, None, vec!["notes.txt - Notepad3".to_string()]).as_deref(),
+            Some("notes.txt - Notepad3"),
+        );
+        assert_eq!(
+            select_source_title(
+                None,
+                None,
+                vec!["Folder A".to_string(), "Folder B".to_string()],
+            ),
+            None,
+        );
     }
 }

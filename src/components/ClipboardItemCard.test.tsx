@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { showToast } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { ClipboardItem } from "@/stores/clipboard";
@@ -28,9 +28,13 @@ vi.mock("@/components/CardContentRenderers", async (importOriginal) => {
   };
 });
 
+beforeEach(() => {
+  vi.mocked(invoke).mockReset();
+  vi.clearAllMocks();
+});
+
 afterEach(() => {
   vi.useRealTimers();
-  vi.clearAllMocks();
 });
 
 const sourceItem = {
@@ -68,10 +72,101 @@ const sourceItem = {
   source_file_name: string;
 };
 
+const filePaths = [
+  "C:\\Users\\Administrator\\Desktop\\report.txt",
+  "D:\\Documents\\notes.md",
+];
+const stagedFilePaths = [
+  "C:\\Z_Software\\ElegantClipboard\\staged\\report.txt",
+  "C:\\Z_Software\\ElegantClipboard\\staged\\notes.md",
+];
+const fileItem = {
+  ...sourceItem,
+  id: 2,
+  content_type: "files",
+  text_content: null,
+  preview: "2 files",
+  file_paths: JSON.stringify(filePaths),
+  source_app_name: "Windows 资源管理器",
+  source_title: null,
+  source_url: null,
+  source_file_name: null,
+  files_valid: undefined,
+} as ClipboardItem;
+
+const imageFilePath = "C:\\Users\\Administrator\\Desktop\\photo.png";
+const imageFileItem = {
+  ...fileItem,
+  id: 3,
+  preview: imageFilePath,
+  file_paths: JSON.stringify([imageFilePath]),
+} as ClipboardItem;
+
 describe("ClipboardItemCard source details", () => {
+  it("shows a copied image file path in the text hover preview", async () => {
+    vi.useFakeTimers();
+    vi.mocked(invoke).mockImplementation((command) => {
+      if (command === "allocate_text_preview_lease") return Promise.resolve(30);
+      return Promise.resolve(null);
+    });
+    render(
+      <TooltipProvider>
+        <ClipboardItemCard item={imageFileItem} index={0} />
+      </TooltipProvider>,
+    );
+
+    const image = screen.getByAltText("photo.png");
+    fireEvent.mouseEnter(image.closest(".px-3")!);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(128);
+    });
+
+    expect(invoke).toHaveBeenCalledWith("show_text_preview", expect.objectContaining({
+      text: imageFilePath,
+    }));
+    expect(invoke).not.toHaveBeenCalledWith("show_image_preview", expect.anything());
+  });
+
+  it("shows full copied file paths in the hover preview", async () => {
+    vi.useFakeTimers();
+    vi.mocked(invoke).mockImplementation((command) => {
+      if (command === "allocate_text_preview_lease") return Promise.resolve(40);
+      if (command === "batch_get_item_file_status") {
+        return Promise.resolve({
+          2: {
+            all_exist: false,
+            resolved_paths: stagedFilePaths,
+            checks: {},
+          },
+        });
+      }
+      return Promise.resolve(null);
+    });
+    render(
+      <TooltipProvider>
+        <ClipboardItemCard item={fileItem} index={0} />
+      </TooltipProvider>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60);
+    });
+
+    const previewAnchor = screen.getByText("2 个文件").closest(".px-3");
+    expect(previewAnchor).not.toBeNull();
+    fireEvent.mouseEnter(previewAnchor!);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(128);
+    });
+
+    expect(invoke).toHaveBeenCalledWith("show_text_preview", expect.objectContaining({
+      text: filePaths.join("\n"),
+    }));
+  });
+
   it("passes source details to the text hover preview", async () => {
     vi.useFakeTimers();
-    vi.mocked(invoke).mockResolvedValueOnce(1);
+    vi.mocked(invoke).mockResolvedValueOnce(50);
     render(
       <TooltipProvider>
         <ClipboardItemCard item={sourceItem} index={0} />

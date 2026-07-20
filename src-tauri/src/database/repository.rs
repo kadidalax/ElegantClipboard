@@ -1097,6 +1097,29 @@ impl ClipboardRepository {
         Ok(())
     }
 
+    pub fn refresh_source_metadata(
+        &self,
+        id: i64,
+        item: &NewClipboardItem,
+    ) -> Result<(), rusqlite::Error> {
+        let write_conn = self.write_connection();
+        let conn = write_conn.lock();
+        conn.execute(
+            "UPDATE clipboard_items SET source_app_name = ?1, source_app_icon = ?2, \
+             source_title = ?3, source_url = ?4, source_file_name = ?5, \
+             updated_at = datetime('now', 'localtime') WHERE id = ?6",
+            params![
+                item.source_app_name,
+                item.source_app_icon,
+                item.source_title,
+                item.source_url,
+                item.source_file_name,
+                id,
+            ],
+        )?;
+        Ok(())
+    }
+
     /// 更新文本内容（编辑功能）
     pub fn update_text_content(&self, id: i64, new_text: &str) -> Result<(), rusqlite::Error> {
         let write_conn = self.write_connection();

@@ -8,6 +8,7 @@ beforeEach(() => {
 // Mock Tauri API
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(() => Promise.resolve()),
+  convertFileSrc: vi.fn((path: string) => path),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -17,11 +18,17 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 vi.mock("@tauri-apps/api/window", () => ({
+  currentMonitor: vi.fn(() => Promise.resolve({
+    position: { x: 0, y: 0 },
+    scaleFactor: 1,
+  })),
   getCurrentWindow: vi.fn(() => ({
     hide: vi.fn(),
     show: vi.fn(),
     setFocus: vi.fn(),
     isVisible: vi.fn(() => Promise.resolve(false)),
+    outerPosition: vi.fn(() => Promise.resolve({ x: 0, y: 0 })),
+    outerSize: vi.fn(() => Promise.resolve({ width: 400, height: 400 })),
   })),
 }));
 

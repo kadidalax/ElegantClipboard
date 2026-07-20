@@ -334,6 +334,8 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
     item.content_type === "files" && effectiveFilesValid === false;
   const isTextLikeContent =
     item.content_type === "text" || item.content_type === "html" || item.content_type === "rtf" || item.content_type === "url";
+  const hasTextPreviewContent =
+    isTextLikeContent || item.content_type === "files";
 
   const {
     attributes,
@@ -410,6 +412,9 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
   }, [clearTextPreviewTimer]);
 
   const resolveTextPreviewContent = useCallback(async (): Promise<string> => {
+    if (item.content_type === "files") {
+      return filePaths.join("\n") || item.preview || "";
+    }
     const inlineText = item.text_content || item.preview || "";
     if (!isTextLikeContent) return "";
     if (item.text_content) return item.text_content;
@@ -426,10 +431,10 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
       logError("Failed to load full text content for preview:", error);
       return inlineText;
     }
-  }, [isTextLikeContent, item.id, item.preview, item.text_content]);
+  }, [filePaths, isTextLikeContent, item.content_type, item.id, item.preview, item.text_content]);
 
   const showTextPreview = useCallback(async (reqId: number, lease: number) => {
-    if (!textPreviewEnabled || !isTextLikeContent || !textPreviewAnchorRef.current) {
+    if (!textPreviewEnabled || !hasTextPreviewContent || !textPreviewAnchorRef.current) {
       return;
     }
     if (!textPreviewHoveringRef.current || reqId !== textPreviewReqIdRef.current || !textPreviewLM.isCurrent(lease)) return;
@@ -516,7 +521,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
     }
   }, [
     textPreviewEnabled,
-    isTextLikeContent,
+    hasTextPreviewContent,
     previewPosition,
     resolveTextPreviewContent,
     sharpCorners,
@@ -527,7 +532,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
   ]);
 
   const handleTextMouseEnter = useCallback(() => {
-    if (!textPreviewEnabled || !isTextLikeContent || batchMode) return;
+    if (!textPreviewEnabled || !hasTextPreviewContent || batchMode) return;
     textPreviewHoveringRef.current = true;
     textPreviewReqIdRef.current += 1;
     const reqId = textPreviewReqIdRef.current;
@@ -544,7 +549,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
         void showTextPreview(reqId, lease);
       }, hoverPreviewDelay);
     })();
-  }, [textPreviewEnabled, isTextLikeContent, batchMode, clearTextPreviewTimer, showTextPreview, hoverPreviewDelay]);
+  }, [textPreviewEnabled, hasTextPreviewContent, batchMode, clearTextPreviewTimer, showTextPreview, hoverPreviewDelay]);
 
   const handleTextMouseLeave = useCallback(() => {
     hideTextPreview();
@@ -572,10 +577,10 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
   }, []);
 
   useEffect(() => {
-    if (!textPreviewEnabled || !isTextLikeContent) {
+    if (!textPreviewEnabled || !hasTextPreviewContent) {
       hideTextPreview();
     }
-  }, [textPreviewEnabled, isTextLikeContent, hideTextPreview]);
+  }, [textPreviewEnabled, hasTextPreviewContent, hideTextPreview]);
 
   useEffect(() => {
     if (isDragging) {
@@ -837,6 +842,10 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
               sourceAppName={effectiveSourceName}
               sourceAppIcon={effectiveSourceIcon}
               sourceDetails={sourceDetails}
+              previewAnchorRef={textPreviewAnchorRef}
+              onPreviewMouseEnter={handleTextMouseEnter}
+              onPreviewMouseLeave={handleTextMouseLeave}
+              onPreviewWheel={handleTextWheel}
             />
           ) : (
             <div
