@@ -1,8 +1,6 @@
 name: Publish to WinGet
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       version:
@@ -16,12 +14,9 @@ jobs:
       - name: Determine version
         id: version
         shell: bash
-        run: |
-          if [ -n "${{ github.event.inputs.version }}" ]; then
-            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
-          fi
+        env:
+          VERSION: ${{ inputs.version }}
+        run: echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Install wingetcreate
         shell: pwsh
@@ -32,7 +27,7 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ steps.version.outputs.VERSION }}"
-          $base = "https://github.com/Y-ASLant/ElegantClipboard/releases/download/v${version}"
+          $base = "https://github.com/${{ github.repository }}/releases/download/v${version}"
           $x64  = "${base}/ElegantClipboard_${version}_x64-setup.exe"
           $arm64 = "${base}/ElegantClipboard_${version}_arm64-setup.exe"
 

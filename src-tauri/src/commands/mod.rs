@@ -1,5 +1,6 @@
 pub mod clipboard;
 pub mod data_transfer;
+pub mod databases;
 pub mod file_ops;
 pub mod groups;
 pub mod preview;
@@ -33,6 +34,8 @@ pub struct AppState {
     pub active_group_id: Arc<Mutex<Option<i64>>>,
     /// 窗口定位设置缓存
     pub position_cache: Arc<Mutex<PositionCache>>,
+    pub database_switch: Mutex<()>,
+    pub database_operation: Arc<parking_lot::RwLock<()>>,
 }
 
 /// 粘贴音效：操作开始时通知前端

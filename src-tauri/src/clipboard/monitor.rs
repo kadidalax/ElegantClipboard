@@ -1,5 +1,7 @@
 use super::file_clipboard;
-use super::handler::{cleanup_capture_content, cleanup_stale_capture_files};
+use super::handler::{
+    cleanup_capture_content, cleanup_stale_capture_files, parse_cf_html_source_url,
+};
 use super::source_app::SourceAppInfo;
 use super::{ClipChangeSettings, ClipboardContent, ClipboardHandler, ImageCapture};
 use crate::database::Database;
@@ -26,10 +28,9 @@ pub struct ClipboardMonitor {
     /// 用户手动暂停（托盘菜单），独立于内部 pause_count
     user_paused: Arc<AtomicBool>,
     handler: Arc<RwLock<Option<Arc<ClipboardHandler>>>>,
+    database_operation: Arc<RwLock<Option<Arc<parking_lot::RwLock<()>>>>>,
     /// watcher 热路径读取，避免与 worker 争用 handler 锁
     clip_change_settings: Arc<RwLock<ClipChangeSettings>>,
-    /// watcher 写入图片临时文件的目录
-    capture_dir: Arc<RwLock<PathBuf>>,
     thread_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
     /// 当前活动分组（None = 默认分组），与 AppState 共享
     active_group_id: Arc<Mutex<Option<i64>>>,
@@ -40,6 +41,7 @@ struct CaptureWorkItem {
     content: ClipboardContent,
     source: Option<SourceAppInfo>,
     group_id: Option<i64>,
+    db_path: PathBuf,
 }
 
 impl ClipboardMonitor {
@@ -49,8 +51,8 @@ impl ClipboardMonitor {
             pause_count: Arc::new(AtomicU32::new(0)),
             user_paused: Arc::new(AtomicBool::new(false)),
             handler: Arc::new(RwLock::new(None)),
+            database_operation: Arc::new(RwLock::new(None)),
             clip_change_settings: Arc::new(RwLock::new(ClipChangeSettings::default())),
-            capture_dir: Arc::new(RwLock::new(PathBuf::new())),
             thread_handle: Arc::new(Mutex::new(None)),
             active_group_id: Arc::new(Mutex::new(None)),
         }
@@ -62,15 +64,16 @@ impl ClipboardMonitor {
     }
 
     /// 初始化监控器（数据库与图片路径）
-    pub fn init(&self, db: &Database, images_path: std::path::PathBuf) {
-        let capture_dir = images_path.join("captures");
+    pub fn init(&self, db: &Database) {
+        let paths = db.active_snapshot();
+        let capture_dir = paths.images_dir.join("captures");
         std::fs::create_dir_all(&capture_dir).ok();
         cleanup_stale_capture_files(&capture_dir);
 
-        let handler = Arc::new(ClipboardHandler::new(db, images_path));
+        let handler = Arc::new(ClipboardHandler::new(db));
         *self.clip_change_settings.write() = handler.get_clip_change_settings();
         *self.handler.write() = Some(handler);
-        *self.capture_dir.write() = capture_dir;
+        *self.database_operation.write() = Some(db.operation_lock());
         info!("Clipboard monitor initialized");
     }
 
@@ -97,8 +100,12 @@ impl ClipboardMonitor {
         let pause_count = self.pause_count.clone();
         let user_paused = self.user_paused.clone();
         let handler = self.handler.clone();
+        let Some(database_operation) = self.database_operation.read().clone() else {
+            running.store(false, Ordering::SeqCst);
+            error!("Clipboard monitor database operation lock is not initialized");
+            return;
+        };
         let active_group_id = self.active_group_id.clone();
-        let capture_dir = self.capture_dir.clone();
         let clip_change_settings = self.clip_change_settings.clone();
 
         // ── 处理 worker 线程：从 channel 接收内容，串行处理 ──
@@ -133,7 +140,8 @@ impl ClipboardMonitor {
                     app_handle: app_handle.clone(),
                     active_group_id: active_group_id.clone(),
                     work_tx: tx.clone(),
-                    capture_dir: capture_dir.clone(),
+                    handler: handler.clone(),
+                    database_operation: database_operation.clone(),
                     clip_change_settings: clip_change_settings.clone(),
                 };
 
@@ -208,7 +216,7 @@ impl ClipboardMonitor {
 
             // catch_unwind 防止单条异常数据的 panic 杀死整个进程（panic=abort）
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                h.process(item.content, item.source, item.group_id)
+                h.process_for_database(&item.db_path, item.content, item.source, item.group_id)
             }));
 
             match result {
@@ -288,48 +296,71 @@ struct MonitorHandler {
     app_handle: AppHandle,
     active_group_id: Arc<Mutex<Option<i64>>>,
     work_tx: mpsc::Sender<CaptureWorkItem>,
-    capture_dir: Arc<RwLock<PathBuf>>,
+    handler: Arc<RwLock<Option<Arc<ClipboardHandler>>>>,
+    database_operation: Arc<parking_lot::RwLock<()>>,
     clip_change_settings: Arc<RwLock<ClipChangeSettings>>,
+}
+
+fn with_callback_context<R>(
+    operation: &Arc<parking_lot::RwLock<()>>,
+    running: &AtomicBool,
+    pause_count: &AtomicU32,
+    user_paused: &AtomicBool,
+    handler: &RwLock<Option<Arc<ClipboardHandler>>>,
+    callback: impl FnOnce(Arc<ClipboardHandler>, crate::database::ActiveDatabase) -> R,
+) -> Option<R> {
+    let _operation = operation.try_read()?;
+    let handler = handler.read().clone()?;
+    let paths = handler.active_paths();
+    if !running.load(Ordering::SeqCst) {
+        return None;
+    }
+    if pause_count.load(Ordering::SeqCst) > 0 || user_paused.load(Ordering::SeqCst) {
+        debug!("Clipboard change ignored (paused)");
+        return None;
+    }
+    Some(callback(handler, paths))
 }
 
 impl CRHandler for MonitorHandler {
     fn on_clipboard_change(&mut self) {
-        if !self.running.load(Ordering::SeqCst) {
-            return;
-        }
+        with_callback_context(
+            &self.database_operation,
+            &self.running,
+            &self.pause_count,
+            &self.user_paused,
+            &self.handler,
+            |_, paths| {
+                let source = super::source_app::get_clipboard_source_app();
 
-        if self.pause_count.load(Ordering::SeqCst) > 0 || self.user_paused.load(Ordering::SeqCst) {
-            debug!("Clipboard change ignored (paused)");
-            return;
-        }
+                let settings = self.clip_change_settings.read().clone();
+                if settings.is_source_app_excluded(&source) {
+                    debug!(
+                        "Clipboard change ignored (source app excluded: {:?})",
+                        source.as_ref().map(|s| &s.app_name)
+                    );
+                    return;
+                }
+                let capture_dir = paths.images_dir.join("captures");
+                std::fs::create_dir_all(&capture_dir).ok();
 
-        let source = super::source_app::get_clipboard_source_app();
+                let Some(content) =
+                    read_clipboard_content_with_retry(settings.max_image_bytes, &capture_dir)
+                else {
+                    return;
+                };
 
-        let settings = self.clip_change_settings.read().clone();
-        if settings.is_source_app_excluded(&source) {
-            debug!(
-                "Clipboard change ignored (source app excluded: {:?})",
-                source.as_ref().map(|s| &s.app_name)
-            );
-            return;
-        }
-        let max_image_bytes = settings.max_image_bytes;
-        let capture_dir = self.capture_dir.read().clone();
-
-        let Some(content) = read_clipboard_content_with_retry(max_image_bytes, &capture_dir) else {
-            return;
-        };
-
-        let group_id = *self.active_group_id.lock();
-
-        let item = CaptureWorkItem {
-            content,
-            source,
-            group_id,
-        };
-        if self.work_tx.send(item).is_err() {
-            warn!("Clipboard worker channel closed, dropping event");
-        }
+                let item = CaptureWorkItem {
+                    content,
+                    source,
+                    group_id: *self.active_group_id.lock(),
+                    db_path: paths.db_path,
+                };
+                if self.work_tx.send(item).is_err() {
+                    warn!("Clipboard worker channel closed, dropping event");
+                }
+            },
+        );
     }
 }
 
@@ -431,6 +462,10 @@ fn read_clipboard_content_inner(
     }
 
     // ── 2. 探测所有文本格式（不短路） ──
+    let source_url = ctx
+        .get_buffer("HTML Format")
+        .ok()
+        .and_then(|raw| parse_cf_html_source_url(&String::from_utf8_lossy(&raw)));
     let html: Option<String> = ctx.get_html().ok().filter(|h| !h.is_empty());
     let rtf: Option<String> = read_rtf_from_context(&ctx);
     let text: Option<String> = ctx.get_text().ok().filter(|t| !t.is_empty());
@@ -451,7 +486,12 @@ fn read_clipboard_content_inner(
                 rtf.is_some(),
                 text.is_some()
             );
-            return Some(ClipboardContent::Html { html, text, rtf });
+            return Some(ClipboardContent::Html {
+                html,
+                text,
+                rtf,
+                source_url,
+            });
         }
         if let Some(rtf) = rtf {
             debug!("Got RTF from clipboard: {} bytes", rtf.len());
@@ -553,4 +593,133 @@ fn read_rtf_from_context(ctx: &ClipboardContext) -> Option<String> {
         return None;
     }
     Some(super::rtf_storage::encode_rtf_for_storage(&bytes))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ClipboardHandler, with_callback_context};
+    use crate::database::Database;
+    use parking_lot::RwLock;
+    use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+    use std::sync::{Arc, Barrier, mpsc};
+
+    #[test]
+    fn callback_guard_blocks_switch_and_keeps_original_database_identity() {
+        let root = std::env::temp_dir().join(format!(
+            "ec-monitor-operation-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let db =
+            Database::new_with_settings(root.join("old/clipboard.db"), root.join("settings.db"))
+                .unwrap();
+        let old_path = db.active_snapshot().db_path;
+        let target = db.open_active(root.join("new")).unwrap();
+        let operation = db.operation_lock();
+        let handler = Arc::new(RwLock::new(Some(Arc::new(ClipboardHandler::new(&db)))));
+        let running = Arc::new(AtomicBool::new(true));
+        let pause_count = Arc::new(AtomicU32::new(0));
+        let user_paused = Arc::new(AtomicBool::new(false));
+        let midpoint = Arc::new(Barrier::new(2));
+        let release = Arc::new(Barrier::new(2));
+
+        let callback_operation = operation.clone();
+        let callback_handler = handler.clone();
+        let callback_running = running.clone();
+        let callback_pause = pause_count.clone();
+        let callback_user_pause = user_paused.clone();
+        let callback_midpoint = midpoint.clone();
+        let callback_release = release.clone();
+        let callback = std::thread::spawn(move || {
+            with_callback_context(
+                &callback_operation,
+                &callback_running,
+                &callback_pause,
+                &callback_user_pause,
+                &callback_handler,
+                |_, paths| {
+                    callback_midpoint.wait();
+                    callback_release.wait();
+                    paths.db_path
+                },
+            )
+        });
+        midpoint.wait();
+
+        let switch_db = db.clone();
+        let (switched_tx, switched_rx) = mpsc::channel();
+        let switch = std::thread::spawn(move || {
+            let operation = switch_db.operation_lock();
+            let _operation = operation.write();
+            drop(switch_db.swap_active(target));
+            switched_tx.send(()).unwrap();
+        });
+        assert!(
+            switched_rx
+                .recv_timeout(std::time::Duration::from_millis(50))
+                .is_err()
+        );
+        release.wait();
+        assert_eq!(callback.join().unwrap(), Some(old_path));
+        switch.join().unwrap();
+
+        drop(handler);
+        drop(db);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn callback_exits_when_paused_or_switch_writer_is_active() {
+        let root = std::env::temp_dir().join(format!(
+            "ec-monitor-paused-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let db = Database::new(root.join("clipboard.db")).unwrap();
+        let operation = db.operation_lock();
+        let handler = Arc::new(RwLock::new(Some(Arc::new(ClipboardHandler::new(&db)))));
+        let running = Arc::new(AtomicBool::new(true));
+        let pause_count = Arc::new(AtomicU32::new(1));
+        let user_paused = Arc::new(AtomicBool::new(false));
+        let called = AtomicBool::new(false);
+
+        assert!(
+            with_callback_context(
+                &operation,
+                &running,
+                &pause_count,
+                &user_paused,
+                &handler,
+                |_, _| called.store(true, Ordering::SeqCst),
+            )
+            .is_none()
+        );
+        assert!(!called.load(Ordering::SeqCst));
+
+        pause_count.store(0, Ordering::SeqCst);
+        let writer = operation.write();
+        assert!(
+            with_callback_context(
+                &operation,
+                &running,
+                &pause_count,
+                &user_paused,
+                &handler,
+                |_, _| called.store(true, Ordering::SeqCst),
+            )
+            .is_none()
+        );
+        assert!(!called.load(Ordering::SeqCst));
+        drop(writer);
+        drop(handler);
+        drop(db);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }

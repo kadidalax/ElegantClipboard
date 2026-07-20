@@ -1,10 +1,21 @@
-use crate::database::{ClipboardItem, ClipboardRepository};
+use crate::database::{ClipboardDeleteError, ClipboardItem, ClipboardRepository};
 use clipboard_rs::Clipboard as ClipboardTrait;
 use std::sync::Arc;
 use tauri::State;
 use tracing::{debug, info};
 
 use super::{AppState, hide_main_window_if_not_pinned, with_paused_monitor};
+
+const ITEM_LOCKED_ERROR: &str = "CLIPBOARD:ITEM_LOCKED";
+const ITEM_NOT_FOUND_ERROR: &str = "CLIPBOARD:ITEM_NOT_FOUND";
+
+fn map_delete_error(error: ClipboardDeleteError) -> String {
+    match error {
+        ClipboardDeleteError::Locked => ITEM_LOCKED_ERROR.to_string(),
+        ClipboardDeleteError::NotFound => ITEM_NOT_FOUND_ERROR.to_string(),
+        ClipboardDeleteError::Database(error) => error.to_string(),
+    }
+}
 
 /// 将 ClipboardItem 内容写入系统剪贴板（保留 HTML/RTF 等格式）
 pub(super) fn set_clipboard_content(
@@ -265,11 +276,13 @@ pub async fn get_clipboard_items(
     pinned_only: Option<bool>,
     favorite_only: Option<bool>,
     group_id: Option<i64>,
+    timeline: Option<bool>,
     limit: Option<i64>,
     offset: Option<i64>,
 ) -> Result<Vec<ClipboardItem>, String> {
     use crate::database::QueryOptions;
 
+    let _operation = state.database_operation.read();
     let repo = ClipboardRepository::new(&state.db);
     let search_keyword = search.clone();
     let options = QueryOptions {
@@ -278,6 +291,7 @@ pub async fn get_clipboard_items(
         pinned_only: pinned_only.unwrap_or(false),
         favorite_only: favorite_only.unwrap_or(false),
         group_id,
+        timeline: timeline.unwrap_or(false),
         limit,
         offset,
     };
@@ -306,6 +320,7 @@ pub async fn get_clipboard_item(
     state: State<'_, Arc<AppState>>,
     id: i64,
 ) -> Result<Option<ClipboardItem>, String> {
+    let _operation = state.database_operation.read();
     let repo = ClipboardRepository::new(&state.db);
     repo.get_by_id(id).map_err(|e| e.to_string())
 }
@@ -321,6 +336,7 @@ pub async fn get_clipboard_count(
 ) -> Result<i64, String> {
     use crate::database::QueryOptions;
 
+    let _operation = state.database_operation.read();
     let repo = ClipboardRepository::new(&state.db);
     let options = QueryOptions {
         content_type,
@@ -335,15 +351,27 @@ pub async fn get_clipboard_count(
 /// 切换固定状态
 #[tauri::command]
 pub async fn toggle_pin(state: State<'_, Arc<AppState>>, id: i64) -> Result<bool, String> {
+    let _operation = state.database_operation.read();
     let repo = ClipboardRepository::new(&state.db);
     let new_state = repo.toggle_pin(id).map_err(|e| e.to_string())?;
     debug!("Toggle pin: id={}, pinned={}", id, new_state);
     Ok(new_state)
 }
 
+/// 切换锁定状态
+#[tauri::command]
+pub async fn toggle_lock(state: State<'_, Arc<AppState>>, id: i64) -> Result<bool, String> {
+    let _operation = state.database_operation.read();
+    let repo = ClipboardRepository::new(&state.db);
+    let new_state = repo.toggle_lock(id).map_err(|e| e.to_string())?;
+    debug!("Toggle lock: id={}, locked={}", id, new_state);
+    Ok(new_state)
+}
+
 /// 切换收藏状态
 #[tauri::command]
 pub async fn toggle_favorite(state: State<'_, Arc<AppState>>, id: i64) -> Result<bool, String> {
+    let _operation = state.database_operation.read();
     let repo = ClipboardRepository::new(&state.db);
     let new_state = repo.toggle_favorite(id).map_err(|e| e.to_string())?;
     debug!("Toggle favorite: id={}, favorite={}", id, new_state);
@@ -357,6 +385,7 @@ pub async fn move_clipboard_item(
     from_id: i64,
     to_id: i64,
 ) -> Result<(), String> {
+    let _operation = state.database_operation.read();
     let repo = ClipboardRepository::new(&state.db);
     repo.move_item_by_id(from_id, to_id)
         .map_err(|e| e.to_string())?;
@@ -371,6 +400,7 @@ pub async fn move_favorite_clipboard_item(
     from_id: i64,
     to_id: i64,
 ) -> Result<(), String> {
+    let _operation = state.database_operation.read();
     let repo = ClipboardRepository::new(&state.db);
     repo.move_favorite_item_by_id(from_id, to_id)
         .map_err(|e| e.to_string())?;
@@ -384,32 +414,68 @@ pub async fn move_favorite_clipboard_item(
 /// 粘贴后置顶：将条目移到非置顶区最前面（sort_order 设为全表最大值 + 1）
 #[tauri::command]
 pub async fn bump_item_to_top(state: State<'_, Arc<AppState>>, id: i64) -> Result<(), String> {
+    let _operation = state.database_operation.read();
     let repo = ClipboardRepository::new(&state.db);
     repo.bump_to_top(id).map_err(|e| e.to_string())?;
     debug!("Bumped clipboard item {} to top", id);
     Ok(())
 }
 
+fn delete_clipboard_item_in_repo(
+    repo: &ClipboardRepository,
+    id: i64,
+) -> Result<ClipboardItem, String> {
+    repo.delete_unlocked(id).map_err(map_delete_error)
+}
+
+fn batch_delete_clipboard_items_in_repo(
+    repo: &ClipboardRepository,
+    ids: &[i64],
+) -> Result<(i64, Vec<String>, Vec<String>), String> {
+    repo.batch_delete(ids).map_err(map_delete_error)
+}
+
+fn delete_empty_text_item_in_repo(repo: &ClipboardRepository, id: i64) -> Result<(), String> {
+    let item = delete_clipboard_item_in_repo(repo, id)?;
+    let payloads: Vec<String> = item.file_payload.map(|p| vec![p]).unwrap_or_default();
+    crate::clipboard::cleanup_deleted_assets(
+        &item.image_path.map(|p| vec![p]).unwrap_or_default(),
+        &payloads,
+    );
+    Ok(())
+}
+
+#[cfg(test)]
+static CLEAR_ALL_HISTORY_TEST_HOOK: parking_lot::Mutex<Option<Arc<dyn Fn() + Send + Sync>>> =
+    parking_lot::Mutex::new(None);
+
+#[cfg(test)]
+static CLEAR_HISTORY_TEST_HOOK: parking_lot::Mutex<Option<Arc<dyn Fn() + Send + Sync>>> =
+    parking_lot::Mutex::new(None);
+
+#[cfg(test)]
+fn run_clear_test_hook(hook: &parking_lot::Mutex<Option<Arc<dyn Fn() + Send + Sync>>>) {
+    if let Some(hook) = hook.lock().clone() {
+        hook();
+    }
+}
+
 /// 删除剪贴板条目（同时删除关联图片文件）
 #[tauri::command]
 pub async fn delete_clipboard_item(state: State<'_, Arc<AppState>>, id: i64) -> Result<(), String> {
+    let _operation = state.database_operation.read();
     let repo = ClipboardRepository::new(&state.db);
 
-    if let Ok(Some(item)) = repo.get_by_id(id) {
-        repo.delete(id).map_err(|e| e.to_string())?;
-        let payloads: Vec<String> = item.file_payload.map(|p| vec![p]).unwrap_or_default();
-        crate::clipboard::cleanup_deleted_assets(
-            &item.image_path.map(|p| vec![p]).unwrap_or_default(),
-            &payloads,
-        );
-        debug!(
-            "Deleted clipboard item: id={}, type={}",
-            id, item.content_type
-        );
-    } else {
-        repo.delete(id).map_err(|e| e.to_string())?;
-        debug!("Deleted clipboard item: id={}", id);
-    }
+    let item = delete_clipboard_item_in_repo(&repo, id)?;
+    let payloads: Vec<String> = item.file_payload.map(|p| vec![p]).unwrap_or_default();
+    crate::clipboard::cleanup_deleted_assets(
+        &item.image_path.map(|p| vec![p]).unwrap_or_default(),
+        &payloads,
+    );
+    debug!(
+        "Deleted clipboard item: id={}, type={}",
+        id, item.content_type
+    );
 
     Ok(())
 }
@@ -420,25 +486,33 @@ pub async fn batch_delete_clipboard_items(
     state: State<'_, Arc<AppState>>,
     ids: Vec<i64>,
 ) -> Result<i64, String> {
+    let _operation = state.database_operation.read();
     let repo = ClipboardRepository::new(&state.db);
-    let (deleted, image_paths, file_payloads) =
-        repo.batch_delete(&ids).map_err(|e| e.to_string())?;
+    let (deleted, image_paths, file_payloads) = batch_delete_clipboard_items_in_repo(&repo, &ids)?;
     crate::clipboard::cleanup_deleted_assets(&image_paths, &file_payloads);
     debug!("Batch deleted {} clipboard items", deleted);
     Ok(deleted)
 }
 
-/// 清空所有历史（包括置顶/收藏，同时删除图片文件）
+/// 清空所有历史（包括置顶/收藏/锁定，同时删除图片文件）
 #[tauri::command]
 pub async fn clear_all_history(state: State<'_, Arc<AppState>>) -> Result<i64, String> {
+    clear_all_history_in(&state.db)
+}
+
+fn clear_all_history_in(db: &crate::database::Database) -> Result<i64, String> {
     use tracing::info;
 
-    let repo = ClipboardRepository::new(&state.db);
+    let operation = db.operation_lock();
+    let _operation = operation.read();
+    let repo = ClipboardRepository::new(db);
     let image_paths = repo.get_all_image_paths().unwrap_or_default();
     let file_payloads = repo.get_all_file_payloads().unwrap_or_default();
+    #[cfg(test)]
+    run_clear_test_hook(&CLEAR_ALL_HISTORY_TEST_HOOK);
     let deleted = repo.clear_all().map_err(|e| e.to_string())?;
     crate::clipboard::cleanup_deleted_assets(&image_paths, &file_payloads);
-    state.db.vacuum().ok();
+    db.vacuum().ok();
 
     info!(
         "Cleared all {} clipboard items ({} image files)",
@@ -448,24 +522,30 @@ pub async fn clear_all_history(state: State<'_, Arc<AppState>>) -> Result<i64, S
     Ok(deleted)
 }
 
-/// 清空所有非固定/非收藏历史（同时删除图片文件），按分组
+/// 清空所有非固定/非收藏/非锁定历史（同时删除图片文件），按分组
 #[tauri::command]
 pub async fn clear_history(
     state: State<'_, Arc<AppState>>,
     group_id: Option<i64>,
     content_type: Option<String>,
 ) -> Result<i64, String> {
+    clear_history_in(&state.db, group_id, content_type.as_deref())
+}
+
+fn clear_history_in(
+    db: &crate::database::Database,
+    group_id: Option<i64>,
+    content_type: Option<&str>,
+) -> Result<i64, String> {
     use tracing::info;
 
-    let repo = ClipboardRepository::new(&state.db);
-    let image_paths = repo
-        .get_clearable_image_paths(group_id, content_type.as_deref())
-        .unwrap_or_default();
-    let file_payloads = repo
-        .get_clearable_file_payloads(group_id, content_type.as_deref())
-        .unwrap_or_default();
-    let deleted = repo
-        .clear_history(group_id, content_type.as_deref())
+    let operation = db.operation_lock();
+    let _operation = operation.read();
+    let repo = ClipboardRepository::new(db);
+    #[cfg(test)]
+    run_clear_test_hook(&CLEAR_HISTORY_TEST_HOOK);
+    let (deleted, image_paths, file_payloads) = repo
+        .clear_history(group_id, content_type)
         .map_err(|e| e.to_string())?;
     crate::clipboard::cleanup_deleted_assets(&image_paths, &file_payloads);
 
@@ -485,6 +565,7 @@ pub async fn set_active_group(
     state: State<'_, Arc<AppState>>,
     group_id: Option<i64>,
 ) -> Result<(), String> {
+    let _operation = state.database_operation.read();
     *state.active_group_id.lock() = group_id;
     debug!("Active group set to: {:?}", group_id);
     Ok(())
@@ -497,9 +578,10 @@ pub async fn update_text_content(
     id: i64,
     new_text: String,
 ) -> Result<bool, String> {
+    let _operation = state.database_operation.read();
     let repo = ClipboardRepository::new(&state.db);
     if new_text.trim().is_empty() {
-        repo.delete(id).map_err(|e| e.to_string())?;
+        delete_empty_text_item_in_repo(&repo, id)?;
         debug!("Deleted empty item {}", id);
         Ok(true)
     } else {
@@ -522,6 +604,7 @@ pub async fn update_text_content(
 /// 将条目复制到系统剪贴板
 #[tauri::command]
 pub async fn copy_to_clipboard(state: State<'_, Arc<AppState>>, id: i64) -> Result<(), String> {
+    let _operation = state.database_operation.read();
     let repo = ClipboardRepository::new(&state.db);
     let item = repo
         .get_by_id(id)
@@ -549,6 +632,7 @@ pub async fn paste_content(
     id: i64,
     close_window: Option<bool>,
 ) -> Result<(), String> {
+    let _operation = state.database_operation.read();
     let repo = ClipboardRepository::new(&state.db);
     let item = repo
         .get_by_id(id)
@@ -568,6 +652,7 @@ pub async fn paste_content_as_plain(
     id: i64,
     close_window: Option<bool>,
 ) -> Result<(), String> {
+    let _operation = state.database_operation.read();
     let repo = ClipboardRepository::new(&state.db);
     let item = repo
         .get_by_id(id)
@@ -605,6 +690,7 @@ pub async fn merge_paste_content(
         return Err("No items selected".to_string());
     }
 
+    let _operation = state.database_operation.read();
     let repo = ClipboardRepository::new(&state.db);
     let sep = separator.as_deref().unwrap_or("\n");
 
@@ -644,6 +730,7 @@ pub fn quick_paste_by_slot(
         return Err("Quick paste slot must be between 1 and 10".to_string());
     }
 
+    let _operation = state.database_operation.read();
     let repo = ClipboardRepository::new(&state.db);
     let active_group = *state.active_group_id.lock();
     let item = repo
@@ -666,6 +753,7 @@ pub fn quick_paste_favorite_by_slot(
         return Err("收藏槽位必须在 1-10 之间".to_string());
     }
 
+    let _operation = state.database_operation.read();
     let repo = ClipboardRepository::new(&state.db);
     let active_group = *state.active_group_id.lock();
     let item = repo
@@ -751,7 +839,222 @@ fn paste_plain_text_to_active_window(
 
 #[cfg(test)]
 mod tests {
-    use super::extract_keyword_context;
+    use super::{
+        CLEAR_ALL_HISTORY_TEST_HOOK, CLEAR_HISTORY_TEST_HOOK, ITEM_LOCKED_ERROR,
+        batch_delete_clipboard_items_in_repo, clear_all_history_in, clear_history_in,
+        delete_clipboard_item_in_repo, delete_empty_text_item_in_repo, extract_keyword_context,
+    };
+    use crate::database::{
+        ClipboardRepository, ContentType, Database, NewClipboardItem, QueryOptions,
+    };
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::{Arc, Barrier, mpsc};
+
+    fn temp_repo() -> ClipboardRepository {
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "elegant_clipboard_command_test_{}_{}.db",
+            std::process::id(),
+            n
+        ));
+        let db = Database::new(path).unwrap();
+        ClipboardRepository::new(&db)
+    }
+
+    fn text_item(text: &str, is_locked: bool) -> NewClipboardItem {
+        NewClipboardItem {
+            content_type: ContentType::Text,
+            text_content: Some(text.to_string()),
+            preview: Some(text.to_string()),
+            content_hash: text.to_string(),
+            semantic_hash: text.to_string(),
+            is_locked,
+            ..Default::default()
+        }
+    }
+
+    fn temp_asset(name: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "elegant_clipboard_{name}_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::write(&path, b"asset").unwrap();
+        path
+    }
+
+    fn assert_history_clear_blocks_switch(clear_all: bool) {
+        let root = std::env::temp_dir().join(format!(
+            "ec-command-operation-{}-{}-{}",
+            if clear_all { "all" } else { "history" },
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let db =
+            Database::new_with_settings(root.join("old/clipboard.db"), root.join("settings.db"))
+                .unwrap();
+        let old_path = db.active_snapshot().db_path;
+        let old_repo = ClipboardRepository::new(&db);
+        let old_asset = root.join("old/images/old.png");
+        std::fs::create_dir_all(old_asset.parent().unwrap()).unwrap();
+        std::fs::write(&old_asset, b"old").unwrap();
+        let mut old_item = text_item("old", false);
+        old_item.image_path = Some(old_asset.to_string_lossy().into_owned());
+        old_repo.insert(old_item).unwrap();
+
+        let target_db = Database::new_with_settings(
+            root.join("new/clipboard.db"),
+            root.join("target-settings.db"),
+        )
+        .unwrap();
+        let target_repo = ClipboardRepository::new(&target_db);
+        target_repo.insert(text_item("new", false)).unwrap();
+        let target = db
+            .open_active(target_db.active_snapshot().data_dir)
+            .unwrap();
+
+        let midpoint = Arc::new(Barrier::new(2));
+        let release = Arc::new(Barrier::new(2));
+        let hook: Arc<dyn Fn() + Send + Sync> = {
+            let midpoint = midpoint.clone();
+            let release = release.clone();
+            Arc::new(move || {
+                midpoint.wait();
+                release.wait();
+            })
+        };
+        if clear_all {
+            *CLEAR_ALL_HISTORY_TEST_HOOK.lock() = Some(hook);
+        } else {
+            *CLEAR_HISTORY_TEST_HOOK.lock() = Some(hook);
+        }
+
+        let clear_db = db.clone();
+        let clear = std::thread::spawn(move || {
+            if clear_all {
+                clear_all_history_in(&clear_db)
+            } else {
+                clear_history_in(&clear_db, None, None)
+            }
+        });
+        midpoint.wait();
+
+        let switch_db = db.clone();
+        let (switched_tx, switched_rx) = mpsc::channel();
+        let switch = std::thread::spawn(move || {
+            let operation = switch_db.operation_lock();
+            let _operation = operation.write();
+            drop(switch_db.swap_active(target));
+            switched_tx.send(()).unwrap();
+        });
+        assert!(
+            switched_rx
+                .recv_timeout(std::time::Duration::from_millis(50))
+                .is_err()
+        );
+        release.wait();
+        assert_eq!(clear.join().unwrap().unwrap(), 1);
+        switch.join().unwrap();
+
+        let reopened_old =
+            Database::new_with_settings(old_path, root.join("reopen-settings.db")).unwrap();
+        assert_eq!(
+            ClipboardRepository::new(&reopened_old)
+                .count(QueryOptions::default())
+                .unwrap(),
+            0
+        );
+        assert!(!old_asset.exists());
+        assert_eq!(target_repo.count(QueryOptions::default()).unwrap(), 1);
+
+        *CLEAR_ALL_HISTORY_TEST_HOOK.lock() = None;
+        *CLEAR_HISTORY_TEST_HOOK.lock() = None;
+        drop(target_repo);
+        drop(target_db);
+        drop(reopened_old);
+        drop(old_repo);
+        drop(db);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn clear_all_history_holds_operation_guard_through_asset_cleanup() {
+        assert_history_clear_blocks_switch(true);
+    }
+
+    #[test]
+    fn clear_history_holds_operation_guard_through_asset_cleanup() {
+        assert_history_clear_blocks_switch(false);
+    }
+
+    #[test]
+    fn locked_item_delete_is_rejected_until_unlocked() {
+        let repo = temp_repo();
+        let id = repo.insert(text_item("locked-delete", true)).unwrap();
+
+        assert_eq!(
+            delete_clipboard_item_in_repo(&repo, id).unwrap_err(),
+            ITEM_LOCKED_ERROR
+        );
+        assert!(repo.get_by_id(id).unwrap().is_some());
+
+        repo.toggle_lock(id).unwrap();
+        delete_clipboard_item_in_repo(&repo, id).unwrap();
+        assert!(repo.get_by_id(id).unwrap().is_none());
+    }
+
+    #[test]
+    fn batch_delete_with_locked_item_deletes_nothing() {
+        let repo = temp_repo();
+        let normal_id = repo.insert(text_item("batch-normal", false)).unwrap();
+        let locked_id = repo.insert(text_item("batch-locked", true)).unwrap();
+
+        assert_eq!(
+            batch_delete_clipboard_items_in_repo(&repo, &[normal_id, locked_id]).unwrap_err(),
+            ITEM_LOCKED_ERROR
+        );
+        assert!(repo.get_by_id(normal_id).unwrap().is_some());
+        assert!(repo.get_by_id(locked_id).unwrap().is_some());
+    }
+
+    #[test]
+    fn empty_text_edit_rejects_locked_item_without_cleaning_assets() {
+        let repo = temp_repo();
+        let asset = temp_asset("locked_empty_edit");
+        let mut item = text_item("locked-empty", true);
+        item.image_path = Some(asset.to_string_lossy().into_owned());
+        let id = repo.insert(item).unwrap();
+
+        assert_eq!(
+            delete_empty_text_item_in_repo(&repo, id).unwrap_err(),
+            ITEM_LOCKED_ERROR
+        );
+        assert!(repo.get_by_id(id).unwrap().is_some());
+        assert!(asset.exists());
+        std::fs::remove_file(asset).unwrap();
+    }
+
+    #[test]
+    fn empty_text_edit_deletes_unlocked_item_and_cleans_assets() {
+        let repo = temp_repo();
+        let asset = temp_asset("unlocked_empty_edit");
+        let mut item = text_item("unlocked-empty", false);
+        item.image_path = Some(asset.to_string_lossy().into_owned());
+        let id = repo.insert(item).unwrap();
+
+        delete_empty_text_item_in_repo(&repo, id).unwrap();
+
+        assert!(repo.get_by_id(id).unwrap().is_none());
+        assert!(!asset.exists());
+    }
 
     #[test]
     fn keyword_at_start() {

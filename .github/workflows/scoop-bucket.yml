@@ -22,10 +22,10 @@ jobs:
         id: hash
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          BASE_URL="https://github.com/Y-ASLant/ElegantClipboard/releases/download/v${VERSION}"
+          BASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}"
 
-          curl -sL "${BASE_URL}/ElegantClipboard_${VERSION}_x64-setup.exe" -o x64.exe
-          curl -sL "${BASE_URL}/ElegantClipboard_${VERSION}_arm64-setup.exe" -o arm64.exe
+          curl -fsSL "${BASE_URL}/ElegantClipboard_${VERSION}_x64-setup.exe" -o x64.exe
+          curl -fsSL "${BASE_URL}/ElegantClipboard_${VERSION}_arm64-setup.exe" -o arm64.exe
 
           echo "X64_HASH=$(sha256sum x64.exe | cut -d' ' -f1)" >> $GITHUB_OUTPUT
           echo "ARM64_HASH=$(sha256sum arm64.exe | cut -d' ' -f1)" >> $GITHUB_OUTPUT
@@ -35,7 +35,7 @@ jobs:
           VERSION="${{ steps.version.outputs.VERSION }}"
           X64_HASH="${{ steps.hash.outputs.X64_HASH }}"
           ARM64_HASH="${{ steps.hash.outputs.ARM64_HASH }}"
-          BASE="https://github.com/Y-ASLant/ElegantClipboard/releases/download"
+          BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download"
 
           jq --arg v "$VERSION" \
              --arg x64_hash "$X64_HASH" \

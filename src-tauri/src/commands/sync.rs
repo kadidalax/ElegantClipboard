@@ -1,5 +1,4 @@
 use crate::commands::AppState;
-use crate::config;
 use crate::database::SettingsRepository;
 use crate::utils::format_size;
 use crate::webdav::{self, SyncOptions, WebDavConfig};
@@ -92,11 +91,6 @@ fn load_sync_options(state: &Arc<AppState>) -> SyncOptions {
     }
 }
 
-/// 获取数据目录
-fn get_data_dir() -> std::path::PathBuf {
-    config::AppConfig::load().get_data_dir()
-}
-
 /// 检查 WebDAV 插件已启用
 fn ensure_webdav_plugin_enabled(state: &Arc<AppState>) -> Result<(), String> {
     let repo = SettingsRepository::new(&state.db);
@@ -122,7 +116,7 @@ pub async fn webdav_enable_plugin(
     app: tauri::AppHandle,
     state: State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    webdav::start_auto_sync_task(state.db.clone(), get_data_dir(), app);
+    webdav::start_auto_sync_task(state.db.clone(), app);
     Ok(())
 }
 
@@ -145,12 +139,14 @@ pub async fn webdav_upload(
     ensure_webdav_available(&state)?;
     let config = load_webdav_config(&state)?;
     let options = load_sync_options(&state);
-    let data_dir = get_data_dir();
     let db = state.db.clone();
     let app_handle = app.clone();
 
     tokio::task::spawn_blocking(move || {
-        let _guard = webdav::try_begin_sync_session()?;
+        let guard = webdav::try_begin_sync_session()?;
+        let operation = db.operation_lock();
+        let _operation = operation.read();
+        let data_dir = db.active_snapshot().data_dir;
         let zip_data = webdav::export_sync_data(&db, &data_dir, &options)?;
         let size = zip_data.len();
         webdav::upload_sync(&config, &zip_data, "clipboard_sync.zip", "application/zip")?;
@@ -171,7 +167,8 @@ pub async fn webdav_upload(
             }
         }
 
-        let pending_media_workers = spawn_media_upload_files(&app, &config, &data_dir, &local_map);
+        let pending_media_workers =
+            spawn_media_upload_files(&app, &config, &data_dir, &local_map, &guard, &operation);
 
         webdav::record_and_notify_last_sync(&db, &app_handle)?;
 
@@ -197,12 +194,14 @@ pub async fn webdav_download(
     ensure_webdav_available(&state)?;
     let config = load_webdav_config(&state)?;
     let options = load_sync_options(&state);
-    let data_dir = get_data_dir();
     let db = state.db.clone();
     let app_handle = app.clone();
 
     tokio::task::spawn_blocking(move || {
-        let _guard = webdav::try_begin_sync_session()?;
+        let guard = webdav::try_begin_sync_session()?;
+        let operation = db.operation_lock();
+        let _operation = operation.read();
+        let data_dir = db.active_snapshot().data_dir;
         let zip_data = webdav::download_sync(&config, "clipboard_sync.zip")?;
         let mut msg = match zip_data {
             Some(data) => {
@@ -230,7 +229,8 @@ pub async fn webdav_download(
             let _ = webdav::reconcile_local_media(&db, &media_map, &data_dir);
             let needed = webdav::plan_media_downloads(&db, &media_map, &data_dir);
             if !needed.is_empty() {
-                pending_media_workers = spawn_media_download(&app, &config, &data_dir, needed);
+                pending_media_workers =
+                    spawn_media_download(&app, &config, &data_dir, needed, &guard, &operation);
             }
         }
 
@@ -267,6 +267,10 @@ fn spawn_media_upload_worker(
     entries: Vec<webdav::MediaEntry>,
     thread_name: &'static str,
     label: &'static str,
+    guards: (
+        &Arc<webdav::SyncSessionGuard>,
+        &Arc<parking_lot::RwLock<()>>,
+    ),
 ) -> bool {
     if entries.is_empty() {
         return false;
@@ -274,9 +278,13 @@ fn spawn_media_upload_worker(
     let cfg = config.clone();
     let dir = data_dir.to_path_buf();
     let handle = app.clone();
+    let session = guards.0.clone();
+    let operation = guards.1.clone();
     match std::thread::Builder::new()
         .name(thread_name.into())
         .spawn(move || {
+            let _session = session;
+            let _operation = operation.read();
             let msg = match webdav::upload_media_files(&cfg, &entries, &dir) {
                 Ok((u, s, bytes)) => format!(
                     "{}上传完成：{} 新 ({})，{} 已存在跳过",
@@ -304,6 +312,10 @@ fn spawn_media_download_worker(
     entries: Vec<webdav::MediaEntry>,
     thread_name: &'static str,
     label: &'static str,
+    guards: (
+        &Arc<webdav::SyncSessionGuard>,
+        &Arc<parking_lot::RwLock<()>>,
+    ),
 ) -> bool {
     if entries.is_empty() {
         return false;
@@ -311,9 +323,13 @@ fn spawn_media_download_worker(
     let cfg = config.clone();
     let dir = data_dir.to_path_buf();
     let handle = app.clone();
+    let session = guards.0.clone();
+    let operation = guards.1.clone();
     match std::thread::Builder::new()
         .name(thread_name.into())
         .spawn(move || {
+            let _session = session;
+            let _operation = operation.read();
             let msg = match webdav::download_missing_media(&cfg, &entries, &dir) {
                 Ok(n) if n > 0 => format!("{label}下载完成：{n} 个文件"),
                 Ok(_) => format!("{label}已是最新"),
@@ -334,6 +350,8 @@ fn spawn_media_upload_files(
     config: &webdav::WebDavConfig,
     data_dir: &std::path::Path,
     media_map: &[webdav::MediaEntry],
+    session: &Arc<webdav::SyncSessionGuard>,
+    operation: &Arc<parking_lot::RwLock<()>>,
 ) -> u8 {
     if media_map.is_empty() {
         return 0;
@@ -362,13 +380,30 @@ fn spawn_media_upload_files(
         images,
         "webdav-upload-images",
         "图片",
+        (session, operation),
     ) {
         workers += 1;
     }
-    if spawn_media_upload_worker(app, config, data_dir, files, "webdav-upload-files", "文件") {
+    if spawn_media_upload_worker(
+        app,
+        config,
+        data_dir,
+        files,
+        "webdav-upload-files",
+        "文件",
+        (session, operation),
+    ) {
         workers += 1;
     }
-    if spawn_media_upload_worker(app, config, data_dir, icons, "webdav-upload-icons", "图标") {
+    if spawn_media_upload_worker(
+        app,
+        config,
+        data_dir,
+        icons,
+        "webdav-upload-icons",
+        "图标",
+        (session, operation),
+    ) {
         workers += 1;
     }
     workers
@@ -379,6 +414,8 @@ fn spawn_media_download(
     config: &webdav::WebDavConfig,
     data_dir: &std::path::Path,
     media_map: Vec<webdav::MediaEntry>,
+    session: &Arc<webdav::SyncSessionGuard>,
+    operation: &Arc<parking_lot::RwLock<()>>,
 ) -> u8 {
     let images: Vec<_> = media_map
         .iter()
@@ -404,6 +441,7 @@ fn spawn_media_download(
         images,
         "webdav-download-images",
         "图片",
+        (session, operation),
     ) {
         workers += 1;
     }
@@ -414,6 +452,7 @@ fn spawn_media_download(
         files,
         "webdav-download-files",
         "文件",
+        (session, operation),
     ) {
         workers += 1;
     }
@@ -424,6 +463,7 @@ fn spawn_media_download(
         icons,
         "webdav-download-icons",
         "图标",
+        (session, operation),
     ) {
         workers += 1;
     }

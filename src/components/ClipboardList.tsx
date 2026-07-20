@@ -10,12 +10,17 @@ import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
 import { useShallow } from "zustand/react/shallow";
 import { ScrollToTopButton } from "@/components/ScrollToTopButton";
 import { Separator } from "@/components/ui/separator";
+import { showToast } from "@/components/ui/toast";
 import { focusWindowImmediately } from "@/hooks/useInputFocus";
 import { useSortableList } from "@/hooks/useSortableList";
 import { useTranslation } from "@/i18n";
 import { GROUP_VALUES } from "@/lib/constants";
 import { logError } from "@/lib/logger";
-import { useClipboardStore, ClipboardItem } from "@/stores/clipboard";
+import {
+  canDeleteClipboardItem,
+  useClipboardStore,
+  ClipboardItem,
+} from "@/stores/clipboard";
 import { useUISettings } from "@/stores/ui-settings";
 import { ClipboardItemCard } from "./ClipboardItemCard";
 import {
@@ -30,6 +35,20 @@ interface SortableClipboardItem extends ClipboardItem {
 
 interface ClipboardListProps {
   searchInputRef: RefObject<HTMLInputElement | null>;
+}
+
+export function deleteActiveClipboardItem(
+  items: ClipboardItem[],
+  activeIndex: number,
+  deleteItem: (id: number) => void,
+  setActiveIndex: (index: number) => void,
+) {
+  const item = items[activeIndex];
+  if (!item || !canDeleteClipboardItem(item)) return;
+  deleteItem(item.id);
+  if (activeIndex >= items.length - 1) {
+    setActiveIndex(Math.max(0, items.length - 2));
+  }
 }
 
 // Virtuoso scrollSeek 占位符 — 快速滚动时替代完整卡片，接收精确高度避免布局抖动
@@ -114,6 +133,12 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
     pasteAsPlainText,
     deleteItem,
     _resetToken,
+    timelineSnapshot,
+    timelineHighlightId,
+    timelineRestoreRequest,
+    enterTimeline,
+    clearTimelineHighlight,
+    consumeTimelineRestoreRequest,
   } = useClipboardStore(
     useShallow((s) => ({
       items: s.items,
@@ -131,6 +156,12 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
       pasteAsPlainText: s.pasteAsPlainText,
       deleteItem: s.deleteItem,
       _resetToken: s._resetToken,
+      timelineSnapshot: s.timelineSnapshot,
+      timelineHighlightId: s.timelineHighlightId,
+      timelineRestoreRequest: s.timelineRestoreRequest,
+      enterTimeline: s.enterTimeline,
+      clearTimelineHighlight: s.clearTimelineHighlight,
+      consumeTimelineRestoreRequest: s.consumeTimelineRestoreRequest,
     })),
   );
   const cardMaxLines = useUISettings((s) => s.cardMaxLines);
@@ -173,13 +204,13 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
 
   // 后端已按 is_pinned DESC 排序，直接计算置顶数即可
   const pinnedCount = useMemo(
-    () => renderedItems.filter((item) => item.is_pinned).length,
-    [renderedItems],
+    () => timelineSnapshot ? 0 : renderedItems.filter((item) => item.is_pinned).length,
+    [renderedItems, timelineSnapshot],
   );
 
   // 搜索/类型筛选时隐藏快捷粘贴序号（过滤后的顺序与快捷粘贴槽位顺序不一致）
   // 自定义分组仍显示序号（quick_paste 分组隔离）
-  const showSlotBadges = !searchQuery && !selectedGroup;
+  const showSlotBadges = !searchQuery && !selectedGroup && !timelineSnapshot;
 
   const handleDragEnd = useCallback(
     async (oldIndex: number, newIndex: number) => {
@@ -248,6 +279,43 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
     },
     [isMasonry],
   );
+
+  const handleLocateInTimeline = useCallback(async (id: number) => {
+    const located = await enterTimeline(id, customScrollParent?.scrollTop ?? 0);
+    if (!located) showToast(t("clipboard.timeline.targetMissing"));
+  }, [customScrollParent, enterTimeline, t]);
+
+  useEffect(() => {
+    if (timelineHighlightId == null) return;
+    const index = renderedItems.findIndex((item) => item.id === timelineHighlightId);
+    if (index < 0) return;
+    scrollToClipboardIndex(index);
+  }, [timelineHighlightId, renderedItems, scrollToClipboardIndex]);
+
+  useEffect(() => {
+    if (timelineHighlightId == null) return;
+    const timer = setTimeout(clearTimelineHighlight, 1500);
+    return () => clearTimeout(timer);
+  }, [timelineHighlightId, clearTimelineHighlight]);
+
+  useEffect(() => {
+    if (!timelineRestoreRequest || !customScrollParent) return;
+    const index = timelineRestoreRequest.activeItemId == null
+      ? -1
+      : renderedItems.findIndex((item) => item.id === timelineRestoreRequest.activeItemId);
+    if (index >= 0) scrollToClipboardIndex(index);
+    const frame = requestAnimationFrame(() => {
+      customScrollParent.scrollTop = timelineRestoreRequest.scrollTop;
+      consumeTimelineRestoreRequest();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [
+    timelineRestoreRequest,
+    customScrollParent,
+    renderedItems,
+    scrollToClipboardIndex,
+    consumeTimelineRestoreRequest,
+  ]);
 
   // 拖拽时接管滚轮事件 - QuickClipboard 优化
   useEffect(() => {
@@ -359,6 +427,10 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
     (key: string, shift: boolean, source: "default" | "search-input" = "default") => {
       if (!useUISettings.getState().keyboardNavigation) return;
       if (useClipboardStore.getState().batchMode) return;
+      if (
+        (key === "ArrowLeft" || key === "ArrowRight") &&
+        useClipboardStore.getState().timelineSnapshot
+      ) return;
 
       switch (key) {
         case "ArrowLeft": {
@@ -424,11 +496,7 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
         }
         case "Delete": {
           const { activeIndex: idx, items: list } = useClipboardStore.getState();
-          if (idx < 0 || idx >= list.length) return;
-          deleteItem(list[idx].id);
-          if (idx >= list.length - 1) {
-            setActiveIndex(Math.max(0, list.length - 2));
-          }
+          deleteActiveClipboardItem(list, idx, deleteItem, setActiveIndex);
           break;
         }
       }
@@ -509,11 +577,17 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
       return (
         <div className={`px-2 ${densityPb}${index === 0 ? ' pt-1.5' : ''} list-item-enter`}>
           {showSeparator && <Separator className="mb-2" />}
-          <ClipboardItemCard item={item} index={index} showBadge={showSlotBadges} sortId={item._sortId} />
+          <ClipboardItemCard
+            item={item}
+            index={index}
+            showBadge={showSlotBadges}
+            sortId={item._sortId}
+            onLocateInTimeline={searchQuery ? handleLocateInTimeline : undefined}
+          />
         </div>
       );
     },
-    [renderedItems, pinnedCount, showSlotBadges, cardDensity],
+    [renderedItems, pinnedCount, showSlotBadges, cardDensity, searchQuery, handleLocateInTimeline],
   );
 
   const computeItemKey = useCallback(
@@ -528,9 +602,10 @@ export function ClipboardList({ searchInputRef }: ClipboardListProps) {
         index={index}
         showBadge={showSlotBadges}
         sortId={item._sortId}
+        onLocateInTimeline={searchQuery ? handleLocateInTimeline : undefined}
       />
     ),
-    [showSlotBadges],
+    [showSlotBadges, searchQuery, handleLocateInTimeline],
   );
 
   if (isLoading && renderedItems.length === 0) {

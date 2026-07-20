@@ -14,16 +14,17 @@ For UI screenshots, see [README_EN.md](README_EN.md) (captured on v0.5.0 and may
 - **Multi-type support** - Text, Image, File, URL (link), HTML, RTF
 - **Custom groups** - Per-item `group_id` assignment; in-group time ordering; group view filters to owned items; move to group via context menu
 - **Unlimited history** - Auto record all copied content, always accessible
-- **Smart search** - Real-time search with optimized LIKE queries (CJK text optimized)
+- **Smart search** - Search content and source metadata in real time; locate a result in its original timeline position and return to the previous search state
 - **Content deduplication** - BLAKE3 hash auto-deduplication, no duplicate storage
-- **Pin/Favorite** - Pin or favorite important items, immune to auto-cleanup
+- **Pin/Favorite/Lock** - Locked items cannot be deleted; automatic cleanup keeps pinned, favorite, and locked items
 - **Drag sorting** - Drag to reorder, cross-zone drag auto-toggles status
 - **Click to paste** - Click item to paste directly to active window
 - **Paste as plain text** - Support paste as plain text (Shift+Enter or right-click menu)
 - **Text editing** - Double-click or right-click to edit saved text
-- **Source app recognition** - Auto record source application name and icon
+- **Source metadata** - Record the source app, window title, URL, and file name through the existing card source details
 - **Deduplication strategy** - Three modes: pin/ignore/always create new
 - **Import/Export** - ZIP backup and restore (Settings → Data)
+- **Multiple databases** - Globally register databases, create safe backups, and hot-switch without restarting; removing a database registration never deletes the database file
 
 ## WebDAV Sync
 
@@ -117,7 +118,7 @@ For UI screenshots, see [README_EN.md](README_EN.md) (captured on v0.5.0 and may
 - **Auto start** - Run on system startup
 - **Admin launch** - Optional run as administrator (UAC elevation)
 - **Database optimization** - Manual OPTIMIZE / VACUUM trigger
-- **Data statistics** - Real-time database, image cache size and file count
+- **Data statistics** - The main window shows the active database name, item count, and size; Settings shows database, image cache, and file totals
 - **Data cleanup** - Three levels: clear history / reset config / reset all data
 
 ## Appearance

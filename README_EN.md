@@ -13,11 +13,11 @@ English | [中文](README.md)
 
 
 <p align="center">
-  <a href="https://github.com/Y-ASLant/ElegantClipboard/releases"><img src="https://img.shields.io/github/v/release/Y-ASLant/ElegantClipboard?label=version&color=blue" alt="version"></a>
-  <a href="https://github.com/Y-ASLant/ElegantClipboard/releases"><img src="https://img.shields.io/github/downloads/Y-ASLant/ElegantClipboard/total?label=downloads&color=brightgreen" alt="downloads"></a>
+  <a href="https://github.com/kadidalax/ElegantClipboard/releases"><img src="https://img.shields.io/github/v/release/kadidalax/ElegantClipboard?label=version&color=blue" alt="version"></a>
+  <a href="https://github.com/kadidalax/ElegantClipboard/releases"><img src="https://img.shields.io/github/downloads/kadidalax/ElegantClipboard/total?label=downloads&color=brightgreen" alt="downloads"></a>
   <img src="https://img.shields.io/badge/platform-Windows-lightgrey.svg" alt="platform">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="license">
-  <a href="https://github.com/Y-ASLant/ElegantClipboard/actions/workflows/ci.yml"><img src="https://github.com/Y-ASLant/ElegantClipboard/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/kadidalax/ElegantClipboard/actions/workflows/ci.yml"><img src="https://github.com/kadidalax/ElegantClipboard/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
 ## UI Screenshots (v0.5.0)
@@ -117,7 +117,7 @@ See [FEATURES_EN.md](FEATURES_EN.md) for complete feature list and terminology.
 
 ### Download Installer
 
-Download the latest version from [Releases](https://github.com/Y-ASLant/ElegantClipboard/releases):
+Download the latest version from [Releases](https://github.com/kadidalax/ElegantClipboard/releases):
 
 - **Installer** (recommended): `ElegantClipboard_x.x.x_x64-setup.exe`
 - **Portable**: `ElegantClipboard_x.x.x_x64_portable.exe` (no installation required)
@@ -131,7 +131,7 @@ winget install Y-ASLant.ElegantClipboard
 ### Scoop
 
 ```powershell
-scoop bucket add elegantclipboard https://github.com/Y-ASLant/ElegantClipboard
+scoop bucket add elegantclipboard https://github.com/kadidalax/ElegantClipboard
 scoop install elegantclipboard
 ```
 
@@ -147,7 +147,7 @@ scoop install elegantclipboard
 
 ```bash
 # Clone repository
-git clone https://github.com/Y-ASLant/ElegantClipboard.git
+git clone https://github.com/kadidalax/ElegantClipboard.git
 cd ElegantClipboard
 
 # Install dependencies

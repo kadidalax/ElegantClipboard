@@ -37,6 +37,10 @@ CREATE TABLE IF NOT EXISTS clipboard_items (
     char_count INTEGER,
     source_app_name TEXT,
     source_app_icon TEXT,
+    source_title TEXT,
+    source_url TEXT,
+    source_file_name TEXT,
+    is_locked INTEGER NOT NULL DEFAULT 0,
     group_id INTEGER REFERENCES groups(id) ON DELETE CASCADE
 );
 
@@ -70,19 +74,27 @@ CREATE INDEX IF NOT EXISTS idx_clipboard_favorite_order ON clipboard_items(favor
 CREATE INDEX IF NOT EXISTS idx_clipboard_sort_order ON clipboard_items(sort_order DESC);
 CREATE INDEX IF NOT EXISTS idx_clipboard_group ON clipboard_items(group_id);
 
--- Insert default settings
+"#;
+
+pub const SETTINGS_SCHEMA_SQL: &str = r#"
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now', 'localtime'))
+);
+CREATE TABLE IF NOT EXISTS settings_metadata (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+"#;
+
+pub const DEFAULT_SETTINGS_SQL: &str = r#"
 INSERT OR IGNORE INTO settings (key, value) VALUES
-    ('global_shortcut', 'Alt+C'),
-    ('max_history_count', '10000'),
-    ('max_content_size_kb', '1024'),
-    ('max_image_size_kb', '51200'),
-    ('dedup_strategy', 'move_to_top'),
-    ('text_dedup_mode', 'semantic'),
-    ('autostart_enabled', 'false'),
-    ('theme', 'system'),
-    ('language', 'zh-CN'),
-    ('auto_cleanup_days', '30'),
-    ('paste_key', 'ctrl_v');
+    ('global_shortcut', 'Alt+C'), ('max_history_count', '10000'),
+    ('max_content_size_kb', '1024'), ('max_image_size_kb', '51200'),
+    ('dedup_strategy', 'move_to_top'), ('text_dedup_mode', 'semantic'),
+    ('autostart_enabled', 'false'), ('theme', 'system'), ('language', 'zh-CN'),
+    ('auto_cleanup_days', '30'), ('paste_key', 'ctrl_v');
 "#;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

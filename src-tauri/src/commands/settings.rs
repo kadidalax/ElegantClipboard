@@ -150,6 +150,7 @@ pub struct MonitorStatus {
 /// 优化数据库
 #[tauri::command]
 pub async fn optimize_database(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    let _operation = state.database_operation.read();
     state.db.optimize().map_err(|e| e.to_string())?;
     tracing::info!("Database optimized");
     Ok(())
@@ -158,6 +159,7 @@ pub async fn optimize_database(state: State<'_, Arc<AppState>>) -> Result<(), St
 /// 整理数据库
 #[tauri::command]
 pub async fn vacuum_database(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    let _operation = state.database_operation.read();
     state.db.vacuum().map_err(|e| e.to_string())?;
     tracing::info!("Database vacuumed");
     Ok(())
@@ -181,9 +183,9 @@ pub async fn select_folder_for_settings(app: tauri::AppHandle) -> Result<Option<
 
 /// 在文件资源管理器中打开数据目录
 #[tauri::command]
-pub async fn open_data_folder() -> Result<(), String> {
-    let config = crate::config::AppConfig::load();
-    let data_dir = config.get_data_dir();
+pub async fn open_data_folder(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    let _operation = state.database_operation.read();
+    let data_dir = state.db.active_snapshot().data_dir;
     super::open_path_in_explorer(&data_dir)
 }
 
@@ -206,6 +208,9 @@ pub async fn reset_all_data(state: State<'_, Arc<AppState>>) -> Result<(), Strin
     use std::fs;
     use tracing::info;
 
+    let operation = state.db.operation_lock();
+    let _operation = operation.read();
+
     // 清空剪贴板数据
     let clipboard_repo = ClipboardRepository::new(&state.db);
     let image_paths = clipboard_repo.get_all_image_paths().unwrap_or_default();
@@ -222,8 +227,7 @@ pub async fn reset_all_data(state: State<'_, Arc<AppState>>) -> Result<(), Strin
     settings_repo.clear_all().map_err(|e| e.to_string())?;
 
     // 删除图片/图标目录（清理残留文件）
-    let config = crate::config::AppConfig::load();
-    let data_dir = config.get_data_dir();
+    let data_dir = state.db.active_snapshot().data_dir;
     for dir_name in &["images", "icons", "staged"] {
         let dir = data_dir.join(dir_name);
         if dir.exists() {
@@ -296,7 +300,7 @@ pub struct RunningAppInfo {
 /// 获取当前运行中的可见应用列表（用于应用过滤设置的可视化选择器）
 #[tauri::command]
 pub async fn get_running_apps(
-    _state: State<'_, Arc<AppState>>,
+    state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<RunningAppInfo>, String> {
     #[cfg(target_os = "windows")]
     {
@@ -376,8 +380,9 @@ pub async fn get_running_apps(
         ctx.apps
             .dedup_by(|a, b| a.1.to_lowercase() == b.1.to_lowercase());
 
-        let config = crate::config::AppConfig::load();
-        let icons_dir = config.get_data_dir().join("icons");
+        let operation = state.db.operation_lock();
+        let _operation = operation.read();
+        let icons_dir = state.db.active_snapshot().icons_dir;
 
         let result: Vec<RunningAppInfo> = ctx
             .apps

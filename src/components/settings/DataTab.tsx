@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Folder16Regular, Open16Regular, ArrowSync16Regular, ArrowDownload16Regular, ArrowUpload16Regular, Delete16Regular, ArrowCounterclockwise16Regular, ArrowClockwise16Regular } from "@fluentui/react-icons";
 import { invoke } from "@tauri-apps/api/core";
+import { emit } from "@tauri-apps/api/event";
 import { SettingsCard, SettingsCardHeader } from "@/components/settings/SettingSection";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +22,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useTranslation } from "@/i18n";
 import { logError } from "@/lib/logger";
+import { DatabaseInfo, useDatabaseStore } from "@/stores/databases";
 
 function isUserCancelled(error: unknown): boolean {
   const msg = String(error).toLowerCase();
@@ -60,6 +62,19 @@ interface DataSizeInfo {
   staged_size?: number;
   staged_count?: number;
   total_size: number;
+}
+
+export function getMigrationAvailability(targetHasData: boolean): "migrate" | "blocked" {
+  return targetHasData ? "blocked" : "migrate";
+}
+
+export async function renameDatabaseAndNotify(
+  renameDatabase: (id: string, name: string) => Promise<unknown>,
+  id: string,
+  name: string,
+) {
+  await renameDatabase(id, name);
+  await emit("database-stats-changed");
 }
 
 function formatDataSize(bytes: number): string {
@@ -258,6 +273,84 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
   const [importing, setImporting] = useState(false);
   const [exportImportMsg, setExportImportMsg] = useState<string | null>(null);
   const [dedupStrategy, setDedupStrategy] = useState<DedupStrategy>("move_to_top");
+  const { databases, activeId, loading: databasesLoading, error: databaseError, fetchDatabases, createDatabase, addExistingDatabase, renameDatabase, removeRegistration, switchDatabase } = useDatabaseStore();
+  const [databaseDialog, setDatabaseDialog] = useState<"create" | "add" | "rename" | null>(null);
+  const [selectedDatabaseId, setSelectedDatabaseId] = useState<string | null>(null);
+  const [databaseName, setDatabaseName] = useState("");
+  const [databasePath, setDatabasePath] = useState("");
+  const [databaseActionLoading, setDatabaseActionLoading] = useState(false);
+  const [removingDatabaseId, setRemovingDatabaseId] = useState<string | null>(null);
+  const removingDatabaseRef = useRef(false);
+  const [switchTarget, setSwitchTarget] = useState<DatabaseInfo | null>(null);
+
+  useEffect(() => { void fetchDatabases().catch(() => undefined); }, [fetchDatabases]);
+
+  const selectDatabaseFolder = async () => {
+    try {
+      const path = await invoke<string | null>("select_folder_for_settings");
+      if (path) setDatabasePath(path);
+    } catch (error) {
+      logError("Failed to select database folder:", error);
+    }
+  };
+
+  const openDatabaseDialog = (mode: "create" | "add" | "rename", database?: DatabaseInfo) => {
+    setDatabaseDialog(mode);
+    setSelectedDatabaseId(database?.id ?? null);
+    setDatabaseName(database?.name ?? "");
+    setDatabasePath("");
+  };
+
+  const submitDatabaseDialog = async () => {
+    const name = databaseName.trim();
+    if (!name || (databaseDialog !== "rename" && !databasePath)) return;
+    setDatabaseActionLoading(true);
+    try {
+      if (databaseDialog === "rename" && selectedDatabaseId) {
+        await renameDatabaseAndNotify(renameDatabase, selectedDatabaseId, name);
+      }
+      if (databaseDialog === "add") await addExistingDatabase(name, databasePath);
+      if (databaseDialog === "create") {
+        const separator = databasePath.includes("\\") ? "\\" : "/";
+        await createDatabase(name, `${databasePath.replace(/[\\/]+$/, "")}${separator}${name}`);
+      }
+      setDatabaseDialog(null);
+    } catch {
+      // Store exposes the command error in the card.
+    } finally {
+      setDatabaseActionLoading(false);
+    }
+  };
+
+  const confirmSwitchDatabase = async () => {
+    if (!switchTarget) return;
+    setDatabaseActionLoading(true);
+    try {
+      await switchDatabase(switchTarget.id);
+      sessionStorage.removeItem("data-size-cache");
+      setDataSize(null);
+      onSettingsChange({ ...settings, data_path: switchTarget.path });
+      setSwitchTarget(null);
+    } catch {
+      // Store exposes the command error in the card.
+    } finally {
+      setDatabaseActionLoading(false);
+    }
+  };
+
+  const handleRemoveRegistration = async (id: string) => {
+    if (removingDatabaseRef.current) return;
+    removingDatabaseRef.current = true;
+    setRemovingDatabaseId(id);
+    try {
+      await removeRegistration(id);
+    } catch {
+      // Store exposes the command error in the card.
+    } finally {
+      removingDatabaseRef.current = false;
+      setRemovingDatabaseId(null);
+    }
+  };
 
   // 数据清理
   type CleanAction = "clear_history" | "reset_settings" | "reset_all";
@@ -299,6 +392,9 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
     setCleanMsg(null);
     try {
       await invoke(config.command);
+      if (config.command === "clear_all_history") {
+        await emit("database-stats-changed");
+      }
       setCleanDialogAction(null);
       if (config.needsRestart) {
         sessionStorage.removeItem("data-size-cache");
@@ -393,31 +489,15 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
       if (result.errors.length > 0) {
         setMigrationError(t("settings.data.migrationErrors", { errors: result.errors.join(", ") }));
       } else {
-        // 成功，重启应用
         setMigrationDialogOpen(false);
         onSettingsChange({ ...settings, data_path: pendingPath });
-        await invoke("restart_app");
+        sessionStorage.removeItem("data-size-cache");
+        await Promise.all([fetchDatabases(), refreshDataSize()]);
       }
     } catch (error) {
       setMigrationError(t("settings.data.migrationFailed", { error: String(error) }));
     } finally {
       setMigrating(false);
-    }
-  };
-
-  const handleSkipMigration = async () => {
-    if (!pendingPath) return;
-    
-    try {
-      // 不删除旧位置数据：当前数据库连接未关闭，强制删除会触发 OS error 32。
-      // 旧数据留在磁盘上无害，用户可手动清理。
-      await invoke("set_data_path", { path: pendingPath });
-      onSettingsChange({ ...settings, data_path: pendingPath });
-      setMigrationDialogOpen(false);
-      // 重启以使用新路径
-      await invoke("restart_app");
-    } catch (error) {
-      setMigrationError(t("settings.data.setPathFailed", { error: String(error) }));
     }
   };
 
@@ -442,6 +522,7 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
     try {
       const msg = await invoke<string>("import_data");
       setExportImportMsg(msg);
+      await emit("database-stats-changed");
       // 导入成功后重启应用
       await invoke("restart_app");
     } catch (error) {
@@ -477,6 +558,40 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
   return (
     <>
       <div className="space-y-3">
+        <SettingsCard>
+          <SettingsCardHeader
+            title={t("settings.data.databaseManagementTitle")}
+            description={t("settings.data.databaseManagementDesc")}
+            action={
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => openDatabaseDialog("add")}>{t("settings.data.addDatabase")}</Button>
+                <Button size="sm" onClick={() => openDatabaseDialog("create")}>{t("settings.data.createDatabase")}</Button>
+              </div>
+            }
+          />
+          <div className="flex flex-col gap-2">
+            {databasesLoading ? <p className="text-xs text-muted-foreground">{t("common.loading")}</p> : databases.map((database) => (
+              <div key={database.id} className="flex items-center gap-3 rounded-md border p-2.5">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-sm font-medium">{database.name}</p>
+                    {database.id === activeId && <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs">{t("settings.data.currentDatabase")}</span>}
+                  </div>
+                  <p className="truncate text-xs text-muted-foreground" title={database.path}>{database.path}</p>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => openDatabaseDialog("rename", database)}>{t("settings.data.renameDatabaseAction")}</Button>
+                {database.id === activeId ? null : (
+                  <>
+                    <Button variant="ghost" size="sm" disabled={removingDatabaseId !== null} onClick={() => void handleRemoveRegistration(database.id)}>{t("settings.data.removeDatabase")}</Button>
+                    <Button variant="outline" size="sm" onClick={() => setSwitchTarget(database)}>{t("settings.data.switchDatabase")}</Button>
+                  </>
+                )}
+              </div>
+            ))}
+            {databaseError && <p className="text-xs text-destructive">{databaseError}</p>}
+          </div>
+        </SettingsCard>
+
         {/* Data Size Card */}
         <SettingsCard>
           <SettingsCardHeader
@@ -753,6 +868,47 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
         </SettingsCard>
       </div>
 
+      <Dialog open={databaseDialog !== null} onOpenChange={(open) => { if (!open) setDatabaseDialog(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t(`settings.data.${databaseDialog ?? "create"}DatabaseTitle`)}</DialogTitle>
+            <DialogDescription>{t(`settings.data.${databaseDialog ?? "create"}DatabaseDesc`)}</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="database-name">{t("settings.data.databaseName")}</Label>
+              <Input id="database-name" value={databaseName} onChange={(event) => setDatabaseName(event.target.value)} placeholder={t("settings.data.databaseName")} />
+            </div>
+            {databaseDialog !== "rename" && (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="database-folder">{t("settings.data.databaseFolder")}</Label>
+                <div className="flex gap-2">
+                  <Input id="database-folder" value={databasePath} readOnly placeholder={t("settings.data.databaseFolder")} />
+                  <Button variant="outline" onClick={() => void selectDatabaseFolder()}>{t("settings.data.browseDatabaseFolder")}</Button>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDatabaseDialog(null)}>{t("common.cancel")}</Button>
+            <Button disabled={databaseActionLoading || !databaseName.trim() || (databaseDialog !== "rename" && !databasePath)} onClick={() => void submitDatabaseDialog()}>{t("common.confirm")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={switchTarget !== null} onOpenChange={(open) => { if (!open) setSwitchTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("settings.data.switchDatabaseTitle")}</DialogTitle>
+            <DialogDescription>{t("settings.data.switchDatabaseConfirm", { name: switchTarget?.name ?? "" })}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSwitchTarget(null)}>{t("common.cancel")}</Button>
+            <Button disabled={databaseActionLoading} onClick={() => void confirmSwitchDatabase()}>{t("settings.data.switchDatabase")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Data Cleanup Confirmation Dialog */}
       <Dialog open={cleanDialogAction !== null} onOpenChange={(open) => { if (!open && !cleanLoading) setCleanDialogAction(null); }}>
         <DialogContent className="max-w-md" showCloseButton={false}>
@@ -795,7 +951,7 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
             <DialogTitle>{destHasData ? t("settings.data.migrationDestHasData") : t("settings.data.migrationTitle")}</DialogTitle>
             <DialogDescription>
               {destHasData
-                ? t("settings.data.migrationDestDesc")
+                ? t("settings.data.migrationTargetBlocked")
                 : t("settings.data.migrationAsk")}
             </DialogDescription>
           </DialogHeader>
@@ -827,40 +983,13 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
             >
               {t("common.cancel")}
             </Button>
-            {destHasData ? (
-              <>
-                <Button
-                  variant="ghost"
-                  onClick={handleMigrate}
-                  disabled={migrating}
-                  className="text-destructive hover:text-destructive hover:bg-destructive-subtle-hover"
-                >
-                  {migrating ? t("settings.data.overwriting") : t("settings.data.keepOldData")}
-                </Button>
-                <Button
-                  onClick={handleSkipMigration}
-                  disabled={migrating}
-                >
-                  {t("settings.data.keepNewData")}
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button
-                  variant="ghost"
-                  onClick={handleSkipMigration}
-                  disabled={migrating}
-                  className="text-destructive hover:text-destructive hover:bg-destructive-subtle-hover"
-                >
-                  {t("settings.data.skipMigration")}
-                </Button>
+            {getMigrationAvailability(destHasData) === "migrate" && (
                 <Button
                   onClick={handleMigrate}
                   disabled={migrating}
                 >
                   {migrating ? t("settings.data.migrating") : t("settings.data.migrateData")}
                 </Button>
-              </>
             )}
           </DialogFooter>
         </DialogContent>
@@ -868,4 +997,3 @@ export function DataTab({ settings, onSettingsChange }: DataTabProps) {
     </>
   );
 }
-

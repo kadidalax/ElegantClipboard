@@ -460,9 +460,7 @@ fn apply_preview_window_effect(_window: &tauri::WebviewWindow, _effect: Option<&
 
 #[tauri::command]
 pub fn set_log_to_file(enabled: bool) -> Result<(), String> {
-    let mut config = AppConfig::load();
-    config.log_to_file = Some(enabled);
-    config.save()
+    AppConfig::update(|config| config.log_to_file = Some(enabled))
 }
 
 #[tauri::command]

@@ -78,11 +78,12 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          UPDATER_GITHUB_TOKEN: ${{ secrets.UPDATER_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "ElegantClipboard ${{ github.ref_name }}"
-          releaseBody: "See the assets to download and install."
+          releaseBody: |
+            下载对应架构的安装包或便携版即可使用。
+            Download the installer or portable executable for your architecture.
           releaseDraft: true
           prerelease: false
           args: --target ${{ matrix.rust-target }}
@@ -93,7 +94,8 @@ jobs:
           $v = "${{ steps.version.outputs.VERSION }}"
           $arch = "${{ matrix.arch }}"
           $src = "src-tauri/target/${{ matrix.rust-target }}/release/elegant-clipboard.exe"
-          Copy-Item $src "ElegantClipboard_${v}_${arch}_portable.exe"
+          if (!(Test-Path -LiteralPath $src)) { throw "Portable executable not found: $src" }
+          Copy-Item -LiteralPath $src "ElegantClipboard_${v}_${arch}_portable.exe"
 
       - name: Upload portable artifact
         uses: actions/upload-artifact@v4

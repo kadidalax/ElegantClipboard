@@ -15,6 +15,101 @@ const MAX_PREVIEW_LENGTH: usize = 200;
 const DEFAULT_MAX_HISTORY_COUNT: i64 = 0;
 const DEFAULT_AUTO_CLEANUP_DAYS: i64 = 30;
 
+pub(crate) fn parse_cf_html_source_url(html: &str) -> Option<String> {
+    html.lines()
+        .take_while(|line| !line.trim_start().starts_with('<'))
+        .find_map(|line| {
+            let (key, value) = line.split_once(':')?;
+            if !key.trim().eq_ignore_ascii_case("SourceURL") {
+                return None;
+            }
+            let value = value.trim();
+            let scheme = value.get(..value.len().min(8))?.to_ascii_lowercase();
+            (scheme.starts_with("http://") || scheme.starts_with("https://"))
+                .then(|| value.to_string())
+        })
+}
+
+fn source_file_name_from_title(title: &str, allow_code: bool) -> Option<String> {
+    title.split(" - ").find_map(|part| {
+        let name = part.trim();
+        let ext = Path::new(name).extension()?.to_str()?.to_ascii_lowercase();
+        let document = matches!(
+            ext.as_str(),
+            "pdf"
+                | "doc"
+                | "docx"
+                | "xls"
+                | "xlsx"
+                | "ppt"
+                | "pptx"
+                | "txt"
+                | "md"
+                | "rtf"
+                | "csv"
+                | "odt"
+                | "ods"
+                | "odp"
+        );
+        let code = matches!(
+            ext.as_str(),
+            "rs" | "js"
+                | "jsx"
+                | "ts"
+                | "tsx"
+                | "py"
+                | "go"
+                | "java"
+                | "c"
+                | "h"
+                | "cpp"
+                | "hpp"
+                | "cs"
+                | "html"
+                | "css"
+                | "json"
+                | "yaml"
+                | "yml"
+                | "toml"
+                | "xml"
+                | "sql"
+                | "sh"
+        );
+        ((document || allow_code && code) && !name.contains('/') && !name.contains('\\'))
+            .then(|| name.to_string())
+    })
+}
+
+fn attach_source_file_name(
+    item: &mut NewClipboardItem,
+    source_title: Option<&str>,
+    source_app_name: Option<&str>,
+) {
+    if matches!(
+        item.content_type,
+        ContentType::Text | ContentType::Html | ContentType::Rtf
+    ) {
+        let app = source_app_name.unwrap_or("").to_ascii_lowercase();
+        let editor = [
+            "code",
+            "studio",
+            "editor",
+            "idea",
+            "intellij",
+            "pycharm",
+            "webstorm",
+            "sublime",
+            "notepad",
+            "vim",
+            "rustrover",
+        ]
+        .iter()
+        .any(|name| app.contains(name));
+        item.source_file_name =
+            source_title.and_then(|title| source_file_name_from_title(title, editor));
+    }
+}
+
 /// 通配符匹配（支持 * 和 ?，不区分大小写，O(n) 空间）
 fn wildcard_match(pattern: &str, text: &str) -> bool {
     let pattern: Vec<char> = pattern.to_lowercase().chars().collect();
@@ -101,6 +196,7 @@ pub enum ClipboardContent {
         html: String,
         text: Option<String>,
         rtf: Option<String>,
+        source_url: Option<String>,
     },
     Rtf {
         rtf: String,
@@ -201,29 +297,29 @@ impl ClipChangeSettings {
 }
 
 pub struct ClipboardHandler {
+    db: Database,
     repository: ClipboardRepository,
     settings_repo: SettingsRepository,
-    images_path: PathBuf,
-    icons_path: PathBuf,
     /// 内存级去重：最近一次成功处理的内容哈希，防止快速连续事件绕过 DB dedup
-    last_content_hash: parking_lot::Mutex<String>,
+    last_content_hash: parking_lot::Mutex<Option<(PathBuf, String)>>,
 }
 
 impl ClipboardHandler {
-    pub fn new(db: &Database, images_path: PathBuf) -> Self {
-        std::fs::create_dir_all(&images_path).ok();
-
-        // 图标目录与图片目录同级
-        let icons_path = images_path.parent().unwrap_or(&images_path).join("icons");
-        std::fs::create_dir_all(&icons_path).ok();
+    pub fn new(db: &Database) -> Self {
+        let paths = db.active_snapshot();
+        std::fs::create_dir_all(&paths.images_dir).ok();
+        std::fs::create_dir_all(&paths.icons_dir).ok();
 
         Self {
+            db: db.clone(),
             repository: ClipboardRepository::new(db),
             settings_repo: SettingsRepository::new(db),
-            images_path,
-            icons_path,
-            last_content_hash: parking_lot::Mutex::new(String::new()),
+            last_content_hash: parking_lot::Mutex::new(None),
         }
+    }
+
+    pub(crate) fn active_paths(&self) -> crate::database::ActiveDatabase {
+        self.db.active_snapshot()
     }
 
     /// 批量读取处理所需的全部设置，单次数据库查询
@@ -346,7 +442,35 @@ impl ClipboardHandler {
     }
 
     /// 处理剪贴板内容，去重后存入数据库
+    #[cfg(test)]
     pub fn process(
+        &self,
+        content: ClipboardContent,
+        source: Option<SourceAppInfo>,
+        group_id: Option<i64>,
+    ) -> Result<Option<i64>, String> {
+        let operation = self.db.operation_lock();
+        let _operation = operation.read();
+        self.process_locked(content, source, group_id)
+    }
+
+    pub(crate) fn process_for_database(
+        &self,
+        expected_db_path: &Path,
+        content: ClipboardContent,
+        source: Option<SourceAppInfo>,
+        group_id: Option<i64>,
+    ) -> Result<Option<i64>, String> {
+        let operation = self.db.operation_lock();
+        let _operation = operation.read();
+        if self.active_paths().db_path != expected_db_path {
+            cleanup_capture_content(&content);
+            return Ok(None);
+        }
+        self.process_locked(content, source, group_id)
+    }
+
+    fn process_locked(
         &self,
         content: ClipboardContent,
         source: Option<SourceAppInfo>,
@@ -371,6 +495,24 @@ impl ClipboardHandler {
             }
         }
 
+        let (source_app_name, source_app_icon, source_title) = match source {
+            Some(ref info) => {
+                let paths = self.active_paths();
+                std::fs::create_dir_all(&paths.icons_dir).ok();
+                let icon_path = source_app::extract_and_cache_icon(
+                    &info.exe_path,
+                    &paths.icons_dir,
+                    &info.icon_cache_key,
+                );
+                (
+                    Some(info.app_name.clone()),
+                    icon_path,
+                    info.source_title.clone(),
+                )
+            }
+            None => (None, None, None),
+        };
+
         let hashes = self.calculate_hashes(&content)?;
         let dedup = &settings.dedup_strategy;
         let text_like = Self::is_text_like_content(&content);
@@ -380,12 +522,15 @@ impl ClipboardHandler {
         // 内存级去重：防止快速连续事件（如 Zen 浏览器 1ms 内两次事件）绕过 DB dedup
         // 仅在 dedup 策略不是 always_new 时生效
         if dedup != "always_new" {
+            let db_path = self.active_paths().db_path;
             let mut last = self.last_content_hash.lock();
-            if *last == hashes.content_hash {
+            if last.as_ref().is_some_and(|(last_db_path, last_hash)| {
+                last_db_path == &db_path && last_hash == &hashes.content_hash
+            }) {
                 debug!("Content hash matches last processed, skipping (memory dedup)");
                 return Ok(None);
             }
-            last.clone_from(&hashes.content_hash);
+            *last = Some((db_path, hashes.content_hash.clone()));
         }
 
         if dedup != "always_new"
@@ -430,11 +575,17 @@ impl ClipboardHandler {
                         ClipboardContent::Html { .. } | ClipboardContent::Rtf { .. }
                     ),
                 ) {
-                    let refreshed = match &content {
-                        ClipboardContent::Html { html, text, rtf } => self.process_html(
+                    let mut refreshed = match &content {
+                        ClipboardContent::Html {
+                            html,
+                            text,
+                            rtf,
+                            source_url,
+                        } => self.process_html(
                             html.clone(),
                             text.clone(),
                             rtf.clone(),
+                            source_url.clone(),
                             &hashes,
                             max_content_size,
                         )?,
@@ -443,6 +594,14 @@ impl ClipboardHandler {
                         }
                         _ => unreachable!(),
                     };
+                    refreshed.source_app_name = source_app_name.clone();
+                    refreshed.source_app_icon = source_app_icon.clone();
+                    refreshed.source_title = source_title.clone();
+                    attach_source_file_name(
+                        &mut refreshed,
+                        source_title.as_deref(),
+                        source_app_name.as_deref(),
+                    );
                     self.repository
                         .refresh_rich_fields(id, &refreshed)
                         .map_err(|e| e.to_string())?;
@@ -452,17 +611,6 @@ impl ClipboardHandler {
             }
         }
 
-        let (source_app_name, source_app_icon) = match source {
-            Some(ref info) => {
-                let icon_path = source_app::extract_and_cache_icon(
-                    &info.exe_path,
-                    &self.icons_path,
-                    &info.icon_cache_key,
-                );
-                (Some(info.app_name.clone()), icon_path)
-            }
-            None => (None, None),
-        };
         // 安全地从 ClipboardContent（impl Drop）中取出内部值
         // 通过 ManuallyDrop 阻止 Drop 运行，process_image_file 已自行处理临时文件
         let mut item = {
@@ -473,11 +621,17 @@ impl ClipboardHandler {
                     let text = std::mem::take(text);
                     self.process_text(text, &hashes, max_content_size)?
                 }
-                ClipboardContent::Html { html, text, rtf } => {
+                ClipboardContent::Html {
+                    html,
+                    text,
+                    rtf,
+                    source_url,
+                } => {
                     let html = std::mem::take(html);
                     let text = std::mem::take(text);
                     let rtf = std::mem::take(rtf);
-                    self.process_html(html, text, rtf, &hashes, max_content_size)?
+                    let source_url = std::mem::take(source_url);
+                    self.process_html(html, text, rtf, source_url, &hashes, max_content_size)?
                 }
                 ClipboardContent::Rtf { rtf, text } => {
                     let rtf = std::mem::take(rtf);
@@ -496,8 +650,14 @@ impl ClipboardHandler {
             }
         };
 
+        attach_source_file_name(
+            &mut item,
+            source_title.as_deref(),
+            source_app_name.as_deref(),
+        );
         item.source_app_name = source_app_name;
         item.source_app_icon = source_app_icon;
+        item.source_title = source_title;
         item.group_id = group_id;
 
         let log_type = format!("{:?}", item.content_type);
@@ -678,6 +838,7 @@ impl ClipboardHandler {
         html: String,
         text: Option<String>,
         rtf: Option<String>,
+        source_url: Option<String>,
         hashes: &ContentHashes,
         max_size: usize,
     ) -> Result<NewClipboardItem, String> {
@@ -700,6 +861,7 @@ impl ClipboardHandler {
             preview: Some(preview),
             byte_size,
             char_count,
+            source_url,
             ..Default::default()
         })
     }
@@ -742,8 +904,10 @@ impl ClipboardHandler {
         let image_width = i64::from(capture.width);
         let image_height = i64::from(capture.height);
 
+        let paths = self.active_paths();
+        std::fs::create_dir_all(&paths.images_dir).ok();
         let filename = format!("{}.png", &hashes.content_hash[..32]);
-        let image_path = self.images_path.join(&filename);
+        let image_path = paths.images_dir.join(&filename);
         let image_path_str = image_path.to_string_lossy().to_string();
 
         debug!(
@@ -765,7 +929,7 @@ impl ClipboardHandler {
         // 处理 DIB 伴侣文件
         if let Some(ref dib_temp) = capture.dib_path {
             let dib_filename = format!("{}.dib", &hashes.content_hash[..32]);
-            let dib_target = self.images_path.join(&dib_filename);
+            let dib_target = paths.images_dir.join(&dib_filename);
             if dib_target.exists() {
                 let _ = std::fs::remove_file(dib_temp);
             } else if std::fs::rename(dib_temp, &dib_target).is_ok() {
@@ -817,10 +981,8 @@ impl ClipboardHandler {
         };
 
         let staged_dir = self
-            .images_path
-            .parent()
-            .unwrap_or(&self.images_path)
-            .join("staged")
+            .active_paths()
+            .staged_dir
             .join(&hashes.content_hash[..8.min(hashes.content_hash.len())]);
         let payload = file_clipboard::build_payload(&capture, &staged_dir, max_stage_bytes as u64);
         let file_payload = Some(file_clipboard::encode_payload(&payload));
@@ -873,5 +1035,285 @@ pub fn cleanup_stale_capture_files(capture_dir: &Path) {
         if path.extension().is_some_and(|ext| ext == "tmp") {
             std::fs::remove_file(path).ok();
         }
+    }
+}
+
+#[cfg(test)]
+mod source_metadata_tests {
+    use super::*;
+
+    fn temp_handler(label: &str) -> (PathBuf, Database, ClipboardHandler) {
+        let root = std::env::temp_dir().join(format!(
+            "ec-handler-{label}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let db = Database::new(root.join("first/clipboard.db")).unwrap();
+        let handler = ClipboardHandler::new(&db);
+        (root, db, handler)
+    }
+
+    #[test]
+    fn memory_dedup_is_scoped_to_active_database() {
+        let (root, db, handler) = temp_handler("dedup-switch");
+        assert!(
+            handler
+                .process(ClipboardContent::Text("same".into()), None, None)
+                .unwrap()
+                .is_some()
+        );
+        let target = db.open_active(root.join("second")).unwrap();
+        db.swap_active(target);
+        assert!(
+            handler
+                .process(ClipboardContent::Text("same".into()), None, None)
+                .unwrap()
+                .is_some()
+        );
+        drop(handler);
+        drop(db);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn memory_dedup_still_skips_consecutive_hash_in_same_database() {
+        let (root, db, handler) = temp_handler("dedup-same");
+        assert!(
+            handler
+                .process(ClipboardContent::Text("same".into()), None, None)
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            handler
+                .process(ClipboardContent::Text("same".into()), None, None)
+                .unwrap()
+                .is_none()
+        );
+        drop(handler);
+        drop(db);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn long_lived_handler_uses_active_database_resource_paths() {
+        let root = std::env::temp_dir().join(format!(
+            "ec-handler-switch-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let db = Database::new(root.join("first/clipboard.db")).unwrap();
+        let handler = ClipboardHandler::new(&db);
+        let target = db.open_active(root.join("second")).unwrap();
+        db.swap_active(target);
+        let paths = handler.active_paths();
+        assert_eq!(
+            paths.images_dir,
+            std::fs::canonicalize(root.join("second"))
+                .unwrap()
+                .join("images")
+        );
+        drop(paths);
+        drop(handler);
+        drop(db);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn parses_http_source_url_from_cf_html_header() {
+        assert_eq!(
+            parse_cf_html_source_url(
+                "Version:1.0\r\nSourceURL:https://example.com/page?q=1\r\n<html>"
+            ),
+            Some("https://example.com/page?q=1".to_string())
+        );
+        assert_eq!(
+            parse_cf_html_source_url("Version:1.0\nSourceURL: http://example.com/a\n<html>"),
+            Some("http://example.com/a".to_string())
+        );
+        assert_eq!(
+            parse_cf_html_source_url("Version:1.0\nSourceURL:HTTPS://example.com/a\n<html>"),
+            Some("HTTPS://example.com/a".to_string())
+        );
+        assert_eq!(
+            parse_cf_html_source_url(
+                "Version:1.0\nStartHTML:00000040\n<html>\nSourceURL:https://evil.example\n"
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn preserves_source_url_when_html_body_has_already_been_extracted() {
+        let db_path = std::env::temp_dir().join(format!(
+            "ec_source_html_{}.db",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let db = Database::new(db_path).unwrap();
+        let handler = ClipboardHandler::new(&db);
+        let hashes = ContentHashes {
+            content_hash: "content".to_string(),
+            semantic_hash: "semantic".to_string(),
+        };
+        let raw_cf_html = "Version:1.0\r\nStartHTML:00000100\r\nEndHTML:00000140\r\nSourceURL:https://example.com/source\r\n<html>body</html>";
+        let item = handler
+            .process_html(
+                "<html><body>fragment only</body></html>".to_string(),
+                None,
+                None,
+                parse_cf_html_source_url(raw_cf_html),
+                &hashes,
+                DEFAULT_MAX_CONTENT_SIZE,
+            )
+            .unwrap();
+        assert_eq!(
+            item.source_url.as_deref(),
+            Some("https://example.com/source")
+        );
+    }
+
+    #[test]
+    fn rejects_missing_or_non_http_cf_html_source_url() {
+        assert_eq!(parse_cf_html_source_url("Version:1.0\n<html>"), None);
+        assert_eq!(
+            parse_cf_html_source_url("SourceURL:file:///C:/secret.txt\n<html>"),
+            None
+        );
+        assert_eq!(
+            parse_cf_html_source_url("SourceURL:javascript:alert(1)\n<html>"),
+            None
+        );
+    }
+
+    #[test]
+    fn conservatively_extracts_file_name_from_window_title() {
+        assert_eq!(
+            source_file_name_from_title("report.final.pdf - Microsoft Edge", false),
+            Some("report.final.pdf".to_string())
+        );
+        assert_eq!(source_file_name_from_title("Inbox - Mail", false), None);
+        assert_eq!(
+            source_file_name_from_title("example.com - Google Chrome", false),
+            None
+        );
+        for name in [
+            "notes.txt",
+            "deck.pptx",
+            "report.docx",
+            "main.rs",
+            "app.tsx",
+        ] {
+            assert_eq!(
+                source_file_name_from_title(&format!("{name} - Editor"), true),
+                Some(name.to_string())
+            );
+        }
+        let mut browser_item = NewClipboardItem::default();
+        attach_source_file_name(
+            &mut browser_item,
+            Some("docs.rs - Browser"),
+            Some("Google Chrome"),
+        );
+        assert_eq!(browser_item.source_file_name, None);
+
+        let mut editor_item = NewClipboardItem::default();
+        attach_source_file_name(
+            &mut editor_item,
+            Some("main.rs - Visual Studio Code"),
+            Some("Visual Studio Code"),
+        );
+        assert_eq!(editor_item.source_file_name.as_deref(), Some("main.rs"));
+    }
+
+    #[test]
+    fn source_file_name_is_only_attached_to_text_like_items() {
+        for content_type in [ContentType::Files, ContentType::Image] {
+            let mut item = NewClipboardItem {
+                content_type,
+                ..Default::default()
+            };
+            attach_source_file_name(&mut item, Some("report.docx - App"), Some("App"));
+            assert_eq!(item.source_file_name, None);
+        }
+
+        for content_type in [ContentType::Text, ContentType::Html, ContentType::Rtf] {
+            let mut item = NewClipboardItem {
+                content_type,
+                ..Default::default()
+            };
+            attach_source_file_name(&mut item, Some("report.docx - App"), Some("App"));
+            assert_eq!(item.source_file_name.as_deref(), Some("report.docx"));
+        }
+    }
+
+    #[test]
+    fn semantic_rich_text_refresh_updates_all_source_metadata() {
+        let db_path = std::env::temp_dir().join(format!(
+            "ec_source_refresh_{}.db",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let db = Database::new(db_path).unwrap();
+        let handler = ClipboardHandler::new(&db);
+        let source = |title: &str| SourceAppInfo {
+            app_name: "Visual Studio Code".to_string(),
+            exe_path: "missing.exe".to_string(),
+            icon_cache_key: "missing".to_string(),
+            source_title: Some(title.to_string()),
+        };
+        let content = |html: &str, url: &str| ClipboardContent::Html {
+            html: html.to_string(),
+            text: Some("same text".to_string()),
+            rtf: None,
+            source_url: Some(url.to_string()),
+        };
+
+        let first_id = handler
+            .process(
+                content("<b>first</b>", "https://first.example"),
+                Some(source("first.docx - Visual Studio Code")),
+                None,
+            )
+            .unwrap()
+            .unwrap();
+        let second_id = handler
+            .process(
+                content("<i>second</i>", "https://second.example"),
+                Some(source("second.docx - Visual Studio Code")),
+                None,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(first_id, second_id);
+
+        let conn = db.read_connection();
+        let conn = conn.lock();
+        let values: (String, String, String, String) = conn
+            .query_row(
+                "SELECT html_content, source_url, source_title, source_file_name FROM clipboard_items WHERE id = ?1",
+                [first_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            values,
+            (
+                "<i>second</i>".to_string(),
+                "https://second.example".to_string(),
+                "second.docx - Visual Studio Code".to_string(),
+                "second.docx".to_string(),
+            )
+        );
     }
 }

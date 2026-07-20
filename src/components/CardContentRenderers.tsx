@@ -4,12 +4,25 @@ import { memo, useCallback, useEffect, useRef, useState, useMemo } from "react";
 import {
   Document16Regular,
   Folder16Regular,
+  History16Regular,
   Warning16Regular,
 } from "@fluentui/react-icons";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { HighlightText } from "@/components/HighlightText";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { showToast } from "@/components/ui/toast";
 import { useTranslation } from "@/i18n";
 import { getFileNameFromPath, isImageFile } from "@/lib/format";
 import { createLeaseManager } from "@/lib/lease-manager";
@@ -28,6 +41,23 @@ interface CardFooterProps {
   isDragOverlay?: boolean;
   sourceAppName?: string | null;
   sourceAppIcon?: string | null;
+  sourceDetails?: SourceDetails;
+}
+
+export interface SourceDetails {
+  title?: string | null;
+  url?: string | null;
+  fileName?: string | null;
+  onLocateInTimeline?: () => void;
+}
+
+function isWebUrl(value: string): boolean {
+  try {
+    const protocol = new URL(value).protocol;
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 export const CardFooter = ({
@@ -37,17 +67,16 @@ export const CardFooter = ({
   isDragOverlay,
   sourceAppName,
   sourceAppIcon,
-}: CardFooterProps) => (
-  <div className="flex items-center justify-between gap-1.5 text-xs text-muted-foreground mt-1.5 min-h-5">
-    <div className="flex items-center gap-1.5 min-w-0">
-      {metaItems.map((info, i) => (
-        <span key={i} className="flex items-center gap-1.5">
-          {i > 0 && <span className="text-muted-foreground/50">·</span>}
-          {info}
-        </span>
-      ))}
-    </div>
-    <div className="flex items-center gap-1.5 shrink-0">
+  sourceDetails,
+}: CardFooterProps) => {
+  const { t } = useTranslation();
+  const hasDetails = sourceDetails
+    ? [sourceDetails.title, sourceDetails.url, sourceDetails.fileName].some(
+        (value) => value?.trim(),
+      )
+    : false;
+  const source = (
+    <>
       {sourceAppIcon && (
         <img
           src={convertFileSrc(sourceAppIcon)}
@@ -59,19 +88,108 @@ export const CardFooter = ({
       {sourceAppName && (
         <span className="truncate max-w-[128px]">{sourceAppName}</span>
       )}
-      {index !== undefined && index >= 0 && !isDragOverlay && (
-        <span
-          className={cn(
-            "min-w-5 h-5 px-1.5 rounded-full bg-primary-subtle flex items-center justify-center text-micro font-semibold text-primary transition-opacity duration-150",
-            showBadge ? "opacity-100" : "opacity-0",
-          )}
-        >
-          {index + 1}
-        </span>
-      )}
+    </>
+  );
+
+  return (
+    <div className="flex items-center justify-between gap-1.5 text-xs text-muted-foreground mt-1.5 min-h-5">
+      <div className="flex items-center gap-1.5 min-w-0">
+        {metaItems.map((info, i) => (
+          <span key={i} className="flex items-center gap-1.5">
+            {i > 0 && <span className="text-muted-foreground/50">·</span>}
+            {info}
+          </span>
+        ))}
+      </div>
+      <div className="flex items-center gap-1.5 shrink-0">
+        {hasDetails && (sourceAppIcon || sourceAppName) ? (
+          <Dialog>
+            <DialogTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex min-w-0 items-center gap-1.5 rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={t("clipboard.sourceDetails.open")}
+                onClick={(event) => event.stopPropagation()}
+              >
+                {source}
+              </button>
+            </DialogTrigger>
+            <DialogContent className="max-w-sm" onClick={(event) => event.stopPropagation()}>
+              <DialogHeader className="text-left">
+                <DialogTitle>{t("clipboard.sourceDetails.title")}</DialogTitle>
+                <DialogDescription className="sr-only">
+                  {t("clipboard.sourceDetails.description")}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 text-sm">
+                {sourceDetails?.title?.trim() && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">{t("clipboard.sourceDetails.windowTitle")}</p>
+                    <p className="truncate" title={sourceDetails.title}>{sourceDetails.title}</p>
+                  </div>
+                )}
+                {sourceDetails?.url?.trim() && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">{t("clipboard.sourceDetails.url")}</p>
+                    {isWebUrl(sourceDetails.url) ? (
+                      <button
+                        type="button"
+                        className="block max-w-full truncate text-left text-primary hover:underline"
+                        title={sourceDetails.url}
+                        aria-label={sourceDetails.url}
+                        onClick={() => {
+                          void openUrl(sourceDetails.url!).catch((error) => {
+                            logError("Failed to open source URL:", error);
+                            showToast(t("clipboard.sourceDetails.openFailed"), "error");
+                          });
+                        }}
+                      >
+                        {sourceDetails.url}
+                      </button>
+                    ) : (
+                      <p className="truncate" title={sourceDetails.url}>{sourceDetails.url}</p>
+                    )}
+                  </div>
+                )}
+                {sourceDetails?.fileName?.trim() && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">{t("clipboard.sourceDetails.fileName")}</p>
+                    <p className="truncate" title={sourceDetails.fileName}>{sourceDetails.fileName}</p>
+                  </div>
+                )}
+              </div>
+              {sourceDetails?.onLocateInTimeline && (
+                <DialogClose asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-fit"
+                    onClick={sourceDetails.onLocateInTimeline}
+                  >
+                    <History16Regular />
+                    {t("clipboard.contextMenu.locateInTimeline")}
+                  </Button>
+                </DialogClose>
+              )}
+            </DialogContent>
+          </Dialog>
+        ) : (
+          source
+        )}
+        {index !== undefined && index >= 0 && !isDragOverlay && (
+          <span
+            className={cn(
+              "min-w-5 h-5 px-1.5 rounded-full bg-primary-subtle flex items-center justify-center text-micro font-semibold text-primary transition-opacity duration-150",
+              showBadge ? "opacity-100" : "opacity-0",
+            )}
+          >
+            {index + 1}
+          </span>
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 // ============ 图片悬浮预览（原生窗口） ============
 
@@ -593,6 +711,7 @@ interface ImageCardProps {
   isDragOverlay?: boolean;
   sourceAppName?: string | null;
   sourceAppIcon?: string | null;
+  sourceDetails?: SourceDetails;
   imageWidth?: number | null;
   imageHeight?: number | null;
 }
@@ -605,6 +724,7 @@ export const ImageCard = memo(function ImageCard({
   isDragOverlay,
   sourceAppName,
   sourceAppIcon,
+  sourceDetails,
   imageWidth,
   imageHeight,
 }: ImageCardProps) {
@@ -639,6 +759,7 @@ export const ImageCard = memo(function ImageCard({
         isDragOverlay={isDragOverlay}
         sourceAppName={sourceAppName}
         sourceAppIcon={sourceAppIcon}
+        sourceDetails={sourceDetails}
       />
     </div>
   );
@@ -654,6 +775,7 @@ const FileImagePreview = memo(function FileImagePreview({
   isDragOverlay,
   sourceAppName,
   sourceAppIcon,
+  sourceDetails,
 }: {
   filePath: string;
   metaItems: string[];
@@ -662,6 +784,7 @@ const FileImagePreview = memo(function FileImagePreview({
   isDragOverlay?: boolean;
   sourceAppName?: string | null;
   sourceAppIcon?: string | null;
+  sourceDetails?: SourceDetails;
 }) {
   const [imgError, setImgError] = useState(false);
   const { t } = useTranslation();
@@ -695,6 +818,7 @@ const FileImagePreview = memo(function FileImagePreview({
           isDragOverlay={isDragOverlay}
           sourceAppName={sourceAppName}
           sourceAppIcon={sourceAppIcon}
+          sourceDetails={sourceDetails}
         />
       </div>
     );
@@ -722,6 +846,7 @@ const FileImagePreview = memo(function FileImagePreview({
         isDragOverlay={isDragOverlay}
         sourceAppName={sourceAppName}
         sourceAppIcon={sourceAppIcon}
+        sourceDetails={sourceDetails}
       />
     </div>
   );
@@ -739,6 +864,7 @@ interface FileContentProps {
   isDragOverlay?: boolean;
   sourceAppName?: string | null;
   sourceAppIcon?: string | null;
+  sourceDetails?: SourceDetails;
 }
 
 export const FileContent = memo(function FileContent({
@@ -751,6 +877,7 @@ export const FileContent = memo(function FileContent({
   isDragOverlay,
   sourceAppName,
   sourceAppIcon,
+  sourceDetails,
 }: FileContentProps) {
   const { t } = useTranslation();
   const isMultiple = filePaths.length > 1;
@@ -770,6 +897,7 @@ export const FileContent = memo(function FileContent({
         isDragOverlay={isDragOverlay}
         sourceAppName={sourceAppName}
         sourceAppIcon={sourceAppIcon}
+        sourceDetails={sourceDetails}
       />
     );
   }
@@ -859,8 +987,8 @@ export const FileContent = memo(function FileContent({
         isDragOverlay={isDragOverlay}
         sourceAppName={sourceAppName}
         sourceAppIcon={sourceAppIcon}
+        sourceDetails={sourceDetails}
       />
     </div>
   );
 });
-

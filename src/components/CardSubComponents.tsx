@@ -4,6 +4,8 @@ import {
   Pin16Filled,
   Star16Regular,
   Star16Filled,
+  LockClosed16Filled,
+  LockOpen16Regular,
   Delete16Regular,
   Copy16Regular,
   Translate16Regular,
@@ -182,6 +184,7 @@ interface ActionToolbarProps {
   item: ClipboardItem;
   onTogglePin: (e: React.MouseEvent) => void;
   onToggleFavorite: (e: React.MouseEvent) => void;
+  onToggleLock: (e: React.MouseEvent) => void;
   onCopy: (e: React.MouseEvent) => void;
   onDelete: (e: React.MouseEvent) => void;
   onTranslate?: (e: React.MouseEvent) => void;
@@ -192,6 +195,7 @@ export const ActionToolbar = ({
   item,
   onTogglePin,
   onToggleFavorite,
+  onToggleLock,
   onCopy,
   onDelete,
   onTranslate,
@@ -200,7 +204,7 @@ export const ActionToolbar = ({
   const { t } = useTranslation();
   return (
   <div
-    className="absolute right-1 top-1 z-20 flex items-center gap-0.5 surface-glass rounded-md p-0.5 elevation-floating border opacity-0 group-hover:opacity-100 transition-surface"
+    className="absolute right-1 top-1 z-20 flex items-center gap-0.5 surface-glass rounded-md p-0.5 elevation-floating border opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-surface"
     data-drag-ignore="true"
   >
     <Tooltip>
@@ -214,6 +218,24 @@ export const ActionToolbar = ({
         </Button>
       </TooltipTrigger>
       <TooltipContent>{item.is_pinned ? t("clipboard.unpin") : t("clipboard.pin")}</TooltipContent>
+    </Tooltip>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onToggleLock}
+          aria-label={item.is_locked ? t("clipboard.unlock") : t("clipboard.lock")}
+          className="h-7 w-7"
+        >
+          {item.is_locked ? (
+            <LockClosed16Filled className="w-3.5 h-3.5 text-primary" />
+          ) : (
+            <LockOpen16Regular className="w-3.5 h-3.5" />
+          )}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{item.is_locked ? t("clipboard.unlock") : t("clipboard.lock")}</TooltipContent>
     </Tooltip>
     <Tooltip>
       <TooltipTrigger asChild>
@@ -247,7 +269,13 @@ export const ActionToolbar = ({
     )}
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="ghost" size="icon" onClick={onDelete} className="h-7 w-7 hover:text-destructive">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onDelete}
+          disabled={item.is_locked}
+          className="h-7 w-7 hover:text-destructive"
+        >
           <Delete16Regular className="w-3.5 h-3.5" />
         </Button>
       </TooltipTrigger>

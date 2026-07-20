@@ -10,6 +10,7 @@ pub struct SourceAppInfo {
     pub app_name: String,
     pub exe_path: String,
     pub icon_cache_key: String,
+    pub source_title: Option<String>,
 }
 
 /// 获取剪贴板来源应用，需在剪贴板变化回调的最开始调用
@@ -17,7 +18,9 @@ pub struct SourceAppInfo {
 pub fn get_clipboard_source_app() -> Option<SourceAppInfo> {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::System::DataExchange::GetClipboardOwner;
-    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetForegroundWindow, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId,
+    };
 
     let self_pid = std::process::id();
 
@@ -36,11 +39,22 @@ pub fn get_clipboard_source_app() -> Option<SourceAppInfo> {
         let exe_path = unsafe { resolve_uwp_app(hwnd, &exe_path) }.unwrap_or(exe_path);
         let app_name = get_app_display_name(&exe_path);
         let icon_cache_key = compute_icon_cache_key(&exe_path);
+        let source_title = unsafe {
+            let len = GetWindowTextLengthW(hwnd);
+            (len > 0)
+                .then(|| {
+                    let mut buf = vec![0u16; len as usize + 1];
+                    let copied = GetWindowTextW(hwnd, &mut buf);
+                    String::from_utf16_lossy(&buf[..copied.max(0) as usize])
+                })
+                .filter(|s| !s.is_empty())
+        };
 
         Some(SourceAppInfo {
             app_name,
             exe_path,
             icon_cache_key,
+            source_title,
         })
     }
 

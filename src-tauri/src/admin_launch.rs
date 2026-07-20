@@ -17,9 +17,7 @@ pub fn is_admin_launch_enabled() -> bool {
 /// 启用管理员启动
 /// 保存偏好，若已提权则同时创建计划任务以便后续免 UAC 提权
 pub fn enable_admin_launch() -> Result<(), String> {
-    let mut config = AppConfig::load();
-    config.run_as_admin = Some(true);
-    config.save()?;
+    AppConfig::update(|config| config.run_as_admin = Some(true))?;
 
     // 已提权时创建/更新计划任务，后续重启可跳过 UAC 弹窗
     #[cfg(target_os = "windows")]
@@ -33,9 +31,7 @@ pub fn enable_admin_launch() -> Result<(), String> {
 /// 禁用管理员启动
 /// 保存偏好、删除计划任务并清理旧版注册表项
 pub fn disable_admin_launch() -> Result<(), String> {
-    let mut config = AppConfig::load();
-    config.run_as_admin = Some(false);
-    config.save()?;
+    AppConfig::update(|config| config.run_as_admin = Some(false))?;
 
     let _ = crate::task_scheduler::delete_elevation_task();
 

@@ -349,6 +349,11 @@ export function Settings() {
     void loadSettings();
   }, [loadSettings]);
 
+  useEffect(() => {
+    const unlisten = listen("database-switched", () => { void loadSettings(); });
+    return () => { void unlisten.then((dispose) => dispose()); };
+  }, [loadSettings]);
+
   const saveSettings = async () => {
     try {
       // 保存设置到数据库（data_path 由 GeneralTab 单独处理迁移）
@@ -537,4 +542,3 @@ export function Settings() {
     </div>
   );
 }
-

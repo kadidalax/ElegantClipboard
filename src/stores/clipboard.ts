@@ -27,6 +27,7 @@ export interface ClipboardItem {
   image_height: number | null;
   is_pinned: boolean;
   is_favorite: boolean;
+  is_locked: boolean;
   favorite_order: number;
   sort_order: number;
   created_at: string;
@@ -36,10 +37,47 @@ export interface ClipboardItem {
   char_count: number | null;
   source_app_name: string | null;
   source_app_icon: string | null;
+  source_title: string | null;
+  source_url: string | null;
+  source_file_name: string | null;
   /** 所属自定义分组 ID（null = 默认分组） */
   group_id: number | null;
   /** 所有文件是否存在（仅 files 类型，查询时计算） */
   files_valid?: boolean;
+}
+
+export function canDeleteClipboardItem(item?: Pick<ClipboardItem, "is_locked">): boolean {
+  return !!item && !item.is_locked;
+}
+
+export function hasLockedSelection(items: ClipboardItem[], selectedIds: Set<number>): boolean {
+  let matched = 0;
+  for (const item of items) {
+    if (!selectedIds.has(item.id)) continue;
+    matched++;
+    if (item.is_locked) return true;
+  }
+  return matched !== selectedIds.size;
+}
+
+export interface TimelineSnapshot {
+  searchQuery: string;
+  selectedGroup: string | null;
+  selectedGroupId: number | null;
+  activeItemId: number | null;
+  scrollTop: number;
+}
+
+export interface TimelineRestoreRequest {
+  activeItemId: number | null;
+  scrollTop: number;
+}
+
+export interface ActiveDatabaseStats {
+  id: string;
+  name: string;
+  item_count: number;
+  db_size: number;
 }
 
 interface ClipboardState {
@@ -55,20 +93,34 @@ interface ClipboardState {
   _fetchId: number;
   /** 视图重置计数（滚动到顶部等） */
   _resetToken: number;
+  /** 使已离开的时间线异步请求失效 */
+  _timelineGeneration: number;
+  timelineSnapshot: TimelineSnapshot | null;
+  timelineHighlightId: number | null;
+  timelineRestoreRequest: TimelineRestoreRequest | null;
+  timelineError: string | null;
+  activeDatabaseStats: ActiveDatabaseStats | null;
+  databaseStatsLoading: boolean;
+  databaseStatsError: string | null;
+  _databaseStatsFetchId: number;
 
   // 操作
   fetchItems: (options?: {
-    search?: string;
-    content_type?: string;
+    search?: string | null;
+    content_type?: string | null;
+    groupId?: number | null;
+    timeline?: boolean;
+    commit?: boolean;
     limit?: number;
     offset?: number;
-  }) => Promise<void>;
+  }) => Promise<ClipboardItem[] | null>;
   setSearchQuery: (query: string) => void;
   setSelectedGroup: (group: string | null) => void;
   setSelectedGroupId: (groupId: number | null) => void;
   setActiveIndex: (index: number) => void;
   togglePin: (id: number) => Promise<void>;
   toggleFavorite: (id: number) => Promise<void>;
+  toggleLock: (id: number) => Promise<void>;
   moveItem: (fromId: number, toId: number) => Promise<void>;
   moveFavoriteItem: (fromId: number, toId: number) => Promise<void>;
   deleteItem: (id: number) => Promise<void>;
@@ -82,6 +134,11 @@ interface ClipboardState {
   applyCaptureUpdate: (id: number) => Promise<void>;
   /** 重置视图：清除搜索、类型筛选，滚动到顶部，刷新 */
   resetView: () => Promise<void>;
+  enterTimeline: (targetId: number, scrollTop: number) => Promise<boolean>;
+  leaveTimeline: () => Promise<void>;
+  clearTimelineHighlight: () => void;
+  consumeTimelineRestoreRequest: () => void;
+  refreshActiveDatabaseStats: () => Promise<void>;
   setupListener: () => Promise<() => void>;
 
   // 批量选择
@@ -121,31 +178,52 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
   activeIndex: -1,
   _fetchId: 0,
   _resetToken: 0,
+  _timelineGeneration: 0,
+  timelineSnapshot: null,
+  timelineHighlightId: null,
+  timelineRestoreRequest: null,
+  timelineError: null,
+  activeDatabaseStats: null,
+  databaseStatsLoading: false,
+  databaseStatsError: null,
+  _databaseStatsFetchId: 0,
 
   fetchItems: async (options = {}) => {
     const state = get();
     const fetchId = state._fetchId + 1;
     set({ isLoading: true, _fetchId: fetchId });
     try {
-      const group = options.content_type ?? state.selectedGroup;
+      const group = "content_type" in options
+        ? options.content_type ?? null
+        : state.selectedGroup;
       const isFavoritesView = group === "__favorites__";
       const items = await invoke<ClipboardItem[]>("get_clipboard_items", {
-        search: options.search ?? (state.searchQuery || null),
+        search: "search" in options
+          ? options.search || null
+          : state.searchQuery || null,
         contentType: isFavoritesView ? null : group,
         pinnedOnly: false,
         favoriteOnly: isFavoritesView,
-        groupId: state.selectedGroupId,
+        groupId: "groupId" in options
+          ? options.groupId ?? null
+          : state.selectedGroupId,
+        timeline: options.timeline ?? false,
         limit: options.limit,
         offset: options.offset ?? 0,
       });
       if (get()._fetchId === fetchId) {
-        set({ items, isLoading: false, activeIndex: -1 });
+        set(options.commit === false
+          ? { isLoading: false }
+          : { items, isLoading: false, activeIndex: -1 });
+        return items;
       }
+      return null;
     } catch (error) {
       if (get()._fetchId === fetchId) {
         logError("Failed to fetch items:", error);
         set({ isLoading: false });
       }
+      return null;
     }
   },
 
@@ -155,11 +233,13 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
   },
 
   setSelectedGroup: (group: string | null) => {
+    if (get().timelineSnapshot) return;
     set({ selectedGroup: group, ...batchResetState() });
     get().fetchItems();
   },
 
   setSelectedGroupId: (groupId: number | null) => {
+    if (get().timelineSnapshot) return;
     set({ selectedGroupId: groupId, ...batchResetState() });
     invoke("set_active_group", { groupId }).catch((error) => {
       logError("Failed to persist active group:", error);
@@ -199,6 +279,19 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
     }
   },
 
+  toggleLock: async (id: number) => {
+    try {
+      const newState = await invoke<boolean>("toggle_lock", { id });
+      set((state) => ({
+        items: state.items.map((item) =>
+          item.id === id ? { ...item, is_locked: newState } : item
+        ),
+      }));
+    } catch (error) {
+      logError("Failed to toggle lock:", error);
+    }
+  },
+
   moveItem: async (fromId: number, toId: number) => {
     try {
       await invoke("move_clipboard_item", { fromId, toId });
@@ -219,11 +312,13 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
   },
 
   deleteItem: async (id: number) => {
+    if (!canDeleteClipboardItem(get().items.find((item) => item.id === id))) return;
     try {
       await invoke("delete_clipboard_item", { id });
       set((state) => ({
         items: state.items.filter((item) => item.id !== id),
       }));
+      await get().refreshActiveDatabaseStats();
     } catch (error) {
       logError("Failed to delete item:", error);
     }
@@ -247,12 +342,14 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
 
   // contentType=null 时后端 Option<String> 为 None，清除所有类型（正确行为）
   clearHistory: async (contentType = null) => {
+    if (get().timelineSnapshot) return null;
     try {
       const deleted = await invoke<number>("clear_history", {
         groupId: get().selectedGroupId,
         contentType,
       });
       await get().refresh();
+      await get().refreshActiveDatabaseStats();
       return deleted;
     } catch (error) {
       logError("Failed to clear history:", error);
@@ -261,11 +358,25 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
   },
 
   refresh: async () => {
-    await get().fetchItems();
+    const state = get();
+    if (state.timelineSnapshot) {
+      await get().fetchItems({
+        search: null,
+        content_type: null,
+        groupId: null,
+        timeline: true,
+      });
+      return;
+    }
+    await state.fetchItems();
   },
 
   applyCaptureUpdate: async (id: number) => {
     const state = get();
+    if (state.timelineSnapshot) {
+      await get().refresh();
+      return;
+    }
     if (state.searchQuery) {
       await get().fetchItems();
       return;
@@ -294,10 +405,160 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
     set((state) => ({
       searchQuery: "",
       selectedGroup: null,
+      timelineSnapshot: null,
+      timelineHighlightId: null,
+      timelineRestoreRequest: null,
+      timelineError: null,
       ...batchResetState(),
       _resetToken: state._resetToken + 1,
+      _timelineGeneration: state._timelineGeneration + 1,
     }));
     await get().fetchItems({ search: "" });
+  },
+
+  enterTimeline: async (targetId, scrollTop) => {
+    const state = get();
+    if (state.timelineSnapshot) {
+      const targetIndex = state.items.findIndex((item) => item.id === targetId);
+      if (targetIndex < 0) return false;
+      set({ activeIndex: targetIndex, timelineHighlightId: targetId });
+      return true;
+    }
+
+    const target = state.items.find((item) => item.id === targetId);
+    if (!target) return false;
+    const generation = state._timelineGeneration + 1;
+    const snapshot: TimelineSnapshot = {
+      searchQuery: state.searchQuery,
+      selectedGroup: state.selectedGroup,
+      selectedGroupId: state.selectedGroupId,
+      activeItemId: state.items[state.activeIndex]?.id ?? null,
+      scrollTop,
+    };
+    set({
+      searchQuery: "",
+      selectedGroup: null,
+      selectedGroupId: null,
+      timelineSnapshot: snapshot,
+      timelineHighlightId: null,
+      timelineRestoreRequest: null,
+      timelineError: null,
+      _timelineGeneration: generation,
+      ...batchResetState(),
+    });
+
+    const timelineItems = await get().fetchItems({
+      search: null,
+      content_type: null,
+      groupId: null,
+      timeline: true,
+    });
+    if (get()._timelineGeneration !== generation) return false;
+    const targetIndex = timelineItems?.findIndex((item) => item.id === targetId) ?? -1;
+    if (targetIndex >= 0) {
+      set({ activeIndex: targetIndex, timelineHighlightId: targetId });
+      return true;
+    }
+
+    const restoredItems = await get().fetchItems({
+      search: snapshot.searchQuery,
+      content_type: snapshot.selectedGroup,
+      groupId: snapshot.selectedGroupId,
+      commit: false,
+    });
+    if (get()._timelineGeneration !== generation) return false;
+    if (!restoredItems) {
+      set({ timelineError: "restore_failed" });
+      return false;
+    }
+    const activeIndex = snapshot.activeItemId == null
+      ? -1
+      : restoredItems.findIndex((item) => item.id === snapshot.activeItemId);
+    set({
+      items: restoredItems,
+      searchQuery: snapshot.searchQuery,
+      selectedGroup: snapshot.selectedGroup,
+      selectedGroupId: snapshot.selectedGroupId,
+      activeIndex,
+      timelineSnapshot: null,
+      timelineHighlightId: null,
+      timelineError: null,
+      timelineRestoreRequest: {
+        activeItemId: snapshot.activeItemId,
+        scrollTop: snapshot.scrollTop,
+      },
+    });
+    return false;
+  },
+
+  leaveTimeline: async () => {
+    const snapshot = get().timelineSnapshot;
+    if (!snapshot) return;
+    const generation = get()._timelineGeneration + 1;
+    set({
+      _timelineGeneration: generation,
+      timelineError: null,
+      ...batchResetState(),
+    });
+    const restoredItems = await get().fetchItems({
+      search: snapshot.searchQuery,
+      content_type: snapshot.selectedGroup,
+      groupId: snapshot.selectedGroupId,
+      commit: false,
+    });
+    if (get()._timelineGeneration !== generation) return;
+    if (!restoredItems) {
+      set({ timelineError: "restore_failed" });
+      return;
+    }
+    const activeIndex = snapshot.activeItemId == null
+      ? -1
+      : restoredItems.findIndex((item) => item.id === snapshot.activeItemId);
+    set({
+      items: restoredItems,
+      searchQuery: snapshot.searchQuery,
+      selectedGroup: snapshot.selectedGroup,
+      selectedGroupId: snapshot.selectedGroupId,
+      activeIndex,
+      timelineSnapshot: null,
+      timelineHighlightId: null,
+      timelineError: null,
+      timelineRestoreRequest: {
+        activeItemId: snapshot.activeItemId,
+        scrollTop: snapshot.scrollTop,
+      },
+    });
+  },
+
+  clearTimelineHighlight: () => set({ timelineHighlightId: null }),
+  consumeTimelineRestoreRequest: () => set({ timelineRestoreRequest: null }),
+
+  refreshActiveDatabaseStats: async () => {
+    const requestId = get()._databaseStatsFetchId + 1;
+    set({
+      databaseStatsLoading: true,
+      databaseStatsError: null,
+      _databaseStatsFetchId: requestId,
+    });
+    try {
+      const stats = await invoke<ActiveDatabaseStats>("get_active_database_stats");
+      if (get()._databaseStatsFetchId === requestId) {
+        set({
+          activeDatabaseStats: stats,
+          databaseStatsLoading: false,
+          databaseStatsError: null,
+        });
+      }
+    } catch (error) {
+      if (get()._databaseStatsFetchId === requestId) {
+        set({
+          activeDatabaseStats: null,
+          databaseStatsLoading: false,
+          databaseStatsError: String(error),
+        });
+      }
+      logError("Failed to refresh active database stats:", error);
+    }
   },
 
   setupListener: async () => {
@@ -317,9 +578,32 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
       playCopySound("immediate");
       void debouncedCaptureUpdate(id);
     });
+    const unlistenDatabaseSwitched = await listen("database-switched", () => {
+      debouncedCaptureUpdate.cancel();
+      set((state) => ({
+        items: [],
+        searchQuery: "",
+        selectedGroup: null,
+        selectedGroupId: null,
+        activeIndex: -1,
+        ...batchResetState(),
+        timelineSnapshot: null,
+        timelineHighlightId: null,
+        timelineRestoreRequest: null,
+        timelineError: null,
+        _timelineGeneration: state._timelineGeneration + 1,
+        activeDatabaseStats: null,
+        databaseStatsLoading: false,
+        databaseStatsError: null,
+        _databaseStatsFetchId: state._databaseStatsFetchId + 1,
+      }));
+      void get().fetchItems({ search: "", content_type: null, groupId: null });
+      void get().refreshActiveDatabaseStats();
+    });
     return () => {
       unlistenPasteSound();
       unlisten();
+      unlistenDatabaseSwitched();
     };
   },
 
@@ -359,15 +643,15 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
   },
 
   batchDelete: async () => {
-    const { selectedIds } = get();
-    if (selectedIds.size === 0) return;
+    const { items, selectedIds } = get();
+    if (selectedIds.size === 0 || hasLockedSelection(items, selectedIds)) return;
     try {
       await invoke("batch_delete_clipboard_items", { ids: Array.from(selectedIds) });
       set({ ...batchResetState() });
       await get().refresh();
+      await get().refreshActiveDatabaseStats();
     } catch (error) {
       logError("Failed to batch delete:", error);
     }
   },
 }));
-

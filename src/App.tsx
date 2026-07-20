@@ -13,6 +13,8 @@ import {
   MultiselectLtr16Regular,
   CloudArrowUp16Regular,
   CloudArrowDown16Regular,
+  ArrowLeft16Regular,
+  ArrowSync16Regular,
 } from "@fluentui/react-icons";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -40,10 +42,11 @@ import { useInputFocus, focusWindowImmediately, releaseWebViewFocus } from "@/ho
 import { useWebDAVAvailable } from "@/hooks/useWebDAVAvailable";
 import { useTranslation } from "@/i18n";
 import { GROUP_VALUES, getGroups } from "@/lib/constants";
+import { formatSize } from "@/lib/format";
 import { logError } from "@/lib/logger";
 import { cn } from "@/lib/utils";
 import { filterToolbarButtonsForWebDAV } from "@/lib/webdav-availability";
-import { useClipboardStore } from "@/stores/clipboard";
+import { hasLockedSelection, useClipboardStore } from "@/stores/clipboard";
 import { useGroupStore } from "@/stores/groups";
 import type { Group } from "@/stores/groups";
 import type { ToolbarButton } from "@/stores/ui-settings";
@@ -76,7 +79,7 @@ function App() {
   const [deleteGroupDialogOpen, setDeleteGroupDialogOpen] = useState(false);
   const [deleteGroupTarget, setDeleteGroupTarget] = useState<Group | null>(null);
 
-  const { searchQuery, selectedGroup, selectedGroupId, setSearchQuery, setSelectedGroup, setSelectedGroupId, fetchItems, clearHistory, refresh, resetView, itemCount } = useClipboardStore(
+  const { searchQuery, selectedGroup, selectedGroupId, setSearchQuery, setSelectedGroup, setSelectedGroupId, fetchItems, clearHistory, refresh, resetView, itemCount, activeDatabaseStats, databaseStatsLoading, databaseStatsError, refreshActiveDatabaseStats } = useClipboardStore(
     useShallow((s) => ({
       searchQuery: s.searchQuery,
       selectedGroup: s.selectedGroup,
@@ -89,15 +92,25 @@ function App() {
       refresh: s.refresh,
       resetView: s.resetView,
       itemCount: s.items.length,
+      activeDatabaseStats: s.activeDatabaseStats,
+      databaseStatsLoading: s.databaseStatsLoading,
+      databaseStatsError: s.databaseStatsError,
+      refreshActiveDatabaseStats: s.refreshActiveDatabaseStats,
     })),
   );
   const batchMode = useClipboardStore((s) => s.batchMode);
+  const timelineActive = useClipboardStore((s) => s.timelineSnapshot !== null);
+  const timelineError = useClipboardStore((s) => s.timelineError);
+  const leaveTimeline = useClipboardStore((s) => s.leaveTimeline);
   const selectedIds = useClipboardStore((s) => s.selectedIds);
+  const batchContainsLocked = useClipboardStore((s) =>
+    hasLockedSelection(s.items, s.selectedIds)
+  );
   const setBatchMode = useClipboardStore((s) => s.setBatchMode);
   const batchDelete = useClipboardStore((s) => s.batchDelete);
   const [batchDeleteDialogOpen, setBatchDeleteDialogOpen] = useState(false);
   const [webdavSyncing, setWebdavSyncing] = useState(false);
-  const { groups, fetchGroups, createGroup, renameGroup, deleteGroup } = useGroupStore();
+  const { groups, fetchGroups, setupListener: setupGroupListener, createGroup, renameGroup, deleteGroup } = useGroupStore();
   const autoResetState = useUISettings((s) => s.autoResetState);
   const searchAutoFocus = useUISettings((s) => s.searchAutoFocus);
   const searchAutoClear = useUISettings((s) => s.searchAutoClear);
@@ -108,8 +121,9 @@ function App() {
   const toolbarButtons = useUISettings((s) => s.toolbarButtons);
   const webdavAvailable = useWebDAVAvailable();
   const visibleToolbarButtons = useMemo(
-    () => filterToolbarButtonsForWebDAV(toolbarButtons, webdavAvailable),
-    [toolbarButtons, webdavAvailable],
+    () => filterToolbarButtonsForWebDAV(toolbarButtons, webdavAvailable)
+      .filter((button) => !timelineActive || button !== "clear"),
+    [toolbarButtons, webdavAvailable, timelineActive],
   );
   const windowAnimation = useUISettings((s) => s.windowAnimation);
   const onboardingCompleted = useUISettings((s) => s.onboardingCompleted);
@@ -137,8 +151,18 @@ function App() {
 
   // 初次加载时获取自定义分组
   useEffect(() => {
-    fetchGroups();
-  }, []);
+    void fetchGroups();
+    let mounted = true;
+    let dispose: (() => void) | undefined;
+    void setupGroupListener().then((unlisten) => {
+      if (mounted) dispose = unlisten;
+      else unlisten();
+    });
+    return () => {
+      mounted = false;
+      dispose?.();
+    };
+  }, [fetchGroups, setupGroupListener]);
 
   // 对话框打开后恢复窗口焦点并聚焦输入框
   useEffect(() => {
@@ -262,13 +286,24 @@ function App() {
   const [suppressTooltips, setSuppressTooltips] = useState(false);
   const suppressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 监听剪贴板变化，标记脏数据
   useEffect(() => {
-    const unlisten = listen("clipboard-updated", () => {
+    void refreshActiveDatabaseStats();
+  }, [refreshActiveDatabaseStats]);
+
+  // 监听会改变当前数据库统计的事件
+  useEffect(() => {
+    const unlistenCapture = listen("clipboard-updated", () => {
       clipboardDirtyRef.current = true;
+      void refreshActiveDatabaseStats();
     });
-    return () => { unlisten.then((fn) => fn()); };
-  }, []);
+    const unlistenChange = listen("database-stats-changed", () => {
+      void refreshActiveDatabaseStats();
+    });
+    return () => {
+      unlistenCapture.then((fn) => fn());
+      unlistenChange.then((fn) => fn());
+    };
+  }, [refreshActiveDatabaseStats]);
 
   // 窗口显示时按需刷新数据
   // NOTE: refresh/fetchItems/setSearchQuery 均来自 zustand store，引用稳定，不会引起 effect 重执行
@@ -585,6 +620,7 @@ function App() {
             type="text"
             placeholder={t("app.searchPlaceholder")}
             value={searchQuery}
+            disabled={timelineActive}
             onChange={handleSearchChange}
             className={cn("pl-9 h-9 text-sm bg-background border elevation-control", searchQuery && "pr-14")}
           />
@@ -614,6 +650,28 @@ function App() {
         )}
       </div>
 
+      <div className="mx-2 mt-0.5 flex h-6 shrink-0 items-center justify-between gap-2 px-1 text-xs text-muted-foreground">
+        <span className="truncate tabular-nums">
+          {activeDatabaseStats
+            ? t("app.activeDatabaseStats", {
+                name: activeDatabaseStats.name,
+                count: activeDatabaseStats.item_count,
+                size: formatSize(activeDatabaseStats.db_size),
+              })
+            : t(databaseStatsError ? "app.databaseStatsLoadFailed" : "common.loading")}
+        </span>
+        <button
+          type="button"
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm hover:bg-accent hover:text-foreground disabled:opacity-50"
+          aria-label={t("app.refreshDatabaseStats")}
+          title={t("app.refreshDatabaseStats")}
+          disabled={databaseStatsLoading}
+          onClick={() => void refreshActiveDatabaseStats()}
+        >
+          <ArrowSync16Regular className={cn("h-3.5 w-3.5", databaseStatsLoading && "animate-spin")} />
+        </button>
+      </div>
+
       {/* 批量操作栏 */}
       {batchMode && (
         <div className="shrink-0 flex items-center justify-between px-3 py-1.5 bg-primary-faint border-b border-primary-subtle">
@@ -638,7 +696,7 @@ function App() {
             </button>
             <button
               onClick={() => setBatchDeleteDialogOpen(true)}
-              disabled={selectedIds.size === 0}
+              disabled={selectedIds.size === 0 || batchContainsLocked}
               className="text-xs px-2 py-1 rounded-md bg-destructive-subtle text-destructive hover:bg-destructive-subtle-hover transition-surface disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {t("common.delete")}
@@ -653,13 +711,29 @@ function App() {
         </div>
       )}
 
+      {timelineActive && (
+        <div className="shrink-0 flex items-center justify-between gap-2 mx-2 mt-1 px-2.5 py-1.5 rounded-md border border-primary-subtle bg-primary-faint text-xs">
+          <span className={timelineError ? "text-destructive" : "text-muted-foreground"}>
+            {t(timelineError ? "clipboard.timeline.restoreFailed" : "clipboard.timeline.viewing")}
+          </span>
+          <button
+            type="button"
+            onClick={() => void leaveTimeline()}
+            className="inline-flex items-center gap-1 font-medium text-primary hover:text-primary/80 transition-surface"
+          >
+            <ArrowLeft16Regular className="w-3.5 h-3.5" />
+            {t("clipboard.timeline.returnToSearch")}
+          </button>
+        </div>
+      )}
+
       {/* 剪贴板列表 */}
       <div className="flex-1 overflow-hidden">
         <ClipboardList searchInputRef={inputRef} />
       </div>
 
       {/* 底部分组选择 */}
-      {showCategoryFilter && (
+      {showCategoryFilter && !timelineActive && (
         <div className="shrink-0 px-2 pb-2 pt-1 select-none">
           {/* 整个底栏2区共用一个 bg-muted rounded-md 容器 */}
           <div
@@ -794,6 +868,7 @@ function App() {
             </Button>
             <Button
               variant="destructive"
+              disabled={batchContainsLocked}
               onClick={async () => {
                 setBatchDeleteDialogOpen(false);
                 await batchDelete();
@@ -936,4 +1011,3 @@ function App() {
 }
 
 export default App;
-

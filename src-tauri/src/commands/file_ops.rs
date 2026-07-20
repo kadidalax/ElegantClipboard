@@ -132,6 +132,7 @@ pub async fn get_item_file_status(
     state: State<'_, Arc<AppState>>,
     id: i64,
 ) -> Result<ItemFileStatus, String> {
+    let _operation = state.database_operation.read();
     let repo = ClipboardRepository::new(&state.db);
     let item = repo
         .get_by_id(id)
@@ -145,6 +146,7 @@ pub async fn batch_get_item_file_status(
     state: State<'_, Arc<AppState>>,
     ids: Vec<i64>,
 ) -> Result<HashMap<i64, ItemFileStatus>, String> {
+    let _operation = state.database_operation.read();
     let repo = ClipboardRepository::new(&state.db);
     let mut out = HashMap::new();
     for id in ids {
@@ -208,6 +210,7 @@ pub async fn paste_as_path(
     app: tauri::AppHandle,
     id: i64,
 ) -> Result<(), String> {
+    let _operation = state.database_operation.read();
     let repo = ClipboardRepository::new(&state.db);
     let item = repo
         .get_by_id(id)
@@ -276,9 +279,11 @@ pub async fn save_file_as(app: tauri::AppHandle, source_path: String) -> Result<
 
 /// 获取数据目录大小明细（数据库+图片）
 #[tauri::command]
-pub async fn get_data_size() -> Result<DataSizeInfo, String> {
-    let config = crate::config::AppConfig::load();
-    let data_dir = config.get_data_dir();
+pub async fn get_data_size(
+    state: tauri::State<'_, std::sync::Arc<crate::commands::AppState>>,
+) -> Result<DataSizeInfo, String> {
+    let _operation = state.database_operation.read();
+    let data_dir = state.db.active_snapshot().data_dir;
 
     let db_size = ["clipboard.db", "clipboard.db-wal", "clipboard.db-shm"]
         .iter()

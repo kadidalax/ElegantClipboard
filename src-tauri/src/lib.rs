@@ -726,7 +726,21 @@ fn set_favorite_paste_shortcut(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let config = AppConfig::load();
+    let config_path = database::get_app_dir().join("config.json");
+    let config = match AppConfig::try_load_from(&config_path) {
+        Ok(config) => config,
+        Err(e) => {
+            eprintln!("Configuration is invalid; refusing to overwrite it: {e}");
+            return;
+        }
+    };
+    let data_dir = config.get_data_dir();
+    if let Err(e) = AppConfig::update_at(&config_path, |config| {
+        config.ensure_default_database(&data_dir)
+    }) {
+        tracing::warn!("Failed to normalize config: {}", e);
+    }
+    let config = AppConfig::try_load_from(&config_path).unwrap_or(config);
     init_logging(&config);
 
     tracing::info!(
@@ -796,8 +810,13 @@ pub fn run() {
         .setup(move |app| {
             main_thread::init();
 
-            let db_path = config.get_db_path();
-            let images_path = config.get_images_path();
+            let data_dir = config
+                .active_database_id
+                .as_ref()
+                .and_then(|id| config.databases.iter().find(|database| &database.id == id))
+                .map(|database| std::path::PathBuf::from(&database.path))
+                .unwrap_or_else(|| config.get_data_dir());
+            let db_path = data_dir.join("clipboard.db");
 
             commands::data_transfer::apply_pending_import(&db_path);
 
@@ -807,9 +826,10 @@ pub fn run() {
             })?;
 
             let monitor = ClipboardMonitor::new();
-            monitor.init(&db, images_path);
+            monitor.init(&db);
 
             let active_group_id = monitor.active_group_id();
+            let database_operation = db.operation_lock();
             let settings_repo = database::SettingsRepository::new(&db);
             let position_cache =
                 Arc::new(parking_lot::Mutex::new(load_position_cache(&settings_repo)));
@@ -818,6 +838,8 @@ pub fn run() {
                 monitor,
                 active_group_id,
                 position_cache,
+                database_switch: parking_lot::Mutex::new(()),
+                database_operation,
             });
 
             let settings_repo = database::SettingsRepository::new(&state.db);
@@ -971,11 +993,7 @@ pub fn run() {
                 let app_state = app.state::<Arc<AppState>>();
                 let settings = SettingsRepository::new(&app_state.db);
                 if settings.get_bool("plugin_webdav_enabled", false) {
-                    webdav::start_auto_sync_task(
-                        app_state.db.clone(),
-                        AppConfig::load().get_data_dir(),
-                        app.handle().clone(),
-                    );
+                    webdav::start_auto_sync_task(app_state.db.clone(), app.handle().clone());
                 }
                 if settings.get_bool("plugin_translate_enabled", false) {
                     commands::translate::register_translate_selection_shortcut(app.handle());
@@ -1045,10 +1063,17 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::preview::get_app_version,
             commands::preview::get_build_time,
+            commands::databases::list_databases,
+            commands::databases::create_database,
+            commands::databases::add_existing_database,
+            commands::databases::rename_database,
+            commands::databases::remove_database_registration,
+            commands::databases::switch_database,
+            commands::databases::get_active_database_info,
+            commands::databases::get_active_database_stats,
             commands::data_transfer::get_default_data_path,
             commands::data_transfer::get_original_default_path,
             commands::data_transfer::check_path_has_data,
-            commands::data_transfer::cleanup_data_at_path,
             commands::data_transfer::set_data_path,
             commands::data_transfer::migrate_data_to_path,
             commands::data_transfer::export_data,
@@ -1101,6 +1126,7 @@ pub fn run() {
             commands::clipboard::get_clipboard_item,
             commands::clipboard::get_clipboard_count,
             commands::clipboard::toggle_pin,
+            commands::clipboard::toggle_lock,
             commands::clipboard::toggle_favorite,
             commands::clipboard::move_clipboard_item,
             commands::clipboard::move_favorite_clipboard_item,

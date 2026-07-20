@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { create } from "zustand";
 import { logError } from "@/lib/logger";
 import { useClipboardStore } from "@/stores/clipboard";
@@ -17,6 +18,7 @@ interface GroupState {
   isLoading: boolean;
 
   fetchGroups: () => Promise<void>;
+  setupListener: () => Promise<() => void>;
   createGroup: (name: string, color?: string) => Promise<Group | null>;
   renameGroup: (id: number, name: string) => Promise<void>;
   updateGroupColor: (id: number, color: string | null) => Promise<void>;
@@ -37,6 +39,12 @@ export const useGroupStore = create<GroupState>((set, get) => ({
       logError("Failed to fetch groups:", error);
       set({ isLoading: false });
     }
+  },
+
+  setupListener: async () => {
+    return listen("database-switched", () => {
+      void get().fetchGroups();
+    });
   },
 
   createGroup: async (name, color) => {

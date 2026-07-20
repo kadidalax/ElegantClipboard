@@ -1,7 +1,7 @@
-use super::{ContentType, Database};
+use super::{ActiveDatabase, ContentType, Database};
 use crate::clipboard::semantic_hash_from_text;
-use parking_lot::Mutex;
-use rusqlite::{Connection, Row, Transaction, params};
+use parking_lot::{Mutex, RwLock};
+use rusqlite::{Connection, OptionalExtension, Row, Transaction, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::debug;
@@ -34,6 +34,11 @@ pub struct ClipboardItem {
     pub char_count: Option<i64>,
     pub source_app_name: Option<String>,
     pub source_app_icon: Option<String>,
+    pub source_title: Option<String>,
+    pub source_url: Option<String>,
+    pub source_file_name: Option<String>,
+    #[serde(default)]
+    pub is_locked: bool,
     /// 所属分组（NULL = 默认分组，Some(id) = 自定义分组）
     pub group_id: Option<i64>,
     /// 文件是否有效（查询时计算，不存储）
@@ -59,6 +64,10 @@ pub struct NewClipboardItem {
     pub char_count: Option<i64>,
     pub source_app_name: Option<String>,
     pub source_app_icon: Option<String>,
+    pub source_title: Option<String>,
+    pub source_url: Option<String>,
+    pub source_file_name: Option<String>,
+    pub is_locked: bool,
     /// None = 默认分组，Some(id) = 自定义分组
     pub group_id: Option<i64>,
 }
@@ -82,6 +91,10 @@ impl Default for NewClipboardItem {
             char_count: None,
             source_app_name: None,
             source_app_icon: None,
+            source_title: None,
+            source_url: None,
+            source_file_name: None,
+            is_locked: false,
             group_id: None,
         }
     }
@@ -94,6 +107,7 @@ pub struct QueryOptions {
     pub pinned_only: bool,
     pub favorite_only: bool,
     pub group_id: Option<i64>,
+    pub timeline: bool,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
 }
@@ -110,8 +124,22 @@ pub struct Group {
 
 /// 剪贴板条目仓库（读写分离）
 pub struct ClipboardRepository {
-    write_conn: Arc<Mutex<Connection>>,
-    read_conn: Arc<Mutex<Connection>>,
+    active: Arc<RwLock<ActiveDatabase>>,
+}
+
+#[derive(Debug)]
+pub enum ClipboardDeleteError {
+    Locked,
+    NotFound,
+    Database(rusqlite::Error),
+}
+
+const SQL_PARAM_CHUNK_SIZE: usize = 500;
+
+impl From<rusqlite::Error> for ClipboardDeleteError {
+    fn from(error: rusqlite::Error) -> Self {
+        Self::Database(error)
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -146,10 +174,11 @@ impl ConditionBuilder {
         }
     }
 
-    /// Add non-pinned + non-favorite conditions (clearable items).
+    /// Add non-pinned + non-favorite + unlocked conditions (clearable items).
     fn clearable(mut self) -> Self {
         self.conditions.push("is_pinned = 0".to_string());
         self.conditions.push("is_favorite = 0".to_string());
+        self.conditions.push("is_locked = 0".to_string());
         self
     }
 
@@ -251,13 +280,21 @@ impl ConditionBuilder {
 impl ClipboardRepository {
     pub fn new(db: &Database) -> Self {
         Self {
-            write_conn: db.write_connection(),
-            read_conn: db.read_connection(),
+            active: db.active.clone(),
         }
     }
 
+    fn write_connection(&self) -> Arc<Mutex<Connection>> {
+        self.active.read().write_conn.clone()
+    }
+
+    fn read_connection(&self) -> Arc<Mutex<Connection>> {
+        self.active.read().read_conn.clone()
+    }
+
     pub fn insert(&self, item: NewClipboardItem) -> Result<i64, rusqlite::Error> {
-        let conn = self.write_conn.lock();
+        let write_conn = self.write_connection();
+        let conn = write_conn.lock();
 
         let file_paths_json = item
             .file_paths
@@ -277,8 +314,8 @@ impl ClipboardRepository {
             "INSERT INTO clipboard_items
              (content_type, text_content, html_content, rtf_content, image_path, file_paths, file_payload,
               content_hash, semantic_hash, preview, byte_size, image_width, image_height, sort_order,
-              char_count, source_app_name, source_app_icon, group_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+              char_count, source_app_name, source_app_icon, source_title, source_url, source_file_name, is_locked, group_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
             params![
                 item.content_type.as_str(),
                 item.text_content,
@@ -297,6 +334,10 @@ impl ClipboardRepository {
                 item.char_count,
                 item.source_app_name,
                 item.source_app_icon,
+                item.source_title,
+                item.source_url,
+                item.source_file_name,
+                item.is_locked,
                 item.group_id,
             ],
         )?;
@@ -331,7 +372,8 @@ impl ClipboardRepository {
         hash: &str,
         group_id: Option<i64>,
     ) -> Result<bool, rusqlite::Error> {
-        let conn = self.read_conn.lock();
+        let read_conn = self.read_connection();
+        let conn = read_conn.lock();
         let column = column.as_sql();
         let count: i64 = match group_id {
             Some(gid) => conn.query_row(
@@ -377,7 +419,8 @@ impl ClipboardRepository {
     ) -> Result<Option<i64>, rusqlite::Error> {
         // 注意：write_conn 是单连接 + Mutex，SELECT MAX 和 UPDATE 在同一锁作用域内，
         // 已经是串行安全的，无需额外事务保护。
-        let conn = self.write_conn.lock();
+        let write_conn = self.write_connection();
+        let conn = write_conn.lock();
 
         let max_sort_order: i64 = conn
             .query_row(
@@ -422,7 +465,8 @@ impl ClipboardRepository {
     }
 
     pub fn get_by_id(&self, id: i64) -> Result<Option<ClipboardItem>, rusqlite::Error> {
-        let conn = self.read_conn.lock();
+        let read_conn = self.read_connection();
+        let conn = read_conn.lock();
         let result = conn.query_row(
             "SELECT * FROM clipboard_items WHERE id = ?1",
             params![id],
@@ -442,7 +486,8 @@ impl ClipboardRepository {
         index: usize,
         group_id: Option<i64>,
     ) -> Result<Option<ClipboardItem>, rusqlite::Error> {
-        let conn = self.read_conn.lock();
+        let read_conn = self.read_connection();
+        let conn = read_conn.lock();
         let (group_cond, group_param) = Self::group_condition(group_id);
         let sql = format!(
             "SELECT * FROM clipboard_items \
@@ -469,7 +514,8 @@ impl ClipboardRepository {
         index: usize,
         group_id: Option<i64>,
     ) -> Result<Option<ClipboardItem>, rusqlite::Error> {
-        let conn = self.read_conn.lock();
+        let read_conn = self.read_connection();
+        let conn = read_conn.lock();
         let (group_cond, group_param) = Self::group_condition(group_id);
         let sql = format!(
             "SELECT * FROM clipboard_items \
@@ -494,13 +540,13 @@ impl ClipboardRepository {
     const LIST_COLUMNS: &'static str = "id, content_type, NULL AS text_content, NULL AS html_content, NULL AS rtf_content, \
          image_path, file_paths, NULL AS file_payload, content_hash, semantic_hash, preview, byte_size, image_width, image_height, \
          is_pinned, is_favorite, favorite_order, sort_order, created_at, updated_at, access_count, last_accessed_at, char_count, \
-         source_app_name, source_app_icon, group_id";
+         source_app_name, source_app_icon, source_title, source_url, source_file_name, is_locked, group_id";
 
     /// 搜索查询列（含 text_content 用于关键词上下文预览）
     const SEARCH_COLUMNS: &'static str = "id, content_type, text_content, NULL AS html_content, NULL AS rtf_content, \
          image_path, file_paths, NULL AS file_payload, content_hash, semantic_hash, preview, byte_size, image_width, image_height, \
          is_pinned, is_favorite, favorite_order, sort_order, created_at, updated_at, access_count, last_accessed_at, char_count, \
-         source_app_name, source_app_icon, group_id";
+         source_app_name, source_app_icon, source_title, source_url, source_file_name, is_locked, group_id";
 
     /// 构建通用的 WHERE 条件（content_type / pinned_only / favorite_only / search）
     fn build_filter_conditions(
@@ -514,7 +560,7 @@ impl ClipboardRepository {
             && !search.is_empty()
         {
             conditions.push(
-                "(text_content LIKE ? ESCAPE '\\' OR file_paths LIKE ? ESCAPE '\\')".to_string(),
+                "(text_content LIKE ? ESCAPE '\\' OR file_paths LIKE ? ESCAPE '\\' OR source_app_name LIKE ? ESCAPE '\\' OR source_title LIKE ? ESCAPE '\\' OR source_url LIKE ? ESCAPE '\\' OR source_file_name LIKE ? ESCAPE '\\')".to_string(),
             );
             let pattern = format!(
                 "%{}%",
@@ -524,7 +570,9 @@ impl ClipboardRepository {
                     .replace('_', "\\_")
             );
             params_vec.push(Box::new(pattern.clone()));
-            params_vec.push(Box::new(pattern));
+            for _ in 0..5 {
+                params_vec.push(Box::new(pattern.clone()));
+            }
         }
 
         // 多类型筛选（逗号分隔）
@@ -598,7 +646,8 @@ impl ClipboardRepository {
     }
 
     pub fn list(&self, options: QueryOptions) -> Result<Vec<ClipboardItem>, rusqlite::Error> {
-        let conn = self.read_conn.lock();
+        let read_conn = self.read_connection();
+        let conn = read_conn.lock();
 
         let is_searching = options.search.as_ref().is_some_and(|s| !s.is_empty());
         let columns = if is_searching {
@@ -611,7 +660,9 @@ impl ClipboardRepository {
         let (conditions, mut params_vec) = Self::build_filter_conditions(&options);
         Self::append_where(&mut sql, &conditions);
 
-        if options.favorite_only {
+        if options.timeline {
+            sql.push_str(" ORDER BY created_at DESC, id DESC");
+        } else if options.favorite_only {
             sql.push_str(
                 " ORDER BY is_pinned DESC, favorite_order DESC, sort_order DESC, created_at DESC",
             );
@@ -638,7 +689,8 @@ impl ClipboardRepository {
     }
 
     pub fn count(&self, options: QueryOptions) -> Result<i64, rusqlite::Error> {
-        let conn = self.read_conn.lock();
+        let read_conn = self.read_connection();
+        let conn = read_conn.lock();
 
         let mut sql = "SELECT COUNT(*) FROM clipboard_items".to_string();
         let (conditions, params_vec) = Self::build_filter_conditions(&options);
@@ -651,7 +703,8 @@ impl ClipboardRepository {
     }
 
     pub fn toggle_pin(&self, id: i64) -> Result<bool, rusqlite::Error> {
-        let conn = self.write_conn.lock();
+        let write_conn = self.write_connection();
+        let conn = write_conn.lock();
         conn.execute(
             "UPDATE clipboard_items SET is_pinned = NOT is_pinned WHERE id = ?1",
             params![id],
@@ -666,8 +719,24 @@ impl ClipboardRepository {
         Ok(pinned)
     }
 
+    pub fn toggle_lock(&self, id: i64) -> Result<bool, rusqlite::Error> {
+        let write_conn = self.write_connection();
+        let conn = write_conn.lock();
+        conn.execute(
+            "UPDATE clipboard_items SET is_locked = NOT is_locked WHERE id = ?1",
+            params![id],
+        )?;
+
+        conn.query_row(
+            "SELECT is_locked FROM clipboard_items WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )
+    }
+
     pub fn toggle_favorite(&self, id: i64) -> Result<bool, rusqlite::Error> {
-        let conn = self.write_conn.lock();
+        let write_conn = self.write_connection();
+        let conn = write_conn.lock();
         let was_favorite: bool = conn.query_row(
             "SELECT is_favorite FROM clipboard_items WHERE id = ?1",
             params![id],
@@ -703,103 +772,136 @@ impl ClipboardRepository {
         Ok(favorite)
     }
 
-    pub fn delete(&self, id: i64) -> Result<(), rusqlite::Error> {
-        let conn = self.write_conn.lock();
-        conn.execute("DELETE FROM clipboard_items WHERE id = ?1", params![id])?;
-        debug!("Deleted clipboard item with id: {}", id);
-        Ok(())
+    pub fn delete_unlocked(&self, id: i64) -> Result<ClipboardItem, ClipboardDeleteError> {
+        let write_conn = self.write_connection();
+        let mut conn = write_conn.lock();
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let item = tx
+            .query_row(
+                "SELECT * FROM clipboard_items WHERE id = ?1",
+                params![id],
+                Self::row_to_item,
+            )
+            .optional()?
+            .ok_or(ClipboardDeleteError::NotFound)?;
+        if item.is_locked {
+            return Err(ClipboardDeleteError::Locked);
+        }
+        tx.execute("DELETE FROM clipboard_items WHERE id = ?1", params![id])?;
+        tx.commit()?;
+        debug!("Deleted unlocked clipboard item with id: {}", id);
+        Ok(item)
     }
 
     /// 批量删除指定 ID 的条目，返回 (删除数, 图片路径, file_payload JSON)
     pub fn batch_delete(
         &self,
         ids: &[i64],
-    ) -> Result<(i64, Vec<String>, Vec<String>), rusqlite::Error> {
+    ) -> Result<(i64, Vec<String>, Vec<String>), ClipboardDeleteError> {
         if ids.is_empty() {
             return Ok((0, vec![], vec![]));
         }
-        let conn = self.write_conn.lock();
-        let placeholders: Vec<String> = ids.iter().map(|_| "?".to_string()).collect();
-        let in_clause = placeholders.join(",");
+        let write_conn = self.write_connection();
+        let mut conn = write_conn.lock();
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
 
-        let sql = format!(
-            "SELECT image_path, file_payload FROM clipboard_items WHERE id IN ({in_clause})"
-        );
-        let mut stmt = conn.prepare(&sql)?;
-        let params_ref: Vec<&dyn rusqlite::ToSql> =
-            ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
-        let mut image_paths = Vec::new();
-        let mut file_payloads = Vec::new();
-        for row in stmt.query_map(params_ref.as_slice(), |row| {
-            Ok((
-                row.get::<_, Option<String>>(0)?,
-                row.get::<_, Option<String>>(1)?,
-            ))
-        })? {
-            let (image_path, file_payload) = row?;
-            if let Some(path) = image_path {
-                image_paths.push(path);
-            }
-            if let Some(payload) = file_payload {
-                file_payloads.push(payload);
+        for chunk in ids.chunks(SQL_PARAM_CHUNK_SIZE) {
+            let in_clause = vec!["?"; chunk.len()].join(",");
+            let refs: Vec<&dyn rusqlite::ToSql> =
+                chunk.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
+            let locked: bool = tx.query_row(
+                &format!(
+                    "SELECT EXISTS(SELECT 1 FROM clipboard_items WHERE is_locked = 1 AND id IN ({in_clause}))"
+                ),
+                refs.as_slice(),
+                |row| row.get(0),
+            )?;
+            if locked {
+                return Err(ClipboardDeleteError::Locked);
             }
         }
 
-        let del_sql = format!("DELETE FROM clipboard_items WHERE id IN ({in_clause})");
-        let params_ref2: Vec<&dyn rusqlite::ToSql> =
-            ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
-        let deleted = conn.execute(&del_sql, params_ref2.as_slice())? as i64;
+        let mut deleted = 0i64;
+        let mut image_paths = Vec::new();
+        let mut file_payloads = Vec::new();
+        for chunk in ids.chunks(SQL_PARAM_CHUNK_SIZE) {
+            let in_clause = vec!["?"; chunk.len()].join(",");
+            let refs: Vec<&dyn rusqlite::ToSql> =
+                chunk.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
+            let sql = format!(
+                "SELECT image_path, file_payload FROM clipboard_items WHERE id IN ({in_clause})"
+            );
+            let mut stmt = tx.prepare(&sql)?;
+            for row in stmt.query_map(refs.as_slice(), |row| {
+                Ok((
+                    row.get::<_, Option<String>>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                ))
+            })? {
+                let (image_path, file_payload) = row?;
+                if let Some(path) = image_path {
+                    image_paths.push(path);
+                }
+                if let Some(payload) = file_payload {
+                    file_payloads.push(payload);
+                }
+            }
+            drop(stmt);
+            let del_sql = format!("DELETE FROM clipboard_items WHERE id IN ({in_clause})");
+            deleted += tx.execute(&del_sql, refs.as_slice())? as i64;
+        }
+        tx.commit()?;
         debug!("Batch deleted {} clipboard items", deleted);
         Ok((deleted, image_paths, file_payloads))
     }
 
-    /// 获取可清除条目的图片路径（按分组/类型过滤）
-    pub fn get_clearable_image_paths(
-        &self,
-        group_id: Option<i64>,
-        content_type: Option<&str>,
-    ) -> Result<Vec<String>, rusqlite::Error> {
-        let conn = self.read_conn.lock();
-        ConditionBuilder::new()
-            .clearable()
-            .group(group_id)
-            .content_type(content_type)
-            .condition("image_path IS NOT NULL")
-            .select_strings(&conn, "SELECT image_path FROM clipboard_items", "")
-    }
-
-    /// 获取可清除条目的 file_payload（按分组/类型过滤）
-    pub fn get_clearable_file_payloads(
-        &self,
-        group_id: Option<i64>,
-        content_type: Option<&str>,
-    ) -> Result<Vec<String>, rusqlite::Error> {
-        let conn = self.read_conn.lock();
-        ConditionBuilder::new()
-            .clearable()
-            .group(group_id)
-            .content_type(content_type)
-            .condition("file_payload IS NOT NULL")
-            .select_strings(&conn, "SELECT file_payload FROM clipboard_items", "")
-    }
-
-    /// 清空历史（保留置顶和收藏），按分组/类型过滤
+    /// 清空历史（保留置顶、收藏和锁定），原子返回关联资源。
     pub fn clear_history(
         &self,
         group_id: Option<i64>,
         content_type: Option<&str>,
-    ) -> Result<i64, rusqlite::Error> {
-        let conn = self.write_conn.lock();
-        ConditionBuilder::new()
+    ) -> Result<(i64, Vec<String>, Vec<String>), rusqlite::Error> {
+        let write_conn = self.write_connection();
+        let mut conn = write_conn.lock();
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let clearable = ConditionBuilder::new()
             .clearable()
             .group(group_id)
-            .content_type(content_type)
-            .delete_items(&conn)
+            .content_type(content_type);
+        let (image_paths, file_payloads) = {
+            let sql = format!(
+                "SELECT image_path, file_payload FROM clipboard_items{}",
+                clearable.where_clause()
+            );
+            let refs = clearable.param_refs();
+            let mut stmt = tx.prepare(&sql)?;
+            let mut image_paths = Vec::new();
+            let mut file_payloads = Vec::new();
+            for row in stmt.query_map(refs.as_slice(), |row| {
+                Ok((
+                    row.get::<_, Option<String>>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                ))
+            })? {
+                let (image_path, file_payload) = row?;
+                if let Some(path) = image_path {
+                    image_paths.push(path);
+                }
+                if let Some(payload) = file_payload {
+                    file_payloads.push(payload);
+                }
+            }
+            (image_paths, file_payloads)
+        };
+        let deleted = clearable.delete_items(&tx)?;
+        tx.commit()?;
+        Ok((deleted, image_paths, file_payloads))
     }
 
     /// 获取所有条目的图片路径（含置顶和收藏）
     pub fn get_all_image_paths(&self) -> Result<Vec<String>, rusqlite::Error> {
-        let conn = self.read_conn.lock();
+        let read_conn = self.read_connection();
+        let conn = read_conn.lock();
         let mut stmt =
             conn.prepare("SELECT image_path FROM clipboard_items WHERE image_path IS NOT NULL")?;
         let paths = stmt
@@ -811,7 +913,8 @@ impl ClipboardRepository {
 
     /// 获取所有条目的 file_payload（含置顶和收藏）
     pub fn get_all_file_payloads(&self) -> Result<Vec<String>, rusqlite::Error> {
-        let conn = self.read_conn.lock();
+        let read_conn = self.read_connection();
+        let conn = read_conn.lock();
         let mut stmt = conn
             .prepare("SELECT file_payload FROM clipboard_items WHERE file_payload IS NOT NULL")?;
         let payloads = stmt
@@ -823,7 +926,8 @@ impl ClipboardRepository {
 
     /// Get all image paths within a specific group (including pinned and favorites).
     pub fn get_image_paths_by_group(&self, group_id: i64) -> Result<Vec<String>, rusqlite::Error> {
-        let conn = self.read_conn.lock();
+        let read_conn = self.read_connection();
+        let conn = read_conn.lock();
         let mut stmt = conn.prepare(
             "SELECT image_path FROM clipboard_items \
              WHERE image_path IS NOT NULL AND group_id = ?1",
@@ -839,7 +943,8 @@ impl ClipboardRepository {
         &self,
         group_id: i64,
     ) -> Result<Vec<String>, rusqlite::Error> {
-        let conn = self.read_conn.lock();
+        let read_conn = self.read_connection();
+        let conn = read_conn.lock();
         let mut stmt = conn.prepare(
             "SELECT file_payload FROM clipboard_items \
              WHERE file_payload IS NOT NULL AND group_id = ?1",
@@ -851,20 +956,22 @@ impl ClipboardRepository {
         Ok(payloads)
     }
 
-    /// 清空所有历史（包括置顶和收藏）
+    /// 清空所有历史（包括置顶、收藏和锁定）
     pub fn clear_all(&self) -> Result<i64, rusqlite::Error> {
-        let conn = self.write_conn.lock();
+        let write_conn = self.write_connection();
+        let conn = write_conn.lock();
         let deleted = conn.execute("DELETE FROM clipboard_items", [])?;
         Ok(deleted as i64)
     }
 
-    /// 删除 N 天前的非置顶/非收藏条目（按分组），返回 (删除数, 图片路径, file_payload)
+    /// 删除 N 天前的非置顶/非收藏/非锁定条目（按分组），返回 (删除数, 图片路径, file_payload)
     pub fn delete_older_than(
         &self,
         days: i64,
         group_id: Option<i64>,
     ) -> Result<(i64, Vec<String>, Vec<String>), rusqlite::Error> {
-        let conn = self.write_conn.lock();
+        let write_conn = self.write_connection();
+        let conn = write_conn.lock();
         let age_cond = "created_at < datetime('now', 'localtime', '-' || ? || ' days')";
 
         let image_paths = ConditionBuilder::new()
@@ -904,7 +1011,8 @@ impl ClipboardRepository {
             return Ok((0, vec![], vec![]));
         }
 
-        let conn = self.write_conn.lock();
+        let write_conn = self.write_connection();
+        let conn = write_conn.lock();
         let current_count = ConditionBuilder::new()
             .clearable()
             .group(group_id)
@@ -963,11 +1071,13 @@ impl ClipboardRepository {
         id: i64,
         item: &NewClipboardItem,
     ) -> Result<(), rusqlite::Error> {
-        let conn = self.write_conn.lock();
+        let write_conn = self.write_connection();
+        let conn = write_conn.lock();
         conn.execute(
             "UPDATE clipboard_items SET text_content = ?1, html_content = ?2, rtf_content = ?3, \
-             byte_size = ?4, preview = ?5, char_count = ?6, \
-             updated_at = datetime('now', 'localtime') WHERE id = ?7",
+             byte_size = ?4, preview = ?5, char_count = ?6, source_app_name = ?7, \
+             source_app_icon = ?8, source_title = ?9, source_url = ?10, source_file_name = ?11, \
+             updated_at = datetime('now', 'localtime') WHERE id = ?12",
             params![
                 item.text_content,
                 item.html_content,
@@ -975,6 +1085,11 @@ impl ClipboardRepository {
                 item.byte_size,
                 item.preview,
                 item.char_count,
+                item.source_app_name,
+                item.source_app_icon,
+                item.source_title,
+                item.source_url,
+                item.source_file_name,
                 id,
             ],
         )?;
@@ -984,7 +1099,8 @@ impl ClipboardRepository {
 
     /// 更新文本内容（编辑功能）
     pub fn update_text_content(&self, id: i64, new_text: &str) -> Result<(), rusqlite::Error> {
-        let conn = self.write_conn.lock();
+        let write_conn = self.write_connection();
+        let conn = write_conn.lock();
         let preview: String = new_text.chars().take(200).collect();
         let byte_size = new_text.len() as i64;
         let char_count = new_text.chars().count() as i64;
@@ -1012,7 +1128,8 @@ impl ClipboardRepository {
     /// 本条目将出现在所有非置顶条目的最前面。
     /// 已置顶的条目不作处理，避免打乱用户手动排列的置顶顺序。
     pub fn bump_to_top(&self, id: i64) -> Result<(), rusqlite::Error> {
-        let conn = self.write_conn.lock();
+        let write_conn = self.write_connection();
+        let conn = write_conn.lock();
         let max_sort: i64 = conn
             .query_row(
                 "SELECT COALESCE(MAX(sort_order), 0) FROM clipboard_items",
@@ -1034,7 +1151,8 @@ impl ClipboardRepository {
 
     /// 交换两个条目的排序位置
     pub fn move_item_by_id(&self, from_id: i64, to_id: i64) -> Result<(), rusqlite::Error> {
-        let conn = self.write_conn.lock();
+        let write_conn = self.write_connection();
+        let conn = write_conn.lock();
 
         let from_sort_order: i64 = conn.query_row(
             "SELECT sort_order FROM clipboard_items WHERE id = ?1",
@@ -1077,7 +1195,8 @@ impl ClipboardRepository {
         from_id: i64,
         to_id: i64,
     ) -> Result<(), rusqlite::Error> {
-        let conn = self.write_conn.lock();
+        let write_conn = self.write_connection();
+        let conn = write_conn.lock();
 
         let from_favorite_order: i64 = conn.query_row(
             "SELECT favorite_order FROM clipboard_items WHERE id = ?1 AND is_favorite = 1",
@@ -1142,6 +1261,10 @@ impl ClipboardRepository {
             char_count: row.get("char_count")?,
             source_app_name: row.get("source_app_name")?,
             source_app_icon: row.get("source_app_icon")?,
+            source_title: row.get("source_title")?,
+            source_url: row.get("source_url")?,
+            source_file_name: row.get("source_file_name")?,
+            is_locked: row.get("is_locked")?,
             group_id: row.get("group_id")?,
             files_valid: None, // 查询时计算
         })
@@ -1181,7 +1304,8 @@ impl ClipboardRepository {
             return Ok(Vec::new());
         }
 
-        let conn = self.read_conn.lock();
+        let read_conn = self.read_connection();
+        let conn = read_conn.lock();
         let sql = format!(
             "SELECT * FROM clipboard_items WHERE {} ORDER BY created_at DESC",
             clauses.join(" OR ")
@@ -1196,7 +1320,8 @@ impl ClipboardRepository {
 
     /// 查询可能引用本地媒体文件的条目（图片/文件条目，或带来源应用图标）
     pub fn query_media_items(&self) -> Result<Vec<ClipboardItem>, rusqlite::Error> {
-        let conn = self.read_conn.lock();
+        let read_conn = self.read_connection();
+        let conn = read_conn.lock();
         let mut stmt = conn.prepare(
             "SELECT * FROM clipboard_items \
              WHERE content_type IN ('image','files') OR source_app_icon IS NOT NULL",
@@ -1216,7 +1341,8 @@ impl ClipboardRepository {
         file_payload: Option<&str>,
         source_app_icon: Option<&str>,
     ) -> Result<(), rusqlite::Error> {
-        let conn = self.write_conn.lock();
+        let write_conn = self.write_connection();
+        let conn = write_conn.lock();
         conn.execute(
             "UPDATE clipboard_items SET image_path = ?1, file_payload = ?2, source_app_icon = ?3 \
              WHERE id = ?4",
@@ -1227,7 +1353,8 @@ impl ClipboardRepository {
 
     /// 导入同步条目（基于 content_hash 去重，已存在则跳过）
     pub fn import_sync_items(&self, items: &[ClipboardItem]) -> Result<usize, rusqlite::Error> {
-        let mut conn = self.write_conn.lock();
+        let write_conn = self.write_connection();
+        let mut conn = write_conn.lock();
         let mut count = 0usize;
 
         let tx = conn.transaction()?;
@@ -1239,8 +1366,9 @@ impl ClipboardRepository {
                  (content_type, text_content, html_content, rtf_content, image_path, file_paths, file_payload,
                   content_hash, semantic_hash, preview, byte_size, image_width, image_height,
                   is_pinned, is_favorite, sort_order, created_at, updated_at,
-                  access_count, last_accessed_at, char_count, source_app_name, source_app_icon, group_id)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)"
+                  access_count, last_accessed_at, char_count, source_app_name, source_app_icon,
+                  source_title, source_url, source_file_name, is_locked, group_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28)"
             )?;
             for item in items {
                 let exists = exists_stmt.exists(params![item.content_hash])?;
@@ -1271,6 +1399,10 @@ impl ClipboardRepository {
                     item.char_count,
                     item.source_app_name,
                     item.source_app_icon,
+                    item.source_title,
+                    item.source_url,
+                    item.source_file_name,
+                    item.is_locked,
                     item.group_id,
                 ])?;
                 count += 1;
@@ -1326,20 +1458,18 @@ impl ClipboardRepository {
 
 /// 设置仓库
 pub struct SettingsRepository {
-    write_conn: Arc<Mutex<Connection>>,
-    read_conn: Arc<Mutex<Connection>>,
+    settings_conn: Arc<Mutex<Connection>>,
 }
 
 impl SettingsRepository {
     pub fn new(db: &Database) -> Self {
         Self {
-            write_conn: db.write_connection(),
-            read_conn: db.read_connection(),
+            settings_conn: db.settings_connection(),
         }
     }
 
     pub fn get(&self, key: &str) -> Result<Option<String>, rusqlite::Error> {
-        let conn = self.read_conn.lock();
+        let conn = self.settings_conn.lock();
         let result = conn.query_row(
             "SELECT value FROM settings WHERE key = ?1",
             params![key],
@@ -1355,7 +1485,7 @@ impl SettingsRepository {
 
     /// 批量读取多个设置项，单次查询
     pub fn get_batch(&self, keys: &[&str]) -> std::collections::HashMap<String, Option<String>> {
-        let conn = self.read_conn.lock();
+        let conn = self.settings_conn.lock();
         let mut result = std::collections::HashMap::new();
         let placeholders: Vec<String> = keys
             .iter()
@@ -1414,7 +1544,7 @@ impl SettingsRepository {
     }
 
     pub fn set(&self, key: &str, value: &str) -> Result<(), rusqlite::Error> {
-        let conn = self.write_conn.lock();
+        let conn = self.settings_conn.lock();
         conn.execute(
             "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?1, ?2, datetime('now', 'localtime'))",
             params![key, value],
@@ -1423,7 +1553,7 @@ impl SettingsRepository {
     }
 
     pub fn get_all(&self) -> Result<std::collections::HashMap<String, String>, rusqlite::Error> {
-        let conn = self.read_conn.lock();
+        let conn = self.settings_conn.lock();
         let mut stmt = conn.prepare("SELECT key, value FROM settings")?;
         let settings = stmt
             .query_map([], |row| {
@@ -1442,7 +1572,7 @@ impl SettingsRepository {
         if keys.is_empty() {
             return Ok(std::collections::HashMap::new());
         }
-        let conn = self.read_conn.lock();
+        let conn = self.settings_conn.lock();
         let placeholders = keys
             .iter()
             .enumerate()
@@ -1462,29 +1592,54 @@ impl SettingsRepository {
 
     /// 清空所有设置
     pub fn clear_all(&self) -> Result<(), rusqlite::Error> {
-        let conn = self.write_conn.lock();
+        let conn = self.settings_conn.lock();
         conn.execute("DELETE FROM settings", [])?;
         Ok(())
+    }
+
+    pub fn replace_all(
+        &self,
+        settings: &std::collections::HashMap<String, String>,
+    ) -> Result<(), rusqlite::Error> {
+        let mut conn = self.settings_conn.lock();
+        let tx = conn.transaction()?;
+        tx.execute("DELETE FROM settings", [])?;
+        for (key, value) in settings {
+            if !key.starts_with('_') {
+                tx.execute(
+                    "INSERT INTO settings(key,value) VALUES(?1,?2)",
+                    params![key, value],
+                )?;
+            }
+        }
+        tx.commit()
     }
 }
 
 /// 自定义分组仓库
 pub struct GroupRepository {
-    write_conn: Arc<Mutex<Connection>>,
-    read_conn: Arc<Mutex<Connection>>,
+    active: Arc<RwLock<ActiveDatabase>>,
 }
 
 impl GroupRepository {
     pub fn new(db: &Database) -> Self {
         Self {
-            write_conn: db.write_connection(),
-            read_conn: db.read_connection(),
+            active: db.active.clone(),
         }
+    }
+
+    fn write_connection(&self) -> Arc<Mutex<Connection>> {
+        self.active.read().write_conn.clone()
+    }
+
+    fn read_connection(&self) -> Arc<Mutex<Connection>> {
+        self.active.read().read_conn.clone()
     }
 
     /// 列出所有分组（含每个分组的条目数）
     pub fn list_with_count(&self) -> Result<Vec<Group>, rusqlite::Error> {
-        let conn = self.read_conn.lock();
+        let read_conn = self.read_connection();
+        let conn = read_conn.lock();
         let mut stmt = conn.prepare(
             "SELECT g.id, g.name, g.color, g.sort_order, g.created_at, \
              COUNT(ci.id) AS item_count \
@@ -1511,7 +1666,8 @@ impl GroupRepository {
 
     /// 创建新分组，返回完整分组对象
     pub fn create(&self, name: &str, color: Option<&str>) -> Result<Group, rusqlite::Error> {
-        let conn = self.write_conn.lock();
+        let write_conn = self.write_connection();
+        let conn = write_conn.lock();
         let max_sort: i64 = conn
             .query_row(
                 "SELECT COALESCE(MAX(sort_order), -1) FROM groups",
@@ -1542,7 +1698,8 @@ impl GroupRepository {
 
     /// 重命名分组
     pub fn rename(&self, id: i64, name: &str) -> Result<(), rusqlite::Error> {
-        let conn = self.write_conn.lock();
+        let write_conn = self.write_connection();
+        let conn = write_conn.lock();
         conn.execute(
             "UPDATE groups SET name = ?1 WHERE id = ?2",
             params![name, id],
@@ -1553,7 +1710,8 @@ impl GroupRepository {
 
     /// 更新分组颜色
     pub fn update_color(&self, id: i64, color: Option<&str>) -> Result<(), rusqlite::Error> {
-        let conn = self.write_conn.lock();
+        let write_conn = self.write_connection();
+        let conn = write_conn.lock();
         conn.execute(
             "UPDATE groups SET color = ?1 WHERE id = ?2",
             params![color, id],
@@ -1564,7 +1722,8 @@ impl GroupRepository {
 
     /// 删除分组（ON DELETE CASCADE 自动删除该分组的所有 clipboard_items）
     pub fn delete(&self, id: i64) -> Result<(), rusqlite::Error> {
-        let conn = self.write_conn.lock();
+        let write_conn = self.write_connection();
+        let conn = write_conn.lock();
         conn.execute("DELETE FROM groups WHERE id = ?1", params![id])?;
         debug!("Deleted group {}", id);
         Ok(())
@@ -1572,7 +1731,8 @@ impl GroupRepository {
 
     /// 删除所有自定义分组（及其关联条目通过 ON DELETE CASCADE 一并删除）
     pub fn delete_all(&self) -> Result<(), rusqlite::Error> {
-        let conn = self.write_conn.lock();
+        let write_conn = self.write_connection();
+        let conn = write_conn.lock();
         conn.execute("DELETE FROM groups", [])?;
         debug!("Deleted all groups");
         Ok(())
@@ -1584,7 +1744,8 @@ impl GroupRepository {
         item_id: i64,
         group_id: Option<i64>,
     ) -> Result<(), rusqlite::Error> {
-        let conn = self.write_conn.lock();
+        let write_conn = self.write_connection();
+        let conn = write_conn.lock();
         conn.execute(
             "UPDATE clipboard_items SET group_id = ?1 WHERE id = ?2",
             params![group_id, item_id],
@@ -1676,6 +1837,61 @@ mod tests {
     }
 
     #[test]
+    fn source_metadata_round_trips_and_is_searchable_with_like_escaping() {
+        let db = temp_db();
+        let repo = ClipboardRepository::new(&db);
+        let mut item = make_text_item("body without search token");
+        item.source_app_name = Some("Browser%_".to_string());
+        item.source_title = Some("report_100%.pdf - Browser".to_string());
+        item.source_url = Some("https://example.com/a_b%20c".to_string());
+        item.source_file_name = Some("report_100%.pdf".to_string());
+        item.is_locked = true;
+        let id = repo.insert(item).unwrap();
+
+        let stored = repo.get_by_id(id).unwrap().unwrap();
+        assert_eq!(
+            stored.source_title.as_deref(),
+            Some("report_100%.pdf - Browser")
+        );
+        assert_eq!(
+            stored.source_url.as_deref(),
+            Some("https://example.com/a_b%20c")
+        );
+        assert_eq!(stored.source_file_name.as_deref(), Some("report_100%.pdf"));
+        assert!(stored.is_locked);
+
+        for query in ["Browser%_", "report_100%.pdf", "a_b%20c"] {
+            let found = repo
+                .list(QueryOptions {
+                    search: Some(query.to_string()),
+                    ..Default::default()
+                })
+                .unwrap();
+            assert_eq!(found.len(), 1, "source search failed for {query}");
+        }
+        assert!(
+            repo.list(QueryOptions {
+                search: Some("BrowserXX".to_string()),
+                ..Default::default()
+            })
+            .unwrap()
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn clipboard_item_deserializes_without_legacy_is_locked_field() {
+        let db = temp_db();
+        let repo = ClipboardRepository::new(&db);
+        let id = repo.insert(make_text_item("legacy json")).unwrap();
+        let mut json = serde_json::to_value(repo.get_by_id(id).unwrap().unwrap()).unwrap();
+        json.as_object_mut().unwrap().remove("is_locked");
+
+        let restored: ClipboardItem = serde_json::from_value(json).unwrap();
+        assert!(!restored.is_locked);
+    }
+
+    #[test]
     fn get_nonexistent_returns_none() {
         let db = temp_db();
         let repo = ClipboardRepository::new(&db);
@@ -1691,6 +1907,39 @@ mod tests {
         let item1 = repo.get_by_id(id1).unwrap().unwrap();
         let item2 = repo.get_by_id(id2).unwrap().unwrap();
         assert!(item2.sort_order > item1.sort_order);
+    }
+
+    #[test]
+    fn timeline_order_ignores_pin_and_sort_order() {
+        let db = temp_db();
+        let repo = ClipboardRepository::new(&db);
+        let old_id = repo.insert(make_text_item("old")).unwrap();
+        let new_id = repo.insert(make_text_item("new")).unwrap();
+        {
+            let write_conn = repo.write_connection();
+            let conn = write_conn.lock();
+            conn.execute(
+                "UPDATE clipboard_items SET created_at = ?1, sort_order = 100 WHERE id = ?2",
+                params!["2026-01-01 10:00:00", old_id],
+            )
+            .unwrap();
+            conn.execute(
+                "UPDATE clipboard_items SET created_at = ?1, sort_order = 1 WHERE id = ?2",
+                params!["2026-01-01 11:00:00", new_id],
+            )
+            .unwrap();
+        }
+        repo.toggle_pin(old_id).unwrap();
+
+        let items = repo
+            .list(QueryOptions {
+                timeline: true,
+                ..Default::default()
+            })
+            .unwrap();
+
+        assert_eq!(items[0].preview.as_deref(), Some("new"));
+        assert_eq!(items[1].preview.as_deref(), Some("old"));
     }
 
     #[test]
@@ -1746,12 +1995,59 @@ mod tests {
     }
 
     #[test]
-    fn delete_item() {
+    fn atomic_delete_rejects_locked_and_returns_assets_after_unlock() {
         let db = temp_db();
         let repo = ClipboardRepository::new(&db);
-        let id = repo.insert(make_text_item("to_delete")).unwrap();
+        let item = NewClipboardItem {
+            content_type: ContentType::Image,
+            image_path: Some("/fake/atomic.png".to_string()),
+            file_payload: Some("atomic-payload".to_string()),
+            content_hash: "atomic-delete".to_string(),
+            semantic_hash: "atomic-delete".to_string(),
+            is_locked: true,
+            ..Default::default()
+        };
+        let id = repo.insert(item).unwrap();
+
+        assert!(matches!(
+            repo.delete_unlocked(id).unwrap_err(),
+            ClipboardDeleteError::Locked
+        ));
         assert!(repo.get_by_id(id).unwrap().is_some());
-        repo.delete(id).unwrap();
+
+        repo.toggle_lock(id).unwrap();
+        let deleted = repo.delete_unlocked(id).unwrap();
+        assert_eq!(deleted.image_path.as_deref(), Some("/fake/atomic.png"));
+        assert_eq!(deleted.file_payload.as_deref(), Some("atomic-payload"));
+        assert!(repo.get_by_id(id).unwrap().is_none());
+    }
+
+    #[test]
+    fn atomic_delete_distinguishes_not_found() {
+        let db = temp_db();
+        let repo = ClipboardRepository::new(&db);
+        assert!(matches!(
+            repo.delete_unlocked(999).unwrap_err(),
+            ClipboardDeleteError::NotFound
+        ));
+    }
+
+    #[test]
+    fn atomic_delete_preserves_locked_text_for_empty_edit() {
+        let db = temp_db();
+        let repo = ClipboardRepository::new(&db);
+        let mut item = make_text_item("locked empty edit");
+        item.is_locked = true;
+        let id = repo.insert(item).unwrap();
+
+        assert!(matches!(
+            repo.delete_unlocked(id).unwrap_err(),
+            ClipboardDeleteError::Locked
+        ));
+        assert!(repo.get_by_id(id).unwrap().is_some());
+
+        repo.toggle_lock(id).unwrap();
+        repo.delete_unlocked(id).unwrap();
         assert!(repo.get_by_id(id).unwrap().is_none());
     }
 
@@ -1768,6 +2064,95 @@ mod tests {
         assert!(repo.get_by_id(id1).unwrap().is_none());
         assert!(repo.get_by_id(id2).unwrap().is_some());
         assert!(repo.get_by_id(id3).unwrap().is_none());
+    }
+
+    #[test]
+    fn atomic_batch_delete_with_locked_item_deletes_nothing() {
+        let db = temp_db();
+        let repo = ClipboardRepository::new(&db);
+        let id1 = repo.insert(make_text_item("atomic_batch1")).unwrap();
+        let mut locked = make_text_item("atomic_batch_locked");
+        locked.is_locked = true;
+        let id2 = repo.insert(locked).unwrap();
+
+        assert!(matches!(
+            repo.batch_delete(&[id1, id2]).unwrap_err(),
+            ClipboardDeleteError::Locked
+        ));
+        assert!(repo.get_by_id(id1).unwrap().is_some());
+        assert!(repo.get_by_id(id2).unwrap().is_some());
+    }
+
+    #[test]
+    fn batch_delete_handles_more_than_1000_ids() {
+        let db = temp_db();
+        let repo = ClipboardRepository::new(&db);
+        let first_id = repo.insert(make_text_item("large first")).unwrap();
+        let last_id = repo.insert(make_text_item("large last")).unwrap();
+        let mut ids: Vec<i64> = (1_000_000..1_040_000).collect();
+        ids[0] = first_id;
+        *ids.last_mut().unwrap() = last_id;
+
+        let (deleted, _, _) = repo.batch_delete(&ids).unwrap();
+
+        assert_eq!(deleted, 2);
+        assert_eq!(repo.count(QueryOptions::default()).unwrap(), 0);
+    }
+
+    #[test]
+    fn batch_delete_duplicate_ids_return_each_resource_once() {
+        let db = temp_db();
+        let repo = ClipboardRepository::new(&db);
+        let first = NewClipboardItem {
+            content_type: ContentType::Image,
+            image_path: Some("/fake/duplicate-first.png".to_string()),
+            content_hash: "duplicate-first".to_string(),
+            semantic_hash: "duplicate-first".to_string(),
+            ..Default::default()
+        };
+        let second = NewClipboardItem {
+            content_type: ContentType::Image,
+            image_path: Some("/fake/duplicate-second.png".to_string()),
+            content_hash: "duplicate-second".to_string(),
+            semantic_hash: "duplicate-second".to_string(),
+            ..Default::default()
+        };
+        let first_id = repo.insert(first).unwrap();
+        let second_id = repo.insert(second).unwrap();
+        let mut ids = vec![first_id; 501];
+        ids.extend([second_id, first_id, second_id]);
+
+        let (deleted, mut image_paths, _) = repo.batch_delete(&ids).unwrap();
+        image_paths.sort();
+
+        assert_eq!(deleted, 2);
+        assert_eq!(
+            image_paths,
+            vec![
+                "/fake/duplicate-first.png".to_string(),
+                "/fake/duplicate-second.png".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn large_batch_with_locked_item_deletes_nothing() {
+        let db = temp_db();
+        let repo = ClipboardRepository::new(&db);
+        let normal_id = repo.insert(make_text_item("large normal")).unwrap();
+        let mut locked = make_text_item("large locked");
+        locked.is_locked = true;
+        let locked_id = repo.insert(locked).unwrap();
+        let mut ids: Vec<i64> = (1_000_000..1_040_000).collect();
+        ids[0] = normal_id;
+        *ids.last_mut().unwrap() = locked_id;
+
+        assert!(matches!(
+            repo.batch_delete(&ids).unwrap_err(),
+            ClipboardDeleteError::Locked
+        ));
+        assert!(repo.get_by_id(normal_id).unwrap().is_some());
+        assert!(repo.get_by_id(locked_id).unwrap().is_some());
     }
 
     #[test]
@@ -1809,6 +2194,18 @@ mod tests {
         let item = repo.get_by_id(id).unwrap().unwrap();
         assert!(!item.is_favorite);
         assert_eq!(item.favorite_order, 0);
+    }
+
+    #[test]
+    fn toggle_lock() {
+        let db = temp_db();
+        let repo = ClipboardRepository::new(&db);
+        let id = repo.insert(make_text_item("lock_test")).unwrap();
+
+        assert!(repo.toggle_lock(id).unwrap());
+        assert!(repo.get_by_id(id).unwrap().unwrap().is_locked);
+        assert!(!repo.toggle_lock(id).unwrap());
+        assert!(!repo.get_by_id(id).unwrap().unwrap().is_locked);
     }
 
     #[test]
@@ -1998,20 +2395,110 @@ mod tests {
     }
 
     #[test]
-    fn clear_history_preserves_pinned_and_favorites() {
+    fn clear_history_preserves_pinned_favorites_and_locked_assets() {
         let db = temp_db();
         let repo = ClipboardRepository::new(&db);
         let id1 = repo.insert(make_text_item("normal")).unwrap();
         let id2 = repo.insert(make_text_item("pinned")).unwrap();
         let id3 = repo.insert(make_text_item("favorite")).unwrap();
+        let locked_asset = NewClipboardItem {
+            content_type: ContentType::Image,
+            image_path: Some("/fake/locked.png".to_string()),
+            file_payload: Some("locked-payload".to_string()),
+            content_hash: "locked-asset".to_string(),
+            semantic_hash: "locked-asset".to_string(),
+            is_locked: true,
+            ..Default::default()
+        };
+        let id4 = repo.insert(locked_asset).unwrap();
+        let clearable_asset = NewClipboardItem {
+            content_type: ContentType::Image,
+            image_path: Some("/fake/clearable.png".to_string()),
+            file_payload: Some("clearable-payload".to_string()),
+            content_hash: "clearable-asset".to_string(),
+            semantic_hash: "clearable-asset".to_string(),
+            ..Default::default()
+        };
+        let id5 = repo.insert(clearable_asset).unwrap();
         repo.toggle_pin(id2).unwrap();
         repo.toggle_favorite(id3).unwrap();
 
-        let deleted = repo.clear_history(None, None).unwrap();
-        assert_eq!(deleted, 1);
+        let (deleted, image_paths, file_payloads) = repo.clear_history(None, None).unwrap();
+        assert_eq!(deleted, 2);
+        assert_eq!(image_paths, vec!["/fake/clearable.png"]);
+        assert_eq!(file_payloads, vec!["clearable-payload"]);
         assert!(repo.get_by_id(id1).unwrap().is_none());
         assert!(repo.get_by_id(id2).unwrap().is_some());
         assert!(repo.get_by_id(id3).unwrap().is_some());
+        assert!(repo.get_by_id(id4).unwrap().is_some());
+        assert!(repo.get_by_id(id5).unwrap().is_none());
+    }
+
+    #[test]
+    fn clear_history_resource_query_failure_deletes_nothing() {
+        let db = temp_db();
+        let repo = ClipboardRepository::new(&db);
+        let item = NewClipboardItem {
+            content_type: ContentType::Image,
+            image_path: Some("/fake/query-failure.png".to_string()),
+            content_hash: "query-failure".to_string(),
+            semantic_hash: "query-failure".to_string(),
+            ..Default::default()
+        };
+        let id = repo.insert(item).unwrap();
+        repo.write_connection()
+            .lock()
+            .execute(
+                "UPDATE clipboard_items SET image_path = X'FF' WHERE id = ?1",
+                params![id],
+            )
+            .unwrap();
+
+        assert!(repo.clear_history(None, None).is_err());
+        assert_eq!(repo.count(QueryOptions::default()).unwrap(), 1);
+    }
+
+    #[test]
+    fn clear_history_delete_failure_rolls_back() {
+        let db = temp_db();
+        let repo = ClipboardRepository::new(&db);
+        repo.insert(make_text_item("delete failure")).unwrap();
+        repo.write_connection()
+            .lock()
+            .execute_batch(
+                "CREATE TRIGGER block_clear_history
+                 BEFORE DELETE ON clipboard_items
+                 BEGIN
+                   SELECT RAISE(ABORT, 'blocked');
+                 END;",
+            )
+            .unwrap();
+
+        assert!(repo.clear_history(None, None).is_err());
+        assert_eq!(repo.count(QueryOptions::default()).unwrap(), 1);
+    }
+
+    #[test]
+    fn auto_cleanup_preserves_locked_items() {
+        let db = temp_db();
+        let repo = ClipboardRepository::new(&db);
+        let normal_id = repo.insert(make_text_item("old normal")).unwrap();
+        let mut locked = make_text_item("old locked");
+        locked.is_locked = true;
+        let locked_id = repo.insert(locked).unwrap();
+        repo.write_connection()
+            .lock()
+            .execute(
+                "UPDATE clipboard_items SET created_at = '2000-01-01 00:00:00' WHERE id IN (?1, ?2)",
+                params![normal_id, locked_id],
+            )
+            .unwrap();
+
+        let (deleted, _, _) = repo.delete_older_than(1, None).unwrap();
+
+        assert_eq!(deleted, 1);
+        assert!(repo.get_by_id(normal_id).unwrap().is_none());
+        assert!(repo.get_by_id(locked_id).unwrap().is_some());
     }
 
     #[test]
@@ -2020,6 +2507,9 @@ mod tests {
         let repo = ClipboardRepository::new(&db);
         repo.insert(make_text_item("all1")).unwrap();
         let id2 = repo.insert(make_text_item("all2")).unwrap();
+        let mut locked = make_text_item("all locked");
+        locked.is_locked = true;
+        repo.insert(locked).unwrap();
         repo.toggle_pin(id2).unwrap();
         repo.clear_all().unwrap();
         assert_eq!(repo.count(QueryOptions::default()).unwrap(), 0);
@@ -2102,6 +2592,42 @@ mod tests {
         let (deleted, _, _) = repo.enforce_max_count(3, None).unwrap();
         assert_eq!(deleted, 2);
         assert_eq!(repo.count(QueryOptions::default()).unwrap(), 3);
+    }
+
+    #[test]
+    fn enforce_max_count_preserves_locked_items() {
+        let db = temp_db();
+        let repo = ClipboardRepository::new(&db);
+        let mut locked = make_text_item("locked oldest");
+        locked.is_locked = true;
+        let locked_id = repo.insert(locked).unwrap();
+        let old_id = repo.insert(make_text_item("old clearable")).unwrap();
+        let new_id = repo.insert(make_text_item("new clearable")).unwrap();
+        let write_conn = repo.write_connection();
+        let conn = write_conn.lock();
+        conn.execute(
+            "UPDATE clipboard_items SET created_at = '2000-01-01 00:00:00' WHERE id = ?1",
+            params![locked_id],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE clipboard_items SET created_at = '2001-01-01 00:00:00' WHERE id = ?1",
+            params![old_id],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE clipboard_items SET created_at = '2002-01-01 00:00:00' WHERE id = ?1",
+            params![new_id],
+        )
+        .unwrap();
+        drop(conn);
+
+        let (deleted, _, _) = repo.enforce_max_count(1, None).unwrap();
+
+        assert_eq!(deleted, 1);
+        assert!(repo.get_by_id(locked_id).unwrap().is_some());
+        assert!(repo.get_by_id(old_id).unwrap().is_none());
+        assert!(repo.get_by_id(new_id).unwrap().is_some());
     }
 
     #[test]

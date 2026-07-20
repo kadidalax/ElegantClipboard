@@ -151,6 +151,10 @@ mod tests {
             char_count: None,
             source_app_name: None,
             source_app_icon: None,
+            source_title: None,
+            source_url: None,
+            source_file_name: None,
+            is_locked: false,
             group_id: None,
             files_valid: None,
         }

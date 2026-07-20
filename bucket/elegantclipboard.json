@@ -1,7 +1,7 @@
 {
   "version": "1.2.4",
   "description": "An elegant Windows clipboard manager built with Tauri",
-  "homepage": "https://github.com/Y-ASLant/ElegantClipboard",
+  "homepage": "https://github.com/kadidalax/ElegantClipboard",
   "license": "MIT",
   "architecture": {
     "64bit": {
@@ -24,10 +24,10 @@
   "autoupdate": {
     "architecture": {
       "64bit": {
-        "url": "https://github.com/Y-ASLant/ElegantClipboard/releases/download/v$version/ElegantClipboard_$version_x64-setup.exe#/dl.7z"
+        "url": "https://github.com/kadidalax/ElegantClipboard/releases/download/v$version/ElegantClipboard_$version_x64-setup.exe#/dl.7z"
       },
       "arm64": {
-        "url": "https://github.com/Y-ASLant/ElegantClipboard/releases/download/v$version/ElegantClipboard_$version_arm64-setup.exe#/dl.7z"
+        "url": "https://github.com/kadidalax/ElegantClipboard/releases/download/v$version/ElegantClipboard_$version_arm64-setup.exe#/dl.7z"
       }
     }
   }

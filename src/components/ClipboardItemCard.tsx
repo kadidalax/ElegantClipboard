@@ -10,6 +10,9 @@ import {
   ArrowDownload16Regular,
   Edit16Regular,
   Translate16Regular,
+  LockClosed16Regular,
+  LockOpen16Regular,
+  History16Regular,
   CheckmarkCircle16Filled,
   Circle16Regular,
 } from "@fluentui/react-icons";
@@ -81,6 +84,7 @@ interface ClipboardItemCardProps {
   showBadge?: boolean;
   sortId?: string;
   isDragOverlay?: boolean;
+  onLocateInTimeline?: (id: number) => void;
 }
 
 const clipboardActions = () => useClipboardStore.getState();
@@ -146,6 +150,7 @@ const arePropsEqual = (
   if (prevProps.showBadge !== nextProps.showBadge) return false;
   if (prevProps.sortId !== nextProps.sortId) return false;
   if (prevProps.isDragOverlay !== nextProps.isDragOverlay) return false;
+  if (prevProps.onLocateInTimeline !== nextProps.onLocateInTimeline) return false;
 
   // 对比关键 item 属性
   const item = prevProps.item;
@@ -155,6 +160,7 @@ const arePropsEqual = (
     item.id === nextItem.id &&
     item.is_pinned === nextItem.is_pinned &&
     item.is_favorite === nextItem.is_favorite &&
+    item.is_locked === nextItem.is_locked &&
     item.content_type === nextItem.content_type &&
     item.created_at === nextItem.created_at &&
     item.byte_size === nextItem.byte_size &&
@@ -163,7 +169,10 @@ const arePropsEqual = (
     item.files_valid === nextItem.files_valid &&
     item.preview === nextItem.preview &&
     item.source_app_name === nextItem.source_app_name &&
-    item.source_app_icon === nextItem.source_app_icon
+    item.source_app_icon === nextItem.source_app_icon &&
+    item.source_title === nextItem.source_title &&
+    item.source_url === nextItem.source_url &&
+    item.source_file_name === nextItem.source_file_name
   );
 };
 
@@ -173,6 +182,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
   showBadge,
   sortId,
   isDragOverlay = false,
+  onLocateInTimeline,
 }: ClipboardItemCardProps) {
   const { t } = useTranslation();
   // 每张卡片自行订阅 activeIndex，只有选中态变化的卡片才重渲染
@@ -180,6 +190,8 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
     (s) => index !== undefined && index >= 0 && s.activeIndex === index,
   );
   const batchMode = useClipboardStore((s) => s.batchMode);
+  const isTimelineMode = useClipboardStore((s) => s.timelineSnapshot !== null);
+  const isTimelineHighlighted = useClipboardStore((s) => s.timelineHighlightId === item.id);
   const isSelected = useClipboardStore((s) => s.selectedIds.has(item.id));
   const toggleSelect = useClipboardStore((s) => s.toggleSelect);
   const keyboardNavEnabled = useUISettings((s) => s.keyboardNavigation);
@@ -220,9 +232,18 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
     showSourceApp && sourceAppDisplay !== "icon" ? item.source_app_name : undefined;
   const effectiveSourceIcon =
     showSourceApp && sourceAppDisplay !== "name" ? item.source_app_icon : undefined;
+  const sourceDetails = useMemo(() => ({
+    title: item.source_title,
+    url: item.source_url,
+    fileName: item.source_file_name,
+    onLocateInTimeline: onLocateInTimeline
+      ? () => onLocateInTimeline(item.id)
+      : undefined,
+  }), [item.id, item.source_file_name, item.source_title, item.source_url, onLocateInTimeline]);
   const {
     togglePin,
     toggleFavorite,
+    toggleLock,
     deleteItem,
     copyToClipboard,
     pasteContent,
@@ -614,6 +635,10 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
     e.stopPropagation();
     toggleFavorite(item.id);
   };
+  const handleToggleLock = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    toggleLock(item.id);
+  };
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
     deleteItem(item.id);
@@ -684,6 +709,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
           !showDragAreaIndicator && "transition-surface hover:bg-accent/50",
           isDragOverlay && "elevation-floating border-primary cursor-move",
           justPasted && "animate-paste-flash",
+          isTimelineHighlighted && "ring-2 ring-primary border-primary bg-primary-faint",
           isActive && "bg-accent border-primary-subtle",
           batchMode && isSelected && "bg-primary-faint",
           batchMode && !isSelected && "opacity-90",
@@ -696,7 +722,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
             <CheckmarkCircle16Filled className="copy-success-icon w-8 h-8 text-primary" />
           </div>
         )}
-        {!isDragging && !isDragOverlay && !batchMode && (
+        {!isDragging && !isDragOverlay && !batchMode && !isTimelineMode && (
           <>
             <button
               ref={setActivatorNodeRef}
@@ -781,6 +807,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
               isDragOverlay={isDragOverlay}
               sourceAppName={effectiveSourceName}
               sourceAppIcon={effectiveSourceIcon}
+              sourceDetails={sourceDetails}
               imageWidth={item.image_width}
               imageHeight={item.image_height}
             />
@@ -795,6 +822,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
               isDragOverlay={isDragOverlay}
               sourceAppName={effectiveSourceName}
               sourceAppIcon={effectiveSourceIcon}
+              sourceDetails={sourceDetails}
             />
           ) : (
             <div
@@ -822,6 +850,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
                 isDragOverlay={isDragOverlay}
                 sourceAppName={effectiveSourceName}
                 sourceAppIcon={effectiveSourceIcon}
+                sourceDetails={sourceDetails}
               />
             </div>
           )}
@@ -831,6 +860,7 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
               item={item}
               onTogglePin={handleTogglePin}
               onToggleFavorite={handleToggleFavorite}
+              onToggleLock={handleToggleLock}
               onCopy={handleCopy}
               onDelete={handleDelete}
               onTranslate={translateAvailable && isTextLikeContent ? handleTranslateClick : undefined}
@@ -876,6 +906,15 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
     }
   };
 
+  const timelineMenuItem = onLocateInTimeline
+    ? [{
+        icon: History16Regular,
+        label: t("clipboard.contextMenu.locateInTimeline"),
+        onClick: () => onLocateInTimeline(item.id),
+        separator: true,
+      }]
+    : [];
+
   // 上下文菜单配置
   const contextMenuItems: ContextMenuItemConfig[] | null = (() => {
     if (isDragOverlay || batchMode) return null;
@@ -887,7 +926,9 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
         { icon: Copy16Regular, label: t("clipboard.contextMenu.copy"), onClick: handleCopyCtxMenu },
         ...(translateAvailable ? [{ icon: Translate16Regular, label: t("clipboard.contextMenu.translate"), onClick: () => triggerTranslate(true) }] : []),
         { icon: Edit16Regular, label: t("clipboard.contextMenu.edit"), onClick: handleEdit },
-        { icon: Delete16Regular, label: t("clipboard.contextMenu.delete"), onClick: () => deleteItem(item.id), destructive: true, separator: true },
+        ...timelineMenuItem,
+        { icon: item.is_locked ? LockOpen16Regular : LockClosed16Regular, label: item.is_locked ? t("clipboard.unlock") : t("clipboard.lock"), onClick: () => toggleLock(item.id), separator: timelineMenuItem.length === 0 },
+        { icon: Delete16Regular, label: t("clipboard.contextMenu.delete"), onClick: () => deleteItem(item.id), disabled: item.is_locked, destructive: true },
       ];
     }
     if (item.content_type === "files") {
@@ -897,7 +938,9 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
         { icon: FolderOpen16Regular, label: t("clipboard.contextMenu.showInExplorer"), onClick: handleShowInExplorer, disabled: filesInvalid },
         { icon: ArrowDownload16Regular, label: t("clipboard.contextMenu.saveAs"), onClick: handleSaveAs, disabled: filesInvalid },
         { icon: Info16Regular, label: t("clipboard.contextMenu.viewDetails"), onClick: handleShowDetails, disabled: filesInvalid },
-        { icon: Delete16Regular, label: t("clipboard.contextMenu.delete"), onClick: () => deleteItem(item.id), destructive: true, separator: true },
+        ...timelineMenuItem,
+        { icon: item.is_locked ? LockOpen16Regular : LockClosed16Regular, label: item.is_locked ? t("clipboard.unlock") : t("clipboard.lock"), onClick: () => toggleLock(item.id), separator: timelineMenuItem.length === 0 },
+        { icon: Delete16Regular, label: t("clipboard.contextMenu.delete"), onClick: () => deleteItem(item.id), disabled: item.is_locked, destructive: true },
       ];
     }
     if (item.content_type === "image" && item.image_path) {
@@ -906,7 +949,9 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
         { icon: Copy16Regular, label: t("clipboard.contextMenu.copy"), onClick: handleCopyCtxMenu },
         { icon: FolderOpen16Regular, label: t("clipboard.contextMenu.showInExplorer"), onClick: handleShowImageInExplorer },
         { icon: ArrowDownload16Regular, label: t("clipboard.contextMenu.saveAs"), onClick: handleSaveAs },
-        { icon: Delete16Regular, label: t("clipboard.contextMenu.delete"), onClick: () => deleteItem(item.id), destructive: true, separator: true },
+        ...timelineMenuItem,
+        { icon: item.is_locked ? LockOpen16Regular : LockClosed16Regular, label: item.is_locked ? t("clipboard.unlock") : t("clipboard.lock"), onClick: () => toggleLock(item.id), separator: timelineMenuItem.length === 0 },
+        { icon: Delete16Regular, label: t("clipboard.contextMenu.delete"), onClick: () => deleteItem(item.id), disabled: item.is_locked, destructive: true },
       ];
     }
     return null;
@@ -953,4 +998,3 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
 
   return cardContent;
 }, arePropsEqual);
-

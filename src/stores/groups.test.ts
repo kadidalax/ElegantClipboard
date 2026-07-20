@@ -37,7 +37,11 @@ vi.mock("@/stores/clipboard", () => ({
   },
 }));
 
-beforeEach(() => {
+beforeEach(async () => {
+  const { invoke } = await import("@tauri-apps/api/core");
+  const { listen } = await import("@tauri-apps/api/event");
+  vi.mocked(invoke).mockClear();
+  vi.mocked(listen).mockClear().mockResolvedValue(() => {});
   useGroupStore.setState({ groups: [], isLoading: false });
   mockFetchItems.mockClear();
 });
@@ -58,6 +62,22 @@ describe("group store", () => {
       expect(state.groups).toHaveLength(2);
       expect(state.groups[0].name).toBe("Work");
       expect(state.isLoading).toBe(false);
+    });
+
+    it("refreshes groups after switching databases", async () => {
+      useGroupStore.setState({
+        groups: [{ id: 99, name: "Old", color: null, sort_order: 0, created_at: "", item_count: 1 }],
+      });
+      const cleanup = await useGroupStore.getState().setupListener();
+      const { listen } = await import("@tauri-apps/api/event");
+      const databaseListener = vi
+        .mocked(listen)
+        .mock.calls.find(([event]) => event === "database-switched")?.[1];
+
+      databaseListener?.({ event: "database-switched", id: 0, payload: undefined });
+
+      await vi.waitFor(() => expect(useGroupStore.getState().groups[0]?.name).toBe("Work"));
+      cleanup();
     });
   });
 

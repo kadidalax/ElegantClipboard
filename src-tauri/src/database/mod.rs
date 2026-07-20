@@ -5,45 +5,145 @@ pub use repository::*;
 pub use schema::*;
 
 use crate::clipboard::{compute_semantic_hash, is_url};
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
 use rusqlite::{Connection, OpenFlags, params};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::info;
 
-/// 数据库管理器（读写分离）
+#[derive(Clone)]
+pub struct ActiveDatabase {
+    pub(crate) write_conn: Arc<Mutex<Connection>>,
+    pub(crate) read_conn: Arc<Mutex<Connection>>,
+    pub data_dir: PathBuf,
+    pub db_path: PathBuf,
+    pub images_dir: PathBuf,
+    pub icons_dir: PathBuf,
+    pub staged_dir: PathBuf,
+}
+
+/// 稳定数据库句柄；业务库可热切换，全局设置库固定。
 pub struct Database {
-    write_conn: Arc<Mutex<Connection>>,
-    read_conn: Arc<Mutex<Connection>>,
-    db_path: PathBuf,
+    pub(crate) active: Arc<RwLock<ActiveDatabase>>,
+    settings_conn: Arc<Mutex<Connection>>,
+    operation: Arc<RwLock<()>>,
 }
 
 impl Database {
+    #[cfg(not(test))]
     pub fn new(db_path: PathBuf) -> Result<Self, rusqlite::Error> {
-        if let Some(parent) = db_path.parent() {
-            std::fs::create_dir_all(parent).ok();
-        }
+        Self::new_with_settings(db_path, get_app_dir().join("settings.db"))
+    }
 
+    #[cfg(test)]
+    pub fn new(db_path: PathBuf) -> Result<Self, rusqlite::Error> {
+        let settings_path = db_path.with_extension("settings.db");
+        Self::new_with_settings(db_path, settings_path)
+    }
+
+    pub(crate) fn new_with_settings(
+        db_path: PathBuf,
+        settings_db_path: PathBuf,
+    ) -> Result<Self, rusqlite::Error> {
+        let active = Self::open_db_path(db_path)?;
+        let settings_conn = Connection::open(settings_db_path)?;
+        settings_conn.execute_batch("PRAGMA busy_timeout = 5000;")?;
+
+        let db = Self {
+            active: Arc::new(RwLock::new(active)),
+            settings_conn: Arc::new(Mutex::new(settings_conn)),
+            operation: Arc::new(RwLock::new(())),
+        };
+
+        db.init_settings_for(&db.active_snapshot())?;
+
+        Ok(db)
+    }
+
+    fn open_db_path(db_path: PathBuf) -> Result<ActiveDatabase, rusqlite::Error> {
+        let data_dir = db_path
+            .parent()
+            .map_or_else(|| PathBuf::from("."), std::path::Path::to_path_buf);
+        std::fs::create_dir_all(&data_dir)
+            .map_err(|_| rusqlite::Error::InvalidPath(data_dir.clone()))?;
+        let data_dir = std::fs::canonicalize(&data_dir).unwrap_or(data_dir);
+        let db_path = data_dir.join(
+            db_path
+                .file_name()
+                .unwrap_or_else(|| std::ffi::OsStr::new("clipboard.db")),
+        );
         let write_conn = Connection::open(&db_path)?;
         Self::configure_connection(&write_conn, false)?;
-
         let read_conn = Connection::open_with_flags(
             &db_path,
             OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
         Self::configure_connection(&read_conn, true)?;
-
-        info!("Database opened at {:?}", db_path);
-
-        let db = Self {
+        let active = ActiveDatabase {
             write_conn: Arc::new(Mutex::new(write_conn)),
             read_conn: Arc::new(Mutex::new(read_conn)),
+            images_dir: data_dir.join("images"),
+            icons_dir: data_dir.join("icons"),
+            staged_dir: data_dir.join("staged"),
+            data_dir,
             db_path,
         };
+        Self::init_schema_for(&active)?;
+        info!("Database opened at {:?}", active.db_path);
+        Ok(active)
+    }
 
-        db.init_schema()?;
+    pub fn open_active(&self, data_dir: PathBuf) -> Result<ActiveDatabase, rusqlite::Error> {
+        let active = Self::open_db_path(data_dir.join("clipboard.db"))?;
+        self.init_settings_for(&active)?;
+        Ok(active)
+    }
 
-        Ok(db)
+    pub fn active_snapshot(&self) -> ActiveDatabase {
+        self.active.read().clone()
+    }
+
+    pub fn swap_active(&self, target: ActiveDatabase) -> ActiveDatabase {
+        std::mem::replace(&mut *self.active.write(), target)
+    }
+
+    fn init_settings_for(&self, active: &ActiveDatabase) -> Result<(), rusqlite::Error> {
+        let legacy: Vec<(String, String)> = {
+            let conn = active.write_conn.lock();
+            let mut stmt = conn.prepare("SELECT key, value FROM settings")?;
+            stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<Result<_, _>>()?
+        };
+        let mut conn = self.settings_conn.lock();
+        let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        tx.execute_batch(SETTINGS_SCHEMA_SQL)?;
+        let migrated = tx.query_row(
+            "SELECT COUNT(*) > 0 FROM settings_metadata WHERE key='legacy_settings_migrated'",
+            [],
+            |r| r.get::<_, bool>(0),
+        )?;
+        let settings_empty = tx.query_row("SELECT COUNT(*) = 0 FROM settings", [], |r| {
+            r.get::<_, bool>(0)
+        })?;
+        if !migrated && settings_empty {
+            for (key, value) in legacy {
+                if key.starts_with('_') {
+                    continue;
+                }
+                tx.execute(
+                    "INSERT OR IGNORE INTO settings(key,value) VALUES(?1,?2)",
+                    params![key, value],
+                )?;
+            }
+        }
+        if !migrated {
+            tx.execute(
+                "INSERT INTO settings_metadata(key,value) VALUES('legacy_settings_migrated','1')",
+                [],
+            )?;
+        }
+        tx.execute_batch(DEFAULT_SETTINGS_SQL)?;
+        tx.commit()
     }
 
     fn configure_connection(conn: &Connection, read_only: bool) -> Result<(), rusqlite::Error> {
@@ -56,7 +156,8 @@ impl Database {
             )?;
         } else {
             conn.execute_batch(
-                "PRAGMA journal_mode = WAL;
+                "PRAGMA busy_timeout = 5000;
+                 PRAGMA journal_mode = WAL;
                  PRAGMA synchronous = NORMAL;
                  PRAGMA cache_size = -64000;
                  PRAGMA temp_store = MEMORY;
@@ -67,8 +168,8 @@ impl Database {
         Ok(())
     }
 
-    fn init_schema(&self) -> Result<(), rusqlite::Error> {
-        let conn = self.write_conn.lock();
+    fn init_schema_for(active: &ActiveDatabase) -> Result<(), rusqlite::Error> {
+        let conn = active.write_conn.lock();
 
         Self::run_migrations(&conn)?;
 
@@ -372,6 +473,26 @@ impl Database {
             info!("Migrating database: adding file_payload column");
             conn.execute_batch("ALTER TABLE clipboard_items ADD COLUMN file_payload TEXT;")?;
             info!("Migration complete: file_payload column added");
+        }
+
+        for (name, definition) in [
+            ("source_title", "TEXT"),
+            ("source_url", "TEXT"),
+            ("source_file_name", "TEXT"),
+            ("is_locked", "INTEGER NOT NULL DEFAULT 0"),
+        ] {
+            let exists: bool = conn
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM pragma_table_info('clipboard_items') WHERE name = ?1",
+                    [name],
+                    |row| row.get(0),
+                )
+                .unwrap_or(false);
+            if !exists {
+                conn.execute_batch(&format!(
+                    "ALTER TABLE clipboard_items ADD COLUMN {name} {definition};"
+                ))?;
+            }
         }
 
         Ok(())
@@ -766,22 +887,33 @@ impl Database {
     }
 
     pub fn write_connection(&self) -> Arc<Mutex<Connection>> {
-        self.write_conn.clone()
+        self.active.read().write_conn.clone()
     }
 
+    #[cfg(test)]
     pub fn read_connection(&self) -> Arc<Mutex<Connection>> {
-        self.read_conn.clone()
+        self.active.read().read_conn.clone()
+    }
+
+    pub fn settings_connection(&self) -> Arc<Mutex<Connection>> {
+        self.settings_conn.clone()
+    }
+
+    pub fn operation_lock(&self) -> Arc<RwLock<()>> {
+        self.operation.clone()
     }
 
     pub fn optimize(&self) -> Result<(), rusqlite::Error> {
-        let conn = self.write_conn.lock();
+        let write_conn = self.write_connection();
+        let conn = write_conn.lock();
         conn.execute_batch("PRAGMA optimize;")?;
         info!("Database optimized");
         Ok(())
     }
 
     pub fn vacuum(&self) -> Result<(), rusqlite::Error> {
-        let conn = self.write_conn.lock();
+        let write_conn = self.write_connection();
+        let conn = write_conn.lock();
         conn.execute_batch("VACUUM;")?;
         info!("Database vacuumed");
         Ok(())
@@ -791,9 +923,9 @@ impl Database {
 impl Clone for Database {
     fn clone(&self) -> Self {
         Self {
-            write_conn: self.write_conn.clone(),
-            read_conn: self.read_conn.clone(),
-            db_path: self.db_path.clone(),
+            active: self.active.clone(),
+            settings_conn: self.settings_conn.clone(),
+            operation: self.operation.clone(),
         }
     }
 }
@@ -810,8 +942,203 @@ pub fn get_default_db_path() -> PathBuf {
     get_app_dir().join("clipboard.db")
 }
 
-pub fn get_default_images_path() -> PathBuf {
-    get_app_dir().join("images")
+#[cfg(test)]
+mod global_settings_tests {
+    use super::*;
+
+    #[test]
+    fn global_settings_are_isolated_migrated_once_and_shared_by_clones() {
+        let dir = std::env::temp_dir().join(format!("elegant-db-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let business1 = dir.join("one.db");
+        let settings = dir.join("settings.db");
+        let legacy = Connection::open(&business1).unwrap();
+        legacy.execute_batch(SCHEMA_SQL).unwrap();
+        legacy
+            .execute(
+                "INSERT OR REPLACE INTO settings(key,value) VALUES('theme','dark')",
+                [],
+            )
+            .unwrap();
+        drop(legacy);
+
+        let db1 = Database::new_with_settings(business1, settings.clone()).unwrap();
+        let repo = SettingsRepository::new(&db1);
+        assert_eq!(repo.get("theme").unwrap().as_deref(), Some("dark"));
+        repo.set("only_global", "yes").unwrap();
+        let clone = db1.clone();
+        assert!(Arc::ptr_eq(
+            &db1.settings_connection(),
+            &clone.settings_connection()
+        ));
+        assert_eq!(
+            Connection::open(&settings)
+                .unwrap()
+                .query_row("SELECT COUNT(*) FROM clipboard_items", [], |r| r
+                    .get::<_, i64>(0))
+                .unwrap_err()
+                .sqlite_error_code(),
+            Some(rusqlite::ErrorCode::Unknown)
+        );
+        assert_eq!(
+            Connection::open(db1.active_snapshot().db_path)
+                .unwrap()
+                .query_row(
+                    "SELECT COUNT(*) FROM settings WHERE key='only_global'",
+                    [],
+                    |r| r.get::<_, i64>(0)
+                )
+                .unwrap(),
+            0
+        );
+
+        let business2 = dir.join("two.db");
+        let legacy = Connection::open(&business2).unwrap();
+        legacy.execute_batch(SCHEMA_SQL).unwrap();
+        legacy
+            .execute(
+                "INSERT OR REPLACE INTO settings(key,value) VALUES('theme','light')",
+                [],
+            )
+            .unwrap();
+        drop(legacy);
+        let db2 = Database::new_with_settings(business2, settings).unwrap();
+        assert_eq!(
+            SettingsRepository::new(&db2)
+                .get("theme")
+                .unwrap()
+                .as_deref(),
+            Some("dark")
+        );
+        drop(repo);
+        drop(clone);
+        drop(db1);
+        drop(db2);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn concurrent_initialization_migrates_only_one_business_database() {
+        let dir = std::env::temp_dir().join(format!("elegant-db-race-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let settings = dir.join("settings.db");
+        let paths = [dir.join("one.db"), dir.join("two.db")];
+        for (path, source) in paths.iter().zip(["one", "two"]) {
+            let conn = Connection::open(path).unwrap();
+            conn.execute_batch(SCHEMA_SQL).unwrap();
+            conn.execute(
+                "INSERT OR REPLACE INTO settings(key,value) VALUES('source',?1)",
+                [source],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT OR REPLACE INTO settings(key,value) VALUES('paired',?1)",
+                [format!("{source}-pair")],
+            )
+            .unwrap();
+        }
+        let barrier = Arc::new(std::sync::Barrier::new(2));
+        let handles: Vec<_> = paths
+            .into_iter()
+            .map(|path| {
+                let settings = settings.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    Database::new_with_settings(path, settings).unwrap()
+                })
+            })
+            .collect();
+        let dbs: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        let repo = SettingsRepository::new(&dbs[0]);
+        let source = repo.get("source").unwrap().unwrap();
+        assert_eq!(
+            repo.get("paired").unwrap().unwrap(),
+            format!("{source}-pair")
+        );
+        drop(repo);
+        drop(dbs);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn reset_settings_does_not_revive_legacy_values_on_reopen() {
+        let dir = std::env::temp_dir().join(format!("elegant-db-reset-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let business = dir.join("business.db");
+        let settings = dir.join("settings.db");
+        let legacy = Connection::open(&business).unwrap();
+        legacy.execute_batch(SCHEMA_SQL).unwrap();
+        legacy
+            .execute(
+                "INSERT INTO settings(key,value) VALUES('legacy_only','old')",
+                [],
+            )
+            .unwrap();
+        drop(legacy);
+        let db = Database::new_with_settings(business.clone(), settings.clone()).unwrap();
+        let repo = SettingsRepository::new(&db);
+        assert_eq!(repo.get("legacy_only").unwrap().as_deref(), Some("old"));
+        repo.clear_all().unwrap();
+        drop(repo);
+        drop(db);
+        let reopened = Database::new_with_settings(business, settings).unwrap();
+        let repo = SettingsRepository::new(&reopened);
+        assert_eq!(repo.get("legacy_only").unwrap(), None);
+        assert_eq!(repo.get("theme").unwrap().as_deref(), Some("system"));
+        drop(repo);
+        drop(reopened);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn existing_global_settings_without_marker_are_not_overwritten_by_legacy() {
+        let dir = std::env::temp_dir().join(format!("elegant-db-marker-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let business = dir.join("business.db");
+        let settings = dir.join("settings.db");
+        let legacy = Connection::open(&business).unwrap();
+        legacy.execute_batch(SCHEMA_SQL).unwrap();
+        legacy
+            .execute(
+                "INSERT INTO settings(key,value) VALUES('legacy_only','old')",
+                [],
+            )
+            .unwrap();
+        drop(legacy);
+        let global = Connection::open(&settings).unwrap();
+        global.execute_batch(SETTINGS_SCHEMA_SQL).unwrap();
+        global
+            .execute(
+                "INSERT INTO settings(key,value) VALUES('custom','keep')",
+                [],
+            )
+            .unwrap();
+        drop(global);
+        let db = Database::new_with_settings(business, settings).unwrap();
+        let repo = SettingsRepository::new(&db);
+        assert_eq!(repo.get("custom").unwrap().as_deref(), Some("keep"));
+        assert_eq!(repo.get("legacy_only").unwrap(), None);
+        assert_eq!(repo.get("theme").unwrap().as_deref(), Some("system"));
+        assert_eq!(
+            db.settings_connection()
+                .lock()
+                .query_row(
+                    "SELECT COUNT(*) FROM settings_metadata WHERE key='legacy_settings_migrated'",
+                    [],
+                    |r| r.get::<_, i64>(0)
+                )
+                .unwrap(),
+            1
+        );
+        drop(repo);
+        drop(db);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 }
 
 #[cfg(test)]
@@ -849,6 +1176,63 @@ mod tests {
     }
 
     #[test]
+    fn new_database_has_source_metadata_columns() {
+        let db = temp_db();
+        let conn = db.read_connection();
+        let conn = conn.lock();
+        for column in [
+            "source_title",
+            "source_url",
+            "source_file_name",
+            "is_locked",
+        ] {
+            let exists: bool = conn
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM pragma_table_info('clipboard_items') WHERE name = ?1",
+                    [column],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert!(exists, "missing column {column}");
+        }
+    }
+
+    #[test]
+    fn migration_adds_source_metadata_columns_to_existing_database() {
+        let dir = std::env::temp_dir().join(format!("ec_source_mig_{}", uuid_simple()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("legacy.db");
+        let legacy_schema = SCHEMA_SQL
+            .replace("    source_title TEXT,\n", "")
+            .replace("    source_url TEXT,\n", "")
+            .replace("    source_file_name TEXT,\n", "")
+            .replace("    is_locked INTEGER NOT NULL DEFAULT 0,\n", "");
+        Connection::open(&path)
+            .unwrap()
+            .execute_batch(&legacy_schema)
+            .unwrap();
+
+        let db = Database::new(path).unwrap();
+        let conn = db.read_connection();
+        let conn = conn.lock();
+        for column in [
+            "source_title",
+            "source_url",
+            "source_file_name",
+            "is_locked",
+        ] {
+            let exists: bool = conn
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM pragma_table_info('clipboard_items') WHERE name = ?1",
+                    [column],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert!(exists, "missing migrated column {column}");
+        }
+    }
+
+    #[test]
     fn schema_creates_groups_table() {
         let db = temp_db();
         let conn = db.read_connection();
@@ -864,11 +1248,18 @@ mod tests {
     }
 
     #[test]
-    fn schema_creates_settings_table_with_defaults() {
+    fn business_settings_stays_empty_and_global_settings_has_defaults() {
         let db = temp_db();
         let conn = db.read_connection();
         let conn = conn.lock();
-        let val: String = conn
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM settings", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
+        drop(conn);
+        let settings = db.settings_connection();
+        let val: String = settings
+            .lock()
             .query_row(
                 "SELECT value FROM settings WHERE key = 'global_shortcut'",
                 [],
@@ -1082,5 +1473,133 @@ mod tests {
             )
             .unwrap();
         assert_eq!(video_count, 1);
+    }
+}
+
+#[cfg(test)]
+mod active_database_switch_tests {
+    use super::*;
+
+    fn temp_root(label: &str) -> PathBuf {
+        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let root = std::env::temp_dir().join(format!(
+            "ec-active-{label}-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    fn text_item(text: &str) -> NewClipboardItem {
+        let hash = blake3::hash(text.as_bytes()).to_hex().to_string();
+        NewClipboardItem {
+            content_type: ContentType::Text,
+            text_content: Some(text.into()),
+            content_hash: hash.clone(),
+            semantic_hash: hash,
+            preview: Some(text.into()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn existing_clipboard_repository_follows_active_database() {
+        let root = temp_root("clipboard");
+        let first_dir = root.join("first");
+        let second_dir = root.join("second");
+        let db =
+            Database::new_with_settings(first_dir.join("clipboard.db"), root.join("settings.db"))
+                .unwrap();
+        let repo = ClipboardRepository::new(&db);
+        repo.insert(text_item("first")).unwrap();
+
+        let second = db.open_active(second_dir.clone()).unwrap();
+        let first = db.swap_active(second);
+        assert_eq!(repo.count(QueryOptions::default()).unwrap(), 0);
+        repo.insert(text_item("second")).unwrap();
+
+        let second = db.swap_active(first);
+        assert_eq!(repo.count(QueryOptions::default()).unwrap(), 1);
+        assert_eq!(
+            repo.list(QueryOptions::default()).unwrap()[0]
+                .preview
+                .as_deref(),
+            Some("first")
+        );
+        db.swap_active(second);
+        assert_eq!(
+            repo.list(QueryOptions::default()).unwrap()[0]
+                .preview
+                .as_deref(),
+            Some("second")
+        );
+        drop(repo);
+        drop(db);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn existing_group_repository_follows_active_database() {
+        let root = temp_root("groups");
+        let db =
+            Database::new_with_settings(root.join("first/clipboard.db"), root.join("settings.db"))
+                .unwrap();
+        let repo = GroupRepository::new(&db);
+        repo.create("first", None).unwrap();
+
+        let second = db.open_active(root.join("second")).unwrap();
+        let first = db.swap_active(second);
+        assert!(repo.list_with_count().unwrap().is_empty());
+        repo.create("second", None).unwrap();
+
+        db.swap_active(first);
+        assert_eq!(repo.list_with_count().unwrap()[0].name, "first");
+        drop(repo);
+        drop(db);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn settings_repository_stays_on_global_database() {
+        let root = temp_root("settings");
+        let db =
+            Database::new_with_settings(root.join("first/clipboard.db"), root.join("settings.db"))
+                .unwrap();
+        let repo = SettingsRepository::new(&db);
+        repo.set("switch-test", "same").unwrap();
+        let second = db.open_active(root.join("second")).unwrap();
+        db.swap_active(second);
+        assert_eq!(repo.get("switch-test").unwrap().as_deref(), Some("same"));
+        drop(repo);
+        drop(db);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn active_resource_snapshot_changes_with_database() {
+        let root = temp_root("paths");
+        let first_dir = root.join("first");
+        let second_dir = root.join("second");
+        let db =
+            Database::new_with_settings(first_dir.join("clipboard.db"), root.join("settings.db"))
+                .unwrap();
+        let first_dir = std::fs::canonicalize(first_dir).unwrap();
+        assert_eq!(db.active_snapshot().images_dir, first_dir.join("images"));
+        assert_eq!(db.active_snapshot().icons_dir, first_dir.join("icons"));
+        assert_eq!(db.active_snapshot().staged_dir, first_dir.join("staged"));
+
+        let second = db.open_active(second_dir.clone()).unwrap();
+        db.swap_active(second);
+        let snapshot = db.active_snapshot();
+        assert_eq!(
+            snapshot.data_dir,
+            std::fs::canonicalize(second_dir).unwrap()
+        );
+        assert_eq!(snapshot.db_path, snapshot.data_dir.join("clipboard.db"));
+        drop(snapshot);
+        drop(db);
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

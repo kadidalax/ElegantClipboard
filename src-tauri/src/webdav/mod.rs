@@ -1274,6 +1274,8 @@ fn load_config_and_options(db: &crate::database::Database) -> Option<(WebDavConf
 /// 防止 ZIP 记录同步并发（手动上传/下载与自动同步互斥）
 static SYNC_SESSION_ACTIVE: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
+#[cfg(test)]
+pub(crate) static SYNC_SESSION_TEST_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
 
 /// 持有期间独占 WebDAV 记录同步会话；Drop 时自动释放。
 pub struct SyncSessionGuard;
@@ -1284,14 +1286,9 @@ impl Drop for SyncSessionGuard {
     }
 }
 
-/// 后台媒体线程持有，延长 SyncSessionGuard 生命周期直至全部完成
-struct SyncSessionHolder {
-    _guard: SyncSessionGuard,
-}
-
 fn finish_auto_media_worker(
     pending: &std::sync::Arc<std::sync::atomic::AtomicUsize>,
-    _session: Option<std::sync::Arc<SyncSessionHolder>>,
+    _session: Option<std::sync::Arc<SyncSessionGuard>>,
 ) {
     if pending.fetch_sub(1, std::sync::atomic::Ordering::Relaxed) == 1 {
         MEDIA_SYNC_RUNNING.store(false, std::sync::atomic::Ordering::Relaxed);
@@ -1325,7 +1322,7 @@ pub fn record_and_notify_last_sync(
 }
 
 /// 尝试开始同步会话；已有会话进行中时返回错误。
-pub fn try_begin_sync_session() -> Result<SyncSessionGuard, String> {
+pub fn try_begin_sync_session() -> Result<std::sync::Arc<SyncSessionGuard>, String> {
     if SYNC_SESSION_ACTIVE
         .compare_exchange(
             false,
@@ -1337,22 +1334,22 @@ pub fn try_begin_sync_session() -> Result<SyncSessionGuard, String> {
     {
         return Err(SYNC_SESSION_BUSY.to_string());
     }
-    Ok(SyncSessionGuard)
+    Ok(std::sync::Arc::new(SyncSessionGuard))
 }
 
 /// 用于追踪媒体同步是否正在进行
 static MEDIA_SYNC_RUNNING: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
+pub fn has_active_media_sync() -> bool {
+    MEDIA_SYNC_RUNNING.load(std::sync::atomic::Ordering::SeqCst)
+}
+
 /// 防止重复启动自动同步后台线程
 static AUTO_SYNC_STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// 启动后台自动同步任务（仅在插件启用时调用）
-pub fn start_auto_sync_task(
-    db: crate::database::Database,
-    data_dir: std::path::PathBuf,
-    app: tauri::AppHandle,
-) {
+pub fn start_auto_sync_task(db: crate::database::Database, app: tauri::AppHandle) {
     if AUTO_SYNC_STARTED.swap(true, std::sync::atomic::Ordering::SeqCst) {
         return;
     }
@@ -1388,6 +1385,9 @@ pub fn start_auto_sync_task(
                     if let Some((config, options)) = load_config_and_options(&db) {
                         match try_begin_sync_session() {
                             Ok(guard) => {
+                                let operation = db.operation_lock();
+                                let _operation = operation.read();
+                                let data_dir = db.active_snapshot().data_dir;
                                 info!("WebDAV 轻量同步: 开始上传");
                                 match export_sync_data(&db, &data_dir, &options) {
                                     Ok(zip_data) => {
@@ -1502,9 +1502,7 @@ pub fn start_auto_sync_task(
 
                                     let session =
                                         if pending.load(std::sync::atomic::Ordering::Relaxed) > 0 {
-                                            Some(std::sync::Arc::new(SyncSessionHolder {
-                                                _guard: guard,
-                                            }))
+                                            Some(guard.clone())
                                         } else {
                                             MEDIA_SYNC_RUNNING
                                                 .store(false, std::sync::atomic::Ordering::Relaxed);
@@ -1519,9 +1517,11 @@ pub fn start_auto_sync_task(
                                             let dir = data_dir.clone();
                                             let cnt = pending.clone();
                                             let sess = session.clone();
+                                            let op = db.operation_lock();
                                             match std::thread::Builder::new()
                                                 .name("webdav-sync-images".into())
                                                 .spawn(move || {
+                                                    let _operation = op.read();
                                                     if !local_images.is_empty() {
                                                         match upload_media_files(
                                                             &cfg,
@@ -1572,9 +1572,11 @@ pub fn start_auto_sync_task(
                                             let dir = data_dir.clone();
                                             let cnt = pending.clone();
                                             let sess = session.clone();
+                                            let op = db.operation_lock();
                                             match std::thread::Builder::new()
                                                 .name("webdav-sync-files".into())
                                                 .spawn(move || {
+                                                    let _operation = op.read();
                                                     if !local_files.is_empty() {
                                                         match upload_media_files(
                                                             &cfg,
@@ -1623,9 +1625,11 @@ pub fn start_auto_sync_task(
                                             let dir = data_dir.clone();
                                             let cnt = pending.clone();
                                             let sess = session.clone();
+                                            let op = db.operation_lock();
                                             match std::thread::Builder::new()
                                                 .name("webdav-sync-icons".into())
                                                 .spawn(move || {
+                                                    let _operation = op.read();
                                                     if !local_icons.is_empty() {
                                                         match upload_media_files(
                                                             &cfg,
@@ -1738,8 +1742,9 @@ pub fn download_sync(config: &WebDavConfig, filename: &str) -> Result<Option<Vec
 #[cfg(test)]
 mod tests {
     use super::{
-        MediaEntry, SYNC_SESSION_ACTIVE, SYNC_SESSION_BUSY, SyncOptions, build_media_index,
-        local_media_target, rewrite_item_media_paths, sync_query_limits, try_begin_sync_session,
+        MediaEntry, SYNC_SESSION_ACTIVE, SYNC_SESSION_BUSY, SYNC_SESSION_TEST_LOCK, SyncOptions,
+        build_media_index, local_media_target, rewrite_item_media_paths, sync_query_limits,
+        try_begin_sync_session,
     };
     use std::path::Path;
 
@@ -1893,6 +1898,10 @@ mod tests {
             char_count: None,
             source_app_name: None,
             source_app_icon: None,
+            source_title: None,
+            source_url: None,
+            source_file_name: None,
+            is_locked: false,
             group_id: None,
             files_valid: None,
         }
@@ -1957,6 +1966,7 @@ mod tests {
 
     #[test]
     fn sync_session_rejects_concurrent_begin() {
+        let _serial = SYNC_SESSION_TEST_LOCK.lock();
         SYNC_SESSION_ACTIVE.store(false, std::sync::atomic::Ordering::SeqCst);
         let _first = try_begin_sync_session().unwrap();
         assert_eq!(
