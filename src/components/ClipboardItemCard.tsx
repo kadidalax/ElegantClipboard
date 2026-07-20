@@ -494,6 +494,9 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
           uiState.customFont,
         ),
         fontSize: uiState.previewFontSize,
+        sourceTitle: item.source_title,
+        sourceUrl: item.source_url,
+        sourceFileName: item.source_file_name,
         token: lease,
       });
       if (!textPreviewHoveringRef.current || reqId !== textPreviewReqIdRef.current || !textPreviewLM.isCurrent(lease)) {
@@ -510,7 +513,16 @@ export const ClipboardItemCard = memo(function ClipboardItemCard({
       textPreviewVisibleRef.current = false;
       logError("Failed to show text preview:", error);
     }
-  }, [textPreviewEnabled, isTextLikeContent, previewPosition, resolveTextPreviewContent, sharpCorners]);
+  }, [
+    textPreviewEnabled,
+    isTextLikeContent,
+    previewPosition,
+    resolveTextPreviewContent,
+    sharpCorners,
+    item.source_title,
+    item.source_url,
+    item.source_file_name,
+  ]);
 
   const handleTextMouseEnter = useCallback(() => {
     if (!textPreviewEnabled || !isTextLikeContent || batchMode) return;

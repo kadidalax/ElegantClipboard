@@ -1,5 +1,6 @@
+import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { showToast } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -10,8 +11,27 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
   openUrl: vi.fn(() => Promise.resolve()),
 }));
 vi.mock("@/components/ui/toast", () => ({ showToast: vi.fn() }));
+vi.mock("@/components/CardContentRenderers", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/components/CardContentRenderers")>();
+  return {
+    ...actual,
+    getPreviewBounds: vi.fn(() => Promise.resolve({
+      maxW: 600,
+      maxH: 400,
+      anchorX: 100,
+      cardCenterY: 200,
+      monY: 0,
+      monBottom: 400,
+      scale: 1,
+      side: "right",
+    })),
+  };
+});
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.clearAllMocks();
+});
 
 const sourceItem = {
   id: 1,
@@ -49,6 +69,29 @@ const sourceItem = {
 };
 
 describe("ClipboardItemCard source details", () => {
+  it("passes source details to the text hover preview", async () => {
+    vi.useFakeTimers();
+    vi.mocked(invoke).mockResolvedValueOnce(1);
+    render(
+      <TooltipProvider>
+        <ClipboardItemCard item={sourceItem} index={0} />
+      </TooltipProvider>,
+    );
+
+    const previewAnchor = screen.getByText(sourceItem.preview).closest(".flex-1");
+    expect(previewAnchor).not.toBeNull();
+    fireEvent.mouseEnter(previewAnchor!);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(128);
+    });
+
+    expect(invoke).toHaveBeenCalledWith("show_text_preview", expect.objectContaining({
+      sourceTitle: sourceItem.source_title,
+      sourceUrl: sourceItem.source_url,
+      sourceFileName: sourceItem.source_file_name,
+    }));
+  });
+
   it("shows source details from the existing footer source control", () => {
     render(
       <TooltipProvider>

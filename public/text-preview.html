@@ -32,6 +32,8 @@
     #panel {
       width: 100%;
       height: 100%;
+      display: flex;
+      flex-direction: column;
       border-radius: var(--preview-radius);
       border: 1px solid var(--preview-panel-border);
       background: var(--preview-panel-bg);
@@ -55,7 +57,8 @@
     }
     #content {
       width: 100%;
-      height: 100%;
+      flex: 1;
+      min-height: 0;
       padding: var(--space-preview-content-y) var(--space-preview-content-x);
       color: var(--preview-content);
       font-family: var(
@@ -76,6 +79,30 @@
       scrollbar-gutter: stable;
       text-overflow: initial;
     }
+    #source {
+      flex: 0 0 auto;
+      padding: 6px var(--space-preview-content-x) 8px;
+      border-top: 1px solid var(--preview-panel-border);
+      color: var(--preview-content);
+      font-family: var(
+        --ui-font-family,
+        "CustomFont",
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        "PingFang SC",
+        "Microsoft YaHei",
+        sans-serif
+      );
+      font-size: 11px;
+      line-height: 1.4;
+      opacity: 0.72;
+    }
+    #source > div {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     #content::-webkit-scrollbar {
       width: var(--size-scrollbar);
     }
@@ -91,12 +118,21 @@
   <div id="wrap">
     <div id="panel">
       <div id="content"></div>
+      <div id="source" hidden>
+        <div id="source-title" hidden></div>
+        <div id="source-url" hidden></div>
+        <div id="source-file-name" hidden></div>
+      </div>
     </div>
   </div>
   <script src="/preview-presentation.js"></script>
   <script>
     const panel = document.getElementById('panel');
     const content = document.getElementById('content');
+    const source = document.getElementById('source');
+    const sourceTitle = document.getElementById('source-title');
+    const sourceUrl = document.getElementById('source-url');
+    const sourceFileName = document.getElementById('source-file-name');
     const root = document.documentElement;
 
     applyPreviewPresentation(root, {
@@ -105,10 +141,27 @@
       colorTheme: 'default',
     });
 
+    function setSourceField(element, label, value) {
+      const text = typeof value === 'string' ? value.trim() : '';
+      element.textContent = text ? `${label}：${text}` : '';
+      element.hidden = !text;
+      return Boolean(text);
+    }
+
+    function renderSource(payload) {
+      const visible = [
+        setSourceField(sourceTitle, '标题', payload.sourceTitle),
+        setSourceField(sourceUrl, '网址', payload.sourceUrl),
+        setSourceField(sourceFileName, '文件名', payload.sourceFileName),
+      ].some(Boolean);
+      source.hidden = !visible;
+    }
+
     function clearPreview() {
       panel.classList.remove('visible');
       content.textContent = '';
       content.style.webkitLineClamp = 'unset';
+      renderSource({});
     }
 
     if (window.__TAURI__) {
@@ -129,6 +182,7 @@
           content.style.fontSize = '';
         }
         content.textContent = typeof payload.text === 'string' ? payload.text : '';
+        renderSource(payload);
         panel.classList.add('visible');
       });
 

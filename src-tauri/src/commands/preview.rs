@@ -226,6 +226,9 @@ pub async fn hide_image_preview(app: tauri::AppHandle, token: Option<u64>) {
 pub async fn show_text_preview(
     app: tauri::AppHandle,
     text: String,
+    source_title: Option<String>,
+    source_url: Option<String>,
+    source_file_name: Option<String>,
     win_x: f64,
     win_y: f64,
     win_width: f64,
@@ -309,6 +312,9 @@ pub async fn show_text_preview(
 
     let update_payload = serde_json::json!({
         "text": text,
+        "sourceTitle": source_title,
+        "sourceUrl": source_url,
+        "sourceFileName": source_file_name,
         "align": align.as_deref().unwrap_or("left"),
         "theme": theme.as_deref().unwrap_or("light"),
         "sharpCorners": sharp_corners.unwrap_or(false),
